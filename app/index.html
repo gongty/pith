@@ -154,47 +154,58 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 }
 .chat-pill:hover{background:var(--bg-active);color:var(--fg)}
 
+.chat-composer-wrap{position:relative}
 .chat-composer{
-  display:flex;align-items:flex-end;gap:0;
+  display:flex;flex-direction:column;
   background:var(--bg);border:1px solid var(--border);
-  border-radius:8px;padding:10px 14px;box-shadow:0 1px 6px rgba(0,0,0,0.04);
-  transition:border-color var(--t),box-shadow var(--t);
+  border-radius:16px;padding:0;box-shadow:0 2px 8px rgba(0,0,0,0.04);
+  transition:border-color var(--t),box-shadow var(--t);overflow:hidden;
 }
-.chat-composer:focus-within{border-color:rgba(55,53,47,0.2);box-shadow:0 1px 10px rgba(0,0,0,0.06)}
-[data-theme="dark"] .chat-composer:focus-within{border-color:rgba(255,255,255,0.15)}
+.chat-composer:focus-within{border-color:rgba(55,53,47,0.15);box-shadow:0 2px 16px rgba(0,0,0,0.06)}
+[data-theme="dark"] .chat-composer:focus-within{border-color:rgba(255,255,255,0.12)}
 .chat-textarea{
-  flex:1;resize:none;font-size:15px;line-height:1.5;
-  max-height:140px;min-height:22px;padding:0;border:none;background:transparent;
+  flex:1;resize:none;font-size:16px;line-height:1.6;
+  max-height:160px;min-height:28px;padding:16px 20px 8px;border:none;background:transparent;
 }
 .chat-textarea:focus{box-shadow:none}
-.chat-textarea::placeholder{color:var(--fg-tertiary)}
-.chat-send-btn{
-  width:28px;height:28px;border-radius:50%;background:var(--fg);color:var(--bg);
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  transition:opacity var(--t);margin-left:8px;
+.chat-textarea::placeholder{color:var(--fg-tertiary);font-size:16px}
+.chat-toolbar{
+  display:flex;align-items:center;padding:6px 12px 10px;gap:4px;
 }
-.chat-send-btn:disabled{opacity:0.2;cursor:default}
-.chat-send-btn:not(:disabled):hover{opacity:0.8}
+.chat-toolbar-left{display:flex;align-items:center;gap:4px}
+.chat-toolbar-right{display:flex;align-items:center;gap:6px;margin-left:auto}
+.chat-attach-btn{
+  width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  color:var(--fg-tertiary);transition:background var(--t),color var(--t);
+}
+.chat-attach-btn:hover{background:var(--bg-hover);color:var(--fg-secondary)}
 .chat-model-tag{
-  font-size:11px;color:var(--fg-tertiary);padding:2px 8px;
-  border-radius:3px;background:var(--bg-hover);cursor:pointer;
-  flex-shrink:0;margin-right:6px;transition:background var(--t);
+  font-size:13px;color:var(--fg-secondary);padding:4px 10px;
+  border-radius:6px;cursor:pointer;transition:background var(--t);
+  display:flex;align-items:center;gap:4px;
 }
-.chat-model-tag:hover{background:var(--bg-active)}
+.chat-model-tag:hover{background:var(--bg-hover)}
+.chat-model-tag svg{width:12px;height:12px;opacity:0.5}
+.chat-send-btn{
+  width:30px;height:30px;border-radius:50%;background:var(--fg);color:var(--bg);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  transition:opacity var(--t);
+}
+.chat-send-btn:disabled{opacity:0.15;cursor:default}
+.chat-send-btn:not(:disabled):hover{opacity:0.8}
 .chat-model-dropdown{
-  position:absolute;bottom:100%;left:0;margin-bottom:4px;
-  background:var(--bg);border:1px solid var(--border);border-radius:6px;
-  box-shadow:0 4px 16px rgba(0,0,0,0.1);min-width:200px;max-height:240px;
+  position:absolute;bottom:100%;right:0;margin-bottom:6px;
+  background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  box-shadow:0 4px 20px rgba(0,0,0,0.12);min-width:220px;max-height:260px;
   overflow-y:auto;z-index:50;display:none;padding:4px;
 }
 .chat-model-dropdown.open{display:block}
 .chat-model-opt{
-  padding:6px 10px;border-radius:var(--radius);font-size:13px;
+  padding:7px 12px;border-radius:6px;font-size:13px;
   color:var(--fg-secondary);cursor:pointer;transition:background var(--t);
 }
 .chat-model-opt:hover{background:var(--bg-hover)}
 .chat-model-opt.active{background:var(--accent-bg);color:var(--accent)}
-.chat-composer-wrap{position:relative}
 
 /* Chat messages */
 .chat-msgs{display:flex;flex-direction:column;gap:20px;margin-bottom:24px;max-height:480px;overflow-y:auto}
@@ -721,9 +732,13 @@ function buildChat(){
     s+='</div>';
   }
   s+='<div class="chat-composer-wrap"><div class="chat-composer">';
-  s+='<span class="chat-model-tag" id="chatModelTag" onclick="toggleModelDD()">选择模型</span>';
-  s+='<textarea class="chat-textarea" id="chatIn" placeholder="输入问题..." rows="1" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();sendMsg()}" oninput="this.style.height=\'auto\';this.style.height=Math.min(this.scrollHeight,140)+\'px\';$(\'chatSendBtn\').disabled=!this.value.trim()"></textarea>';
-  s+='<button class="chat-send-btn" id="chatSendBtn" onclick="sendMsg()" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>';
+  s+='<textarea class="chat-textarea" id="chatIn" placeholder="输入问题..." rows="1" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();sendMsg()}" oninput="this.style.height=\'auto\';this.style.height=Math.min(this.scrollHeight,160)+\'px\';$(\'chatSendBtn\').disabled=!this.value.trim()"></textarea>';
+  s+='<div class="chat-toolbar"><div class="chat-toolbar-left">';
+  s+='<button class="chat-attach-btn" title="附件"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>';
+  s+='</div><div class="chat-toolbar-right">';
+  s+='<span class="chat-model-tag" id="chatModelTag" onclick="toggleModelDD()"><span id="chatModelName">选择模型</span> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span>';
+  s+='<button class="chat-send-btn" id="chatSendBtn" onclick="sendMsg()" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>';
+  s+='</div></div>';
   s+='</div>';
   s+='<div class="chat-model-dropdown" id="chatModelDD"></div>';
   s+='</div>';
@@ -789,14 +804,17 @@ async function loadModels(ddId,tagId){
       v.models.forEach(m=>{const active=(s.provider===k&&s.model===m)?' active':'';html+='<div class="chat-model-opt'+active+'" data-v="'+k+'|'+m+'" onclick="pickModel(this,\''+ddId+'\',\''+tagId+'\')">'+h(m)+'</div>'});
     }}
     dd.innerHTML=html;
-    tag.textContent=s.model||'选择模型';
+    const nameEl=document.getElementById(tagId.replace('Tag','Name'));
+    if(nameEl)nameEl.textContent=s.model||'选择模型';
+    else tag.firstChild.textContent=s.model||'选择模型';
   }catch{}
 }
 function toggleModelDD(){$('chatModelDD').classList.toggle('open')}
 function pickModel(el,ddId,tagId){
   $(ddId).querySelectorAll('.chat-model-opt').forEach(o=>o.classList.remove('active'));
   el.classList.add('active');
-  $(tagId).textContent=el.textContent;
+  const nameEl=document.getElementById(tagId.replace('Tag','Name'));
+  if(nameEl)nameEl.textContent=el.textContent;
   $(ddId).classList.remove('open');
 }
 
