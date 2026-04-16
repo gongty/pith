@@ -7,6 +7,8 @@ let tasks = [];
 let history = [];
 let topicsList = [];
 let historyRange = 7; // days: 7 | 30 | 0(all)
+let watchingRunId = null;  // run we're actively polling for live progress
+let pollTimer = null;
 
 /* ── Wizard state ── */
 let wizardStep = 1;       // 1 (templates+NL) | 2 (confirm)
@@ -302,24 +304,60 @@ function renderHistory() {
     s += '<div class="autotask-empty" style="padding:40px 20px"><p class="autotask-empty-desc">' + h(rangeLabel) + '内暂无记录</p></div>';
     return s;
   }
+  // Sort: running run first, then by startedAt desc
+  rows.sort((a, b) => {
+    if (a.status === 'running' && b.status !== 'running') return -1;
+    if (b.status === 'running' && a.status !== 'running') return 1;
+    return new Date(b.startedAt || 0) - new Date(a.startedAt || 0);
+  });
   s += '<div class="autotask-history-list">';
   rows.forEach(run => {
+    const isRunning = run.status === 'running';
+    const isWatching = isRunning && run.id === watchingRunId;
     const dotColor = STATUS_COLORS[run.status] || 'var(--fg-tertiary)';
-    const dimClass = (run.status === 'error' || run.itemsIngested === 0) ? ' dim' : '';
-    s += '<div class="autotask-history-row' + dimClass + '">';
+    const dimClass = (!isRunning && (run.status === 'error' || run.itemsIngested === 0)) ? ' dim' : '';
+    const runningClass = isRunning ? ' running' : '';
+    const watchingClass = isWatching ? ' watching' : '';
+    s += '<div class="autotask-history-row' + dimClass + runningClass + watchingClass + '">';
     s += '<div class="autotask-history-head">';
-    s += '<span class="autotask-status-dot" style="background:' + dotColor + '"></span>';
+    if (isRunning) {
+      s += '<span class="autotask-status-dot pulsing" style="background:' + dotColor + '"></span>';
+    } else {
+      s += '<span class="autotask-status-dot" style="background:' + dotColor + '"></span>';
+    }
     s += '<span class="autotask-history-name">' + h(run.taskName || '未知任务') + '</span>';
+    if (isRunning) s += '<span class="autotask-running-badge">运行中</span>';
     s += '<span class="autotask-history-time">' + relTime(run.startedAt) + '</span>';
     s += '</div>';
-    s += '<div class="autotask-history-meta">';
-    if (run.itemsFound != null) {
-      s += '找到 ' + run.itemsFound + ' 项';
-      if (run.itemsIngested != null) s += ' · 入库 ' + run.itemsIngested;
-      if (run.itemsSkipped != null) s += ' · 跳过 ' + run.itemsSkipped;
+
+    // Progress (running) or summary (done)
+    if (isRunning) {
+      const prog = run.progress || { phase: 'fetching', current: 0, total: 0, currentTitle: null };
+      const phaseLabel = prog.phase === 'fetching' ? '抓取数据源...' : prog.phase === 'filtering' ? '过滤中...' : '处理条目';
+      const total = prog.total || 0;
+      const cur = prog.current || 0;
+      const pct = total > 0 ? Math.min(100, Math.round((cur / total) * 100)) : (prog.phase === 'fetching' ? 10 : 5);
+      s += '<div class="autotask-progress-bar"><div class="autotask-progress-fill" style="width:' + pct + '%"></div></div>';
+      s += '<div class="autotask-history-meta">';
+      if (prog.phase === 'processing' && total > 0) {
+        s += h(phaseLabel) + ' ' + cur + '/' + total;
+      } else {
+        s += h(phaseLabel);
+      }
+      if (run.itemsIngested) s += ' · 已入库 ' + run.itemsIngested;
+      if (run.itemsSkipped) s += ' · 已跳过 ' + run.itemsSkipped;
+      if (prog.currentTitle) s += '<div class="autotask-progress-current">当前: ' + h(prog.currentTitle.length > 80 ? prog.currentTitle.slice(0, 78) + '...' : prog.currentTitle) + '</div>';
+      s += '</div>';
+    } else {
+      s += '<div class="autotask-history-meta">';
+      if (run.itemsFound != null) {
+        s += '找到 ' + run.itemsFound + ' 项';
+        if (run.itemsIngested != null) s += ' · 入库 ' + run.itemsIngested;
+        if (run.itemsSkipped != null) s += ' · 跳过 ' + run.itemsSkipped;
+      }
+      if (run.error) s += '<span style="color:var(--red)"> · ' + h(run.error) + '</span>';
+      s += '</div>';
     }
-    if (run.error) s += '<span style="color:var(--red)"> · ' + h(run.error) + '</span>';
-    s += '</div>';
     // Per-row ingested titles
     const ing = (run.items || []).filter(it => it.status === 'ingested').slice(0, 3);
     if (ing.length) {
@@ -998,10 +1036,72 @@ export async function showRunDetail(runId) {
 /* ── Actions ── */
 export async function runAutotask(taskId) {
   try {
-    await post('/api/autotask/' + taskId + '/run', {});
-    toast('任务已触发执行');
+    const res = await post('/api/autotask/' + taskId + '/run', {});
+    const runId = res && res.runId;
+    if (!runId) { toast('已触发但未拿到 runId'); return; }
+    watchingRunId = runId;
+    currentTab = 'history';
+    // Immediate UI switch: refresh tasks+history then render
+    await refreshData();
+    const c = $('content');
+    if (c) renderPage(c);
+    // Start polling
+    startPolling();
+    toast('任务执行中，已跳转到执行历史');
   } catch (e) {
     toast('执行失败: ' + e.message);
+  }
+}
+
+async function refreshData() {
+  try {
+    const [taskRes, histRes] = await Promise.all([
+      api('/api/autotask/list'),
+      api('/api/autotask/history')
+    ]);
+    tasks = taskRes.tasks || [];
+    history = Array.isArray(histRes) ? histRes : (histRes.history || []);
+  } catch (_) { /* ignore */ }
+}
+
+function startPolling() {
+  stopPolling();
+  pollTimer = setTimeout(pollOnce, 1500);
+}
+
+function stopPolling() {
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+}
+
+async function pollOnce() {
+  pollTimer = null;
+  if (!watchingRunId) return;
+  try {
+    const histRes = await api('/api/autotask/history');
+    history = Array.isArray(histRes) ? histRes : (histRes.history || []);
+    const run = history.find(r => r.id === watchingRunId);
+    const c = $('content');
+    if (c && currentTab === 'history') renderPage(c);
+    if (run && run.status === 'running') {
+      pollTimer = setTimeout(pollOnce, 1500);
+    } else {
+      // Finished: refresh tasks (lastRun) then stop
+      const watched = watchingRunId;
+      watchingRunId = null;
+      try {
+        const tres = await api('/api/autotask/list');
+        tasks = tres.tasks || [];
+      } catch (_) {}
+      if (c && currentTab === 'history') renderPage(c);
+      if (run) {
+        const label = run.status === 'success' ? '执行完成' : run.status === 'partial' ? '部分完成' : '执行失败';
+        toast(label + '：入库 ' + (run.itemsIngested || 0) + ' · 跳过 ' + (run.itemsSkipped || 0));
+      }
+      void watched;
+    }
+  } catch (_) {
+    // Transient; back off briefly
+    if (watchingRunId) pollTimer = setTimeout(pollOnce, 3000);
   }
 }
 

@@ -360,6 +360,18 @@
 .autotask-history-row.dim{opacity:.55}
 .autotask-history-row.dim:hover{opacity:1}
 
+/* Running run highlighting */
+.autotask-history-row.running{border-color:var(--accent-border);background:var(--accent-bg)}
+.autotask-history-row.running.watching{box-shadow:0 0 0 2px var(--accent-bg),0 0 0 3px rgba(91,91,214,0.35)}
+.autotask-running-badge{display:inline-block;margin-left:auto;padding:2px 10px;border-radius:10px;background:var(--accent);color:#fff;font-size:11px;font-weight:500;letter-spacing:.3px}
+.autotask-status-dot.pulsing{position:relative;animation:autotask-pulse 1.4s ease-in-out infinite}
+@keyframes autotask-pulse{0%,100%{box-shadow:0 0 0 0 rgba(91,91,214,.6)}50%{box-shadow:0 0 0 6px rgba(91,91,214,0)}}
+.autotask-progress-bar{margin:8px 0 6px;height:4px;border-radius:2px;background:rgba(91,91,214,.12);overflow:hidden}
+.autotask-progress-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .4s ease}
+.autotask-progress-current{margin-top:4px;font-size:11px;color:var(--fg-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[data-theme="dark"] .autotask-history-row.running{background:rgba(91,91,214,0.08)}
+[data-theme="dark"] .autotask-progress-bar{background:rgba(91,91,214,.18)}
+
 /* ── Detail item title link ── */
 .autotask-detail-item-title a{color:var(--fg);text-decoration:none}
 .autotask-detail-item-title a:hover{color:var(--accent);text-decoration:underline}

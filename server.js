@@ -2063,20 +2063,32 @@ async function fetchWebpageLinks(url, selector) {
   return links;
 }
 
-async function executeAutotask(taskId, isManual = false) {
+async function executeAutotask(taskId, isManual = false, presetRunId = null) {
   const tasks = loadAutotasks();
   const task = tasks.find(t => t.id === taskId);
   if (!task) throw new Error('任务不存在');
 
   const modelOverrides = (task.provider && task.model) ? { provider: task.provider, model: task.model } : null;
 
-  const runId = genId('run');
+  const runId = presetRunId || genId('run');
   const run = {
     id: runId, taskId: task.id, taskName: task.name,
     startedAt: new Date().toISOString(), finishedAt: null,
     status: 'running', itemsFound: 0, itemsIngested: 0, itemsSkipped: 0,
-    items: [], error: null, manual: isManual
+    items: [], error: null, manual: isManual,
+    progress: { phase: 'fetching', current: 0, total: 0, currentTitle: null }
   };
+
+  // Persist incrementally so frontend can poll live progress
+  const persistRun = () => {
+    try {
+      const h = loadHistory();
+      const i = h.findIndex(r => r.id === runId);
+      if (i >= 0) h[i] = run; else h.push(run);
+      saveHistory(h);
+    } catch (e) { console.error('[AutoTask] persist run failed:', e.message); }
+  };
+  persistRun();
 
   try {
     // 1. Fetch source items
@@ -2109,6 +2121,8 @@ async function executeAutotask(taskId, isManual = false) {
     const maxItems = task.sourceConfig.maxItems || 5;
     sourceItems = sourceItems.slice(0, maxItems);
     run.itemsFound = sourceItems.length;
+    run.progress = { phase: 'filtering', current: 0, total: sourceItems.length, currentTitle: null };
+    persistRun();
 
     // 3. Apply keyword filters
     if (task.filters && task.filters.keywords && task.filters.keywords.length) {
@@ -2124,8 +2138,16 @@ async function executeAutotask(taskId, isManual = false) {
       });
     }
 
+    run.progress = { phase: 'processing', current: 0, total: sourceItems.length, currentTitle: null };
+    persistRun();
+
     // 4. Process each item
+    let processedIdx = 0;
     for (const item of sourceItems) {
+      run.progress.current = processedIdx;
+      run.progress.currentTitle = item.title || item.url || '';
+      persistRun();
+      processedIdx += 1;
       const itemResult = { title: item.title, url: item.url, status: 'pending', articlePath: null, reason: null };
 
       // Dedup check
@@ -2187,6 +2209,7 @@ async function executeAutotask(taskId, isManual = false) {
         itemResult.reason = e.message;
       }
       run.items.push(itemResult);
+      persistRun();
     }
 
     run.status = run.items.some(i => i.status === 'error') ? 'partial' : 'success';
@@ -2196,6 +2219,7 @@ async function executeAutotask(taskId, isManual = false) {
   }
 
   run.finishedAt = new Date().toISOString();
+  run.progress = null;
 
   // Update task lastRun info
   const updatedTasks = loadAutotasks();
@@ -2206,10 +2230,8 @@ async function executeAutotask(taskId, isManual = false) {
     saveAutotasks(updatedTasks);
   }
 
-  // Save run to history
-  const hist = loadHistory();
-  hist.push(run);
-  saveHistory(hist);
+  // Final persist (status/finishedAt updated)
+  persistRun();
 
   return run;
 }
@@ -2879,8 +2901,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (p === '/api/ingest' && req.method === 'POST') {
-    const running = taskQueue.find(t => t.status === 'compiling');
-    if (running) return json(res, 409, { error: '已有编译任务进行中' });
+    // 允许并发编译：不再阻塞新任务。每个请求拥有独立的 task 对象 + stages 状态。
     const chunks = [];
     let totalSize = 0;
     const MAX_BODY = 100 * 1024 * 1024;
@@ -2995,7 +3016,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (p === '/api/ingest/status') {
-    const task = latestTask();
+    // 支持 ?id=xxx 精确查询某个任务；否则返回最新
+    const reqId = url.searchParams.get('id');
+    const task = reqId ? taskQueue.find(t => t.id === reqId) : latestTask();
     if (!task) return json(res, 200, { status: 'idle' });
     const resp = { id: task.id, status: task.status, message: task.message };
     if (task.stages) resp.stages = task.stages;
@@ -3004,6 +3027,25 @@ const server = http.createServer(async (req, res) => {
       if (task.created.length > 0) resp.article = task.created[0];
     }
     return json(res, 200, resp);
+  }
+
+  // 所有当前 compiling + 最近 10s 内完成的任务（便于前端展示/收尾）
+  if (p === '/api/ingest/active') {
+    const now = Date.now();
+    const items = taskQueue.filter(t => {
+      if (t.status === 'compiling') return true;
+      const started = t.startedAt ? new Date(t.startedAt).getTime() : 0;
+      return (t.status === 'done' || t.status === 'error') && (now - started < 30000);
+    }).map(t => ({
+      id: t.id,
+      status: t.status,
+      message: t.message,
+      stages: t.stages || [],
+      article: t.created && t.created.length > 0 ? t.created[0] : null,
+      type: t.type,
+      startedAt: t.startedAt
+    }));
+    return json(res, 200, { items });
   }
 
   if (p === '/api/ingest/batch/status') {
@@ -3640,10 +3682,10 @@ ${topicListStr}`;
       const taskId = runMatch[1];
       const tasks = loadAutotasks();
       if (!tasks.find(t => t.id === taskId)) return json(res, 404, { error: '任务不存在' });
-      executeAutotask(taskId, true).then(run => {
-        // run result stored in history, no need to respond here
-      }).catch(e => console.error('[AutoTask] 手动执行失败:', e.message));
-      return json(res, 200, { ok: true, message: '任务已触发' });
+      const runId = genId('run');
+      // Fire-and-forget; runId is preset so frontend can poll history immediately
+      executeAutotask(taskId, true, runId).catch(e => console.error('[AutoTask] 手动执行失败:', e.message));
+      return json(res, 200, { ok: true, runId, message: '任务已触发' });
     }
 
     // GET /api/autotask/:id/toggle — toggle enabled/disabled
