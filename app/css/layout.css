@@ -34,7 +34,7 @@
 .sidebar-expand-btn:hover{background:var(--bg-hover);color:var(--fg-secondary)}
 .sidebar.collapsed ~ .main .sidebar-expand-btn{display:flex}
 
-.sidebar-nav{padding:4px 8px 12px;border-bottom:1px solid var(--border);margin-bottom:4px}
+.sidebar-nav{padding:4px 8px 12px;border-bottom:1px solid var(--border);margin-bottom:12px}
 .sidebar-item{
   display:flex;align-items:center;gap:8px;padding:6px 10px;
   border-radius:var(--radius);font-size:13.5px;color:var(--fg-secondary);
@@ -101,7 +101,7 @@
 }
 .sidebar-tab svg{opacity:0.5;flex-shrink:0}
 .sidebar-tab:hover{color:var(--fg-secondary);background:var(--bg-hover)}
-.sidebar-tab.active{color:var(--fg);background:var(--bg-active)}
+.sidebar-tab.active{color:var(--fg);background:none}
 .sidebar-tab.active svg{opacity:0.7}
 .sidebar-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0}
 
