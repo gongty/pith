@@ -9,6 +9,7 @@ import { rGraph } from './pages/graph.js';
 import { rBrowse } from './pages/browse.js';
 import { rArticle } from './pages/article.js';
 import { rHealth } from './pages/health.js';
+import { rAutotask } from './pages/autotask.js';
 
 export function route() {
   const hash = location.hash || '#/';
@@ -18,6 +19,7 @@ export function route() {
   if (hash === '#/graph') return { v: 'graph' };
   if (hash === '#/browse') return { v: 'browse' };
   if (hash === '#/health') return { v: 'health' };
+  if (hash === '#/autotask') return { v: 'autotask' };
   if (hash.startsWith('#/article/')) return { v: 'article', p: hash.slice(10) };
   return { v: 'dashboard' };
 }
@@ -38,6 +40,7 @@ function updBC(r) {
   else if (r.v === 'graph') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>知识图谱';
   else if (r.v === 'health') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>健康报告';
   else if (r.v === 'browse') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>全部文章';
+  else if (r.v === 'autotask') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>自动任务';
   else if (r.v === 'article' && r.p) {
     const pts = r.p.split('/'), topic = pts.length > 1 ? pts[0] : '', f = pts[pts.length - 1].replace('.md', '');
     const topicColors = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
@@ -62,6 +65,7 @@ export async function render() {
   else if (r.v === 'graph') await rGraph(c);
   else if (r.v === 'browse') await rBrowse(c);
   else if (r.v === 'health') await rHealth(c);
+  else if (r.v === 'autotask') await rAutotask(c);
   else if (r.v === 'article') await rArticle(c, r.p);
   updSidebarPages();
 }

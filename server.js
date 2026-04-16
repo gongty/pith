@@ -28,6 +28,8 @@ const UPLOADS = path.join(ROOT, 'data', 'uploads');
 fs.mkdirSync(UPLOADS, { recursive: true });
 const CHATS = path.join(ROOT, 'data', 'chats');
 fs.mkdirSync(CHATS, { recursive: true });
+const AUTOTASKS_DIR = path.join(ROOT, 'data', 'autotasks');
+fs.mkdirSync(AUTOTASKS_DIR, { recursive: true });
 
 // ── 内置编译规则（原 SKILL.md） ──
 
@@ -1361,6 +1363,267 @@ async function extractContent(type, content, filename, urlVal, rawDir) {
   }
 }
 
+// ── 自动化任务 ──
+
+function loadAutotasks() { try { return JSON.parse(fs.readFileSync(path.join(AUTOTASKS_DIR, 'tasks.json'), 'utf-8')); } catch { return []; } }
+function saveAutotasks(tasks) { fs.writeFileSync(path.join(AUTOTASKS_DIR, 'tasks.json'), JSON.stringify(tasks, null, 2), 'utf-8'); }
+function loadHistory() { try { return JSON.parse(fs.readFileSync(path.join(AUTOTASKS_DIR, 'history.json'), 'utf-8')); } catch { return []; } }
+function saveHistory(hist) { fs.writeFileSync(path.join(AUTOTASKS_DIR, 'history.json'), JSON.stringify(hist, null, 2), 'utf-8'); if (hist.length > 200) saveHistory(hist.slice(-200)); }
+function loadDedup() { try { return JSON.parse(fs.readFileSync(path.join(AUTOTASKS_DIR, 'dedup.json'), 'utf-8')); } catch { return { urls: {}, hashes: {} }; } }
+function saveDedup(d) { fs.writeFileSync(path.join(AUTOTASKS_DIR, 'dedup.json'), JSON.stringify(d, null, 2), 'utf-8'); }
+
+function normalizeUrl(url) {
+  try {
+    const u = new URL(url);
+    u.hash = '';
+    u.searchParams.delete('utm_source');
+    u.searchParams.delete('utm_medium');
+    u.searchParams.delete('utm_campaign');
+    u.searchParams.delete('utm_content');
+    u.searchParams.delete('utm_term');
+    u.searchParams.sort();
+    return u.toString().replace(/\/+$/, '');
+  } catch { return url; }
+}
+
+function contentHash(text) {
+  return crypto.createHash('sha256').update(text.slice(0, 5000)).digest('hex');
+}
+
+function isDuplicate(url, content) {
+  const dedup = loadDedup();
+  const normUrl = normalizeUrl(url);
+  if (url && dedup.urls[normUrl]) return { dup: true, reason: 'URL 已入库' };
+  if (content) {
+    const hash = contentHash(content);
+    if (dedup.hashes[hash]) return { dup: true, reason: '内容重复' };
+  }
+  return { dup: false };
+}
+
+function markIngested(url, content, runId) {
+  const dedup = loadDedup();
+  if (url) dedup.urls[normalizeUrl(url)] = runId;
+  if (content) dedup.hashes[contentHash(content)] = runId;
+  saveDedup(dedup);
+}
+
+async function fetchRSS(url) {
+  const xml = await new Promise((resolve, reject) => {
+    const mod = url.startsWith('https') ? https : http;
+    const req = mod.get(url, { headers: { 'User-Agent': 'WikiBot/1.0' } }, r => {
+      if (r.statusCode >= 300 && r.statusCode < 400 && r.headers.location) {
+        return fetchRSS(r.headers.location).then(resolve).catch(reject);
+      }
+      let data = ''; r.on('data', c => data += c); r.on('end', () => resolve(data));
+    });
+    req.on('error', reject);
+    req.setTimeout(30000, () => { req.destroy(); reject(new Error('RSS fetch timeout')); });
+  });
+
+  const items = [];
+  const itemRegex = /<item[\s>]([\s\S]*?)<\/item>/gi;
+  let match;
+  while ((match = itemRegex.exec(xml)) !== null) {
+    const block = match[1];
+    const title = (block.match(/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i) || [])[1] || '';
+    const link = (block.match(/<link[^>]*>([\s\S]*?)<\/link>/i) || [])[1] ||
+                 (block.match(/<link[^>]*href="([^"]*)"[^>]*\/?>/i) || [])[1] || '';
+    const desc = (block.match(/<description[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/i) || [])[1] || '';
+    const pubDate = (block.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i) || [])[1] || '';
+    items.push({ title: title.trim(), url: link.trim(), description: stripHtml(desc).trim(), pubDate: pubDate.trim() });
+  }
+
+  // Also try Atom <entry> format
+  if (!items.length) {
+    const entryRegex = /<entry[\s>]([\s\S]*?)<\/entry>/gi;
+    while ((match = entryRegex.exec(xml)) !== null) {
+      const block = match[1];
+      const title = (block.match(/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i) || [])[1] || '';
+      const link = (block.match(/<link[^>]*href="([^"]*)"[^>]*\/?>/i) || [])[1] || '';
+      const summary = (block.match(/<summary[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/summary>/i) || [])[1] || '';
+      items.push({ title: title.trim(), url: link.trim(), description: stripHtml(summary).trim(), pubDate: '' });
+    }
+  }
+
+  return items;
+}
+
+async function fetchWebpageLinks(url, selector) {
+  const html = await new Promise((resolve, reject) => {
+    const mod = url.startsWith('https') ? https : http;
+    const req = mod.get(url, { headers: { 'User-Agent': 'Mozilla/5.0 WikiBot/1.0' } }, r => {
+      if (r.statusCode >= 300 && r.statusCode < 400 && r.headers.location) {
+        return fetchWebpageLinks(r.headers.location, selector).then(resolve).catch(reject);
+      }
+      let data = ''; r.on('data', c => data += c); r.on('end', () => resolve(data));
+    });
+    req.on('error', reject);
+    req.setTimeout(30000, () => { req.destroy(); reject(new Error('Webpage fetch timeout')); });
+  });
+
+  const links = [];
+  const linkRegex = /<a\s[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = linkRegex.exec(html)) !== null) {
+    const href = m[1];
+    const title = stripHtml(m[2]).trim();
+    if (href && title && href.startsWith('http') && title.length > 2) {
+      links.push({ title, url: href, description: '' });
+    }
+  }
+  return links;
+}
+
+async function executeAutotask(taskId, isManual = false) {
+  const tasks = loadAutotasks();
+  const task = tasks.find(t => t.id === taskId);
+  if (!task) throw new Error('任务不存在');
+
+  const runId = genId('run');
+  const run = {
+    id: runId, taskId: task.id, taskName: task.name,
+    startedAt: new Date().toISOString(), finishedAt: null,
+    status: 'running', itemsFound: 0, itemsIngested: 0, itemsSkipped: 0,
+    items: [], error: null, manual: isManual
+  };
+
+  try {
+    // 1. Fetch source items
+    let sourceItems = [];
+    if (task.sourceType === 'rss') {
+      sourceItems = await fetchRSS(task.sourceConfig.url);
+    } else if (task.sourceType === 'webpage') {
+      sourceItems = await fetchWebpageLinks(task.sourceConfig.url, task.sourceConfig.selector);
+    } else if (task.sourceType === 'api') {
+      const raw = await new Promise((resolve, reject) => {
+        const mod = task.sourceConfig.url.startsWith('https') ? https : http;
+        const req = mod.get(task.sourceConfig.url, { headers: { 'User-Agent': 'WikiBot/1.0' } }, r => {
+          let data = ''; r.on('data', c => data += c); r.on('end', () => resolve(data));
+        });
+        req.on('error', reject);
+        req.setTimeout(30000, () => { req.destroy(); reject(new Error('API fetch timeout')); });
+      });
+      try {
+        const parsed = JSON.parse(raw);
+        const arr = parsed.items || parsed.articles || parsed.data || parsed.results || (Array.isArray(parsed) ? parsed : []);
+        sourceItems = arr.map(it => ({
+          title: it.title || it.name || '',
+          url: it.url || it.link || '',
+          description: it.description || it.summary || ''
+        })).filter(it => it.title || it.url);
+      } catch { sourceItems = []; }
+    }
+
+    // 2. Apply maxItems limit
+    const maxItems = task.sourceConfig.maxItems || 10;
+    sourceItems = sourceItems.slice(0, maxItems);
+    run.itemsFound = sourceItems.length;
+
+    // 3. Apply keyword filters
+    if (task.filters && task.filters.keywords && task.filters.keywords.length) {
+      sourceItems = sourceItems.filter(it => {
+        const text = (it.title + ' ' + it.description).toLowerCase();
+        return task.filters.keywords.some(kw => text.includes(kw.toLowerCase()));
+      });
+    }
+    if (task.filters && task.filters.excludeKeywords && task.filters.excludeKeywords.length) {
+      sourceItems = sourceItems.filter(it => {
+        const text = (it.title + ' ' + it.description).toLowerCase();
+        return !task.filters.excludeKeywords.some(kw => text.includes(kw.toLowerCase()));
+      });
+    }
+
+    // 4. Process each item
+    for (const item of sourceItems) {
+      const itemResult = { title: item.title, url: item.url, status: 'pending', articlePath: null, reason: null };
+
+      // Dedup check
+      if (item.url) {
+        const dupCheck = isDuplicate(item.url, null);
+        if (dupCheck.dup) {
+          itemResult.status = 'skipped';
+          itemResult.reason = dupCheck.reason;
+          run.itemsSkipped++;
+          run.items.push(itemResult);
+          continue;
+        }
+      }
+
+      // Extract content
+      try {
+        const topicDir = task.topic && task.topic !== 'auto' ? task.topic : 'general';
+        const rawDir = path.join(RAW, topicDir);
+        fs.mkdirSync(rawDir, { recursive: true });
+
+        const extractedText = await extractContent('url', null, null, item.url, rawDir);
+
+        // Content-level dedup
+        if (extractedText) {
+          const dupCheck2 = isDuplicate(null, extractedText);
+          if (dupCheck2.dup) {
+            itemResult.status = 'skipped';
+            itemResult.reason = dupCheck2.reason;
+            run.itemsSkipped++;
+            run.items.push(itemResult);
+            continue;
+          }
+        }
+
+        // Save raw file
+        const date = new Date().toISOString().slice(0, 10);
+        const slug = item.url.replace(/https?:\/\//, '').replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-').slice(0, 40);
+        const rawFilename = `${date}-${slug}.md`;
+        const filePath = path.join(rawDir, rawFilename);
+        const rawContent = `# Source\n\n> Source: ${item.url}\n> Title: ${item.title}\n> Collected: ${date}\n> Type: autotask\n> Task: ${task.name}\n\n${extractedText}`;
+        fs.writeFileSync(filePath, rawContent, 'utf-8');
+
+        // Compile article
+        const compileTask = pushTask('autotask');
+        await compileArticle(topicDir, rawFilename, filePath, compileTask, null);
+
+        // Mark as ingested in dedup
+        markIngested(item.url, extractedText, runId);
+
+        itemResult.status = 'ingested';
+        if (compileTask.created && compileTask.created.length > 0) {
+          itemResult.articlePath = compileTask.created[0].path;
+        }
+        run.itemsIngested++;
+        indexCache.invalidate('index');
+        wikiCache.invalidate();
+      } catch (e) {
+        itemResult.status = 'error';
+        itemResult.reason = e.message;
+      }
+      run.items.push(itemResult);
+    }
+
+    run.status = run.items.some(i => i.status === 'error') ? 'partial' : 'success';
+  } catch (e) {
+    run.status = 'error';
+    run.error = e.message;
+  }
+
+  run.finishedAt = new Date().toISOString();
+
+  // Update task lastRun info
+  const updatedTasks = loadAutotasks();
+  const tIdx = updatedTasks.findIndex(t => t.id === taskId);
+  if (tIdx >= 0) {
+    updatedTasks[tIdx].lastRunAt = run.finishedAt;
+    updatedTasks[tIdx].lastRunStatus = run.status;
+    saveAutotasks(updatedTasks);
+  }
+
+  // Save run to history
+  const hist = loadHistory();
+  hist.push(run);
+  saveHistory(hist);
+
+  return run;
+}
+
 // ── 服务器 ──
 
 const server = http.createServer(async (req, res) => {
@@ -2490,6 +2753,179 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── 自动化任务 API ──
+  if (p.startsWith('/api/autotask')) {
+    const subPath = p.slice('/api/autotask'.length);
+
+    // GET /api/autotask/list — list all tasks
+    if (subPath === '/list' && req.method === 'GET') {
+      return json(res, 200, { tasks: loadAutotasks() });
+    }
+
+    // GET /api/autotask/history — get execution history
+    if (subPath === '/history' && req.method === 'GET') {
+      let hist = loadHistory();
+      const filterTaskId = params.get('taskId');
+      if (filterTaskId) hist = hist.filter(h => h.taskId === filterTaskId);
+      return json(res, 200, { history: hist.reverse() });
+    }
+
+    // GET /api/autotask/history/:runId — single run detail
+    const histDetailMatch = subPath.match(/^\/history\/(.+)$/);
+    if (histDetailMatch && req.method === 'GET') {
+      const runId = histDetailMatch[1];
+      const hist = loadHistory();
+      const run = hist.find(h => h.id === runId);
+      if (!run) return json(res, 404, { error: '记录不存在' });
+      return json(res, 200, run);
+    }
+
+    // DELETE /api/autotask/history/:runId — delete history record
+    if (histDetailMatch && req.method === 'DELETE') {
+      const runId = histDetailMatch[1];
+      let hist = loadHistory();
+      const idx = hist.findIndex(h => h.id === runId);
+      if (idx < 0) return json(res, 404, { error: '记录不存在' });
+      hist.splice(idx, 1);
+      saveHistory(hist);
+      return json(res, 200, { ok: true });
+    }
+
+    // POST /api/autotask/test-source — test a source URL
+    if (subPath === '/test-source' && req.method === 'POST') {
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', async () => {
+        try {
+          const { sourceType, sourceConfig } = JSON.parse(body);
+          let items = [];
+          if (sourceType === 'rss') {
+            items = await fetchRSS(sourceConfig.url);
+          } else if (sourceType === 'webpage') {
+            items = await fetchWebpageLinks(sourceConfig.url, sourceConfig.selector);
+          } else if (sourceType === 'api') {
+            const raw = await new Promise((resolve, reject) => {
+              const mod = sourceConfig.url.startsWith('https') ? https : http;
+              const r = mod.get(sourceConfig.url, { headers: { 'User-Agent': 'WikiBot/1.0' } }, resp => {
+                let data = ''; resp.on('data', c => data += c); resp.on('end', () => resolve(data));
+              });
+              r.on('error', reject);
+              r.setTimeout(30000, () => { r.destroy(); reject(new Error('API fetch timeout')); });
+            });
+            try {
+              const parsed = JSON.parse(raw);
+              const arr = parsed.items || parsed.articles || parsed.data || parsed.results || (Array.isArray(parsed) ? parsed : []);
+              items = arr.map(it => ({
+                title: it.title || it.name || '',
+                url: it.url || it.link || '',
+                description: it.description || it.summary || ''
+              })).filter(it => it.title || it.url);
+            } catch { items = []; }
+          }
+          const maxItems = (sourceConfig && sourceConfig.maxItems) || 10;
+          return json(res, 200, { items: items.slice(0, maxItems), total: items.length });
+        } catch (e) { return json(res, 500, { error: e.message }); }
+      });
+      return;
+    }
+
+    // POST /api/autotask/:id/run — manual trigger
+    const runMatch = subPath.match(/^\/([^/]+)\/run$/);
+    if (runMatch && req.method === 'POST') {
+      const taskId = runMatch[1];
+      const tasks = loadAutotasks();
+      if (!tasks.find(t => t.id === taskId)) return json(res, 404, { error: '任务不存在' });
+      executeAutotask(taskId, true).then(run => {
+        // run result stored in history, no need to respond here
+      }).catch(e => console.error('[AutoTask] 手动执行失败:', e.message));
+      return json(res, 200, { ok: true, message: '任务已触发' });
+    }
+
+    // GET /api/autotask/:id/toggle — toggle enabled/disabled
+    const toggleMatch = subPath.match(/^\/([^/]+)\/toggle$/);
+    if (toggleMatch && req.method === 'GET') {
+      const taskId = toggleMatch[1];
+      const tasks = loadAutotasks();
+      const idx = tasks.findIndex(t => t.id === taskId);
+      if (idx < 0) return json(res, 404, { error: '任务不存在' });
+      tasks[idx].enabled = !tasks[idx].enabled;
+      saveAutotasks(tasks);
+      return json(res, 200, { ok: true, enabled: tasks[idx].enabled });
+    }
+
+    // POST /api/autotask — create task
+    if ((subPath === '' || subPath === '/') && req.method === 'POST') {
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          const task = {
+            id: genId('at'),
+            name: data.name || '未命名任务',
+            sourceType: data.sourceType || 'rss',
+            sourceConfig: data.sourceConfig || { url: '', maxItems: 5 },
+            schedule: data.schedule || 'daily',
+            scheduleTime: data.scheduleTime || '08:00',
+            topic: data.topic || 'auto',
+            enabled: data.enabled !== false,
+            filters: {
+              keywords: (data.filters && data.filters.keywords) || [],
+              excludeKeywords: (data.filters && data.filters.excludeKeywords) || []
+            },
+            createdAt: new Date().toISOString(),
+            lastRunAt: null,
+            lastRunStatus: null
+          };
+          const tasks = loadAutotasks();
+          tasks.push(task);
+          saveAutotasks(tasks);
+          return json(res, 201, task);
+        } catch (e) { return json(res, 400, { error: e.message }); }
+      });
+      return;
+    }
+
+    // PUT /api/autotask/:id — update task
+    const idMatch = subPath.match(/^\/([^/]+)$/);
+    if (idMatch && req.method === 'PUT') {
+      const taskId = idMatch[1];
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          const tasks = loadAutotasks();
+          const idx = tasks.findIndex(t => t.id === taskId);
+          if (idx < 0) return json(res, 404, { error: '任务不存在' });
+          const t = tasks[idx];
+          if (data.name !== undefined) t.name = data.name;
+          if (data.sourceType !== undefined) t.sourceType = data.sourceType;
+          if (data.sourceConfig !== undefined) t.sourceConfig = data.sourceConfig;
+          if (data.schedule !== undefined) t.schedule = data.schedule;
+          if (data.scheduleTime !== undefined) t.scheduleTime = data.scheduleTime;
+          if (data.topic !== undefined) t.topic = data.topic;
+          if (data.enabled !== undefined) t.enabled = data.enabled;
+          if (data.filters !== undefined) t.filters = data.filters;
+          saveAutotasks(tasks);
+          return json(res, 200, t);
+        } catch (e) { return json(res, 400, { error: e.message }); }
+      });
+      return;
+    }
+
+    // DELETE /api/autotask/:id — delete task
+    if (idMatch && req.method === 'DELETE') {
+      const taskId = idMatch[1];
+      let tasks = loadAutotasks();
+      const idx = tasks.findIndex(t => t.id === taskId);
+      if (idx < 0) return json(res, 404, { error: '任务不存在' });
+      tasks.splice(idx, 1);
+      saveAutotasks(tasks);
+      return json(res, 200, { ok: true });
+    }
+  }
+
   // raw 目录图片（wiki 文章中的 ../../raw/... 解析后变成 /raw/...）
   if (p.startsWith('/raw/')) {
     const rel = p.slice(5); // strip /raw/
@@ -2575,5 +3011,32 @@ setInterval(() => {
     req.end();
   } catch {}
 }, 24 * 60 * 60 * 1000);
+
+// ── 自动化任务调度器 ──
+setInterval(() => {
+  try {
+    const tasks = loadAutotasks();
+    const now = new Date();
+    tasks.forEach(task => {
+      if (!task.enabled || task.schedule === 'manual') return;
+
+      const lastRun = task.lastRunAt ? new Date(task.lastRunAt) : null;
+      let shouldRun = false;
+
+      if (task.schedule === 'hourly') {
+        shouldRun = !lastRun || (now - lastRun) >= 55 * 60 * 1000;
+      } else if (task.schedule === 'daily') {
+        const [hh, mm] = (task.scheduleTime || '08:00').split(':').map(Number);
+        const targetToday = new Date(now); targetToday.setHours(hh, mm, 0, 0);
+        shouldRun = !lastRun || (now >= targetToday && (!lastRun || lastRun < targetToday));
+      }
+
+      if (shouldRun) {
+        console.log(`[AutoTask] 执行任务: ${task.name}`);
+        executeAutotask(task.id, false).catch(e => console.error(`[AutoTask] 任务失败: ${task.name}`, e.message));
+      }
+    });
+  } catch (e) { console.error('[AutoTask] 调度器错误:', e.message); }
+}, 5 * 60 * 1000);
 
 server.listen(PORT, () => console.log(`Wiki 应用已启动：http://localhost:${PORT}`));

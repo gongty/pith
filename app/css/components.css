@@ -92,6 +92,21 @@
 }
 .slash-menu-label{flex:1}
 .slash-menu-empty{font-size:13px;color:var(--fg-tertiary);padding:12px 10px;text-align:center}
+/* ── Block "+" button ── */
+.block-plus-btn{
+  position:fixed;z-index:50;display:none;
+  width:28px;height:28px;border-radius:50%;
+  border:1px solid var(--border);background:var(--bg);
+  color:var(--fg-tertiary);cursor:pointer;
+  align-items:center;justify-content:center;
+  transition:all 150ms ease;
+  box-shadow:0 1px 4px rgba(0,0,0,0.06);
+}
+.block-plus-btn.show{display:flex}
+.block-plus-btn:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-bg);transform:scale(1.1)}
+.block-plus-btn svg{width:16px;height:16px}
+[data-theme="dark"] .block-plus-btn{box-shadow:0 1px 4px rgba(0,0,0,0.2)}
+
 [data-theme="dark"] .slash-menu{box-shadow:0 4px 24px rgba(0,0,0,0.3)}
 
 /* ── Image toolbar ── */

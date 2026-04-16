@@ -9,9 +9,10 @@ import { openSettings, closeSettings, onProvChange, saveSett, testConn, switchSe
 import { openIngest, closeIngest, submitIngest, batchToggleAll, batchFileToggle, initIngestDragDrop, checkActiveIngest, removeIngestUrl } from './ingest.js';
 import { render } from './router.js';
 import { dashAsk } from './pages/dashboard.js';
-import { chatSend, delChat, precipitateMsg, precipitateConv, closePrecipModal } from './pages/chat.js';
+import { chatSend, delChat, archiveChat, precipitateMsg, precipitateConv, closePrecipModal } from './pages/chat.js';
 import { toggleToc, scrollToH, onArtChange, fmtCmd, closeDel, doDel, newArticle, pickSlash, closeSlashMenu, imgAlign, imgSize, deselectImg } from './pages/article.js';
 import { gZoom, applyGF } from './pages/graph.js';
+import { openAutotaskModal, closeAutotaskModal, saveAutotask, closeAutotaskDetail, runAutotask, toggleAutotaskEnabled, deleteAutotask, testAutotaskSource, showRunDetail, deleteRun, switchAutotaskTab } from './pages/autotask.js';
 
 /* ── Expose functions to inline onclick handlers ── */
 window.go = go;
@@ -33,6 +34,7 @@ window.pickModel = pickModel;
 window.dashAsk = dashAsk;
 window.chatSend = chatSend;
 window.delChat = delChat;
+window.archiveChat = archiveChat;
 window.toggleToc = toggleToc;
 window.scrollToH = scrollToH;
 window.onArtChange = onArtChange;
@@ -57,6 +59,17 @@ window.batchFileToggle = batchFileToggle;
 window.imgAlign = imgAlign;
 window.imgSize = imgSize;
 window.deselectImg = deselectImg;
+window.openAutotaskModal = openAutotaskModal;
+window.closeAutotaskModal = closeAutotaskModal;
+window.saveAutotask = saveAutotask;
+window.closeAutotaskDetail = closeAutotaskDetail;
+window.runAutotask = runAutotask;
+window.toggleAutotaskEnabled = toggleAutotaskEnabled;
+window.deleteAutotask = deleteAutotask;
+window.testAutotaskSource = testAutotaskSource;
+window.showRunDetail = showRunDetail;
+window.deleteRun = deleteRun;
+window.switchAutotaskTab = switchAutotaskTab;
 
 /* ── Sidebar resize ── */
 (function () {
@@ -85,7 +98,7 @@ document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openSearch(); }
   if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); go('#/'); }
   if ((e.metaKey || e.ctrlKey) && e.key === 'i') { e.preventDefault(); openIngest(); }
-  if (e.key === 'Escape') { closeSearch(); closeIngest(); closeSettings(); closeDel(); closePrecipModal(); deselectImg(); }
+  if (e.key === 'Escape') { closeSearch(); closeIngest(); closeSettings(); closeDel(); closePrecipModal(); deselectImg(); closeAutotaskModal(); closeAutotaskDetail(); }
   handleSearchKeydown(e);
 });
 

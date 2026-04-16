@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="/css/components.css">
 <link rel="stylesheet" href="/css/pages.css">
 <link rel="stylesheet" href="/css/ingest.css">
+<link rel="stylesheet" href="/css/autotask.css">
 </head>
 <body>
 <div class="app">
@@ -34,6 +35,10 @@
     <div class="sidebar-item" data-view="browse" onclick="go('#/browse')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
       全部文章
+    </div>
+    <div class="sidebar-item" data-view="autotask" onclick="go('#/autotask')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
+      自动任务
     </div>
   </nav>
 
@@ -228,6 +233,26 @@
     <div class="mobile-nav-item" onclick="openIngest()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>投喂
     </div>
+  </div>
+</div>
+
+<!-- Autotask Modal -->
+<div class="autotask-modal-bg" id="autotaskModal" onclick="if(event.target===this)closeAutotaskModal()">
+  <div class="autotask-modal">
+    <div class="modal-top"><h3 id="autotaskModalTitle">新建任务</h3><button onclick="closeAutotaskModal()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+    <div class="modal-form" id="autotaskForm"></div>
+    <div class="modal-foot">
+      <button class="btn-outline" onclick="closeAutotaskModal()">取消</button>
+      <button class="btn-sm-fill" id="autotaskSaveBtn" onclick="saveAutotask()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Autotask Detail Modal -->
+<div class="autotask-modal-bg" id="autotaskDetailModal" onclick="if(event.target===this)closeAutotaskDetail()">
+  <div class="autotask-modal autotask-detail-modal">
+    <div class="modal-top"><h3 id="autotaskDetailTitle">执行详情</h3><button onclick="closeAutotaskDetail()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+    <div id="autotaskDetailContent"></div>
   </div>
 </div>
 

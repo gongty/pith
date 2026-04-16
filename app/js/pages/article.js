@@ -215,6 +215,7 @@ const SLASH_BLOCKS = [
 ];
 
 function clearSlashTrigger() {
+  if (_slashFromPlus) { _slashFromPlus = false; return; }
   // Remove the "/" character before inserting block
   const sel = window.getSelection();
   if (!sel.rangeCount) return;
@@ -261,9 +262,11 @@ export function closeSlashMenu() {
   const menu = $('slashMenu');
   if (menu) menu.classList.remove('open');
   _slashFilter = '';
+  // Re-evaluate plus button after menu closes
+  if (_plusBtn) setTimeout(() => { _plusBtn.classList.remove('show'); }, 50);
 }
 
-function showSlashMenu() {
+function showSlashMenu(anchorRect) {
   let menu = $('slashMenu');
   if (!menu) {
     menu = document.createElement('div');
@@ -272,11 +275,15 @@ function showSlashMenu() {
     document.body.appendChild(menu);
   }
   _slashFilter = '';
+  _slashFromPlus = !!anchorRect;
   renderSlashItems(menu, '');
-  // Position near cursor
-  const sel = window.getSelection();
-  if (sel.rangeCount) {
-    const rect = sel.getRangeAt(0).getBoundingClientRect();
+  // Position near cursor or anchor
+  let rect = anchorRect;
+  if (!rect) {
+    const sel = window.getSelection();
+    if (sel.rangeCount) rect = sel.getRangeAt(0).getBoundingClientRect();
+  }
+  if (rect) {
     const scroller = document.querySelector('.content');
     const scrollerRect = scroller ? scroller.getBoundingClientRect() : { top: 0, left: 0 };
     menu.style.top = (rect.bottom + 4) + 'px';
@@ -289,6 +296,7 @@ function showSlashMenu() {
 
 let _slashFilter = '';
 let _slashIdx = 0;
+let _slashFromPlus = false;
 
 function renderSlashItems(menu, filter) {
   const items = SLASH_BLOCKS.filter(b => !filter || b.label.includes(filter));
@@ -368,8 +376,11 @@ function setupSlashMenu() {
   // Close on click outside
   document.addEventListener('mousedown', (e) => {
     const menu = $('slashMenu');
-    if (menu && menu.classList.contains('open') && !menu.contains(e.target)) closeSlashMenu();
+    if (menu && menu.classList.contains('open') && !menu.contains(e.target) && !e.target.closest('.block-plus-btn')) closeSlashMenu();
   }, { once: false });
+
+  // ── "+" button on empty lines ──
+  setupBlockPlusBtn(body);
 }
 
 let delPath = '';
@@ -398,6 +409,63 @@ export async function newArticle() {
     await put('/api/wiki/article', { path, content: '# ' + title + '\n\n' }); state.td = null;
     go('#/article/' + path); toast('已创建');
   } catch (e) { toast('创建失败: ' + e.message); }
+}
+
+/* ── Block "+" button on empty lines ── */
+let _plusBtn = null;
+function setupBlockPlusBtn(body) {
+  if (!_plusBtn) {
+    _plusBtn = document.createElement('button');
+    _plusBtn.className = 'block-plus-btn';
+    _plusBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+    _plusBtn.addEventListener('mousedown', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Focus the empty line and open menu
+      const line = _plusBtn._targetLine;
+      if (line) {
+        const sel = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(line);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      const rect = _plusBtn.getBoundingClientRect();
+      showSlashMenu({ top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right });
+    });
+    document.body.appendChild(_plusBtn);
+  }
+
+  function isEmptyBlock(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (!/^(P|DIV|H[1-6])$/i.test(el.tagName)) return false;
+    const text = el.textContent.trim();
+    return text === '' || text === '\u200B';
+  }
+
+  function updatePlus() {
+    const sel = window.getSelection();
+    if (!sel.rangeCount || !sel.isCollapsed) { _plusBtn.classList.remove('show'); return; }
+    // Find the block-level parent of the cursor
+    let node = sel.anchorNode;
+    if (node.nodeType === 3) node = node.parentElement;
+    while (node && node !== body && !/^(P|DIV|H[1-6])$/i.test(node.tagName)) node = node.parentElement;
+    if (!node || node === body || !isEmptyBlock(node)) { _plusBtn.classList.remove('show'); return; }
+    // Slash menu already open? hide plus
+    const menu = $('slashMenu');
+    if (menu && menu.classList.contains('open')) { _plusBtn.classList.remove('show'); return; }
+    // Position to the left of the empty block
+    const rect = node.getBoundingClientRect();
+    _plusBtn.style.top = (rect.top + rect.height / 2 - 14) + 'px';
+    _plusBtn.style.left = (rect.left - 32) + 'px';
+    _plusBtn._targetLine = node;
+    _plusBtn.classList.add('show');
+  }
+
+  document.addEventListener('selectionchange', updatePlus);
+  body.addEventListener('input', () => setTimeout(updatePlus, 10));
+  body.addEventListener('blur', () => setTimeout(() => { if (!document.activeElement || !document.activeElement.closest('.block-plus-btn')) _plusBtn.classList.remove('show'); }, 100));
 }
 
 /* ── Image toolbar (resize + alignment) ── */

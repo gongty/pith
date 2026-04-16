@@ -29,10 +29,6 @@ export async function rDash(c) {
     else s += '<canvas id="dgCanvas"></canvas>';
     s += '<div class="graph-footer" id="dgLegend"></div></div>';
 
-    // Health card
-    s += '<div class="section-head"><span class="section-label">知识库健康</span><a class="section-link" href="#/health">查看报告 &rarr;</a></div>';
-    s += '<div class="dash-health-card" id="dashHealthCard"><span style="color:var(--fg-tertiary)">加载中...</span></div>';
-
     // Recent
     const ent = recent.entries || [];
     s += '<div class="section-head"><span class="section-label">最近活动</span></div>';
@@ -47,20 +43,6 @@ export async function rDash(c) {
     c.innerHTML = s;
     initComposer('dash', dashSend);
     if (graph.nodes.length >= 2) requestAnimationFrame(() => { const cv = document.getElementById('dgCanvas'); if (cv) initFG(cv, graph, false); });
-    // Async load health score
-    api('/api/reports/latest').then(report => {
-      const card = document.getElementById('dashHealthCard');
-      if (!card || !report) return;
-      const sc = report.score || 0;
-      const color = sc >= 90 ? 'var(--green)' : sc >= 70 ? 'var(--orange)' : 'var(--red)';
-      const issues = (report.issues || []).length;
-      card.innerHTML = '<div style="display:flex;align-items:center;gap:16px;cursor:pointer" onclick="go(\'#/health\')">'
-        + '<span style="font-size:32px;font-weight:700;color:' + color + '">' + sc + '</span>'
-        + '<div><div style="font-weight:500">健康评分</div><div style="color:var(--fg-tertiary);font-size:13px">' + issues + ' 个待处理问题</div></div></div>';
-    }).catch(() => {
-      const card = document.getElementById('dashHealthCard');
-      if (card) card.innerHTML = '<span style="color:var(--fg-tertiary);font-size:13px">暂无报告</span>';
-    });
   } catch (e) { c.innerHTML = '<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败: ' + h(e.message) + '</div>'; }
 }
 

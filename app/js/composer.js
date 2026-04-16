@@ -22,7 +22,7 @@ export function initComposer(ctx, sendFn) {
   inp.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
   inp.oninput = () => { inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 160) + 'px'; btn.disabled = !inp.value.trim(); };
   btn.onclick = send;
-  rotatePH(ctx + 'In'); setInterval(() => rotatePH(ctx + 'In'), 4000);
+  rotatePH(ctx + 'In'); setInterval(() => rotatePH(ctx + 'In'), 5000);
 }
 
 export async function loadModels(ddId, tagId) {

@@ -10,6 +10,15 @@ export function initSidebar() {
   if (localStorage.getItem('kb-sidebar') === 'collapsed') $('sidebar').classList.add('collapsed');
   const saved = localStorage.getItem('kb-sidebar-tab') || 'chat';
   switchSidebarTab(saved);
+  // Auto-hide scrollbar on sidebar lists
+  document.querySelectorAll('.sidebar-chat-list, .sidebar-pages').forEach(el => {
+    let t;
+    el.addEventListener('scroll', () => {
+      el.classList.add('is-scrolling');
+      clearTimeout(t);
+      t = setTimeout(() => el.classList.remove('is-scrolling'), 300);
+    }, { passive: true });
+  });
 }
 
 export function switchSidebarTab(tab) {
@@ -90,7 +99,9 @@ export async function updSidebarChats() {
     let s = '';
     items.forEach(c => {
       const active = (state.cv === 'chat' && state.convId === c.id) ? ' active' : '';
-      s += '<div class="sidebar-chat-item' + active + '" onclick="go(\'#/chat/' + h(c.id) + '\')" title="' + h(c.title) + '"><span class="chat-title">' + h(c.title) + '</span></div>';
+      s += '<div class="sidebar-chat-item' + active + '" onclick="go(\'#/chat/' + h(c.id) + '\')" title="' + h(c.title) + '"><span class="chat-title">' + h(c.title) + '</span>'
+        + '<button class="sidebar-chat-archive" onclick="event.stopPropagation();archiveChat(\'' + h(c.id) + '\')" title="归档"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg></button>'
+        + '</div>';
     });
     sc.innerHTML = s;
   } catch { sc.innerHTML = ''; }

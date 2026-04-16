@@ -28,8 +28,9 @@ export async function rChatList(c) {
 }
 
 export async function delChat(id) {
-  try { await apiDel('/api/chat/' + id); state.chatList = null; toast('已删除'); window.render(); } catch { toast('删除失败'); }
+  try { await apiDel('/api/chat/' + id); state.chatList = null; toast('已归档'); window.render(); } catch { toast('归档失败'); }
 }
+export { delChat as archiveChat };
 
 export async function rChat(c, id) {
   if (!id) {
@@ -75,15 +76,6 @@ function renderChatPage(c) {
 
   // Add topbar buttons
   const topActs = $('topbarActions');
-  const delBtn = document.getElementById('topbarDel');
-  if (topActs && !delBtn) {
-    const btn = document.createElement('button');
-    btn.id = 'topbarDel'; btn.className = 'topbar-btn'; btn.style.color = 'var(--fg-tertiary)';
-    btn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>';
-    btn.title = '删除对话';
-    btn.onclick = () => { delChat(state.convId); go('#/chat'); };
-    topActs.insertBefore(btn, topActs.firstChild);
-  }
   // Add topbar precipitate-conversation button
   if (topActs && state.convId && state.msgs.length > 0 && !document.getElementById('topbarPrecip')) {
     const pbtn = document.createElement('button');
