@@ -104,6 +104,23 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 .sidebar-page.active{background:var(--bg-active);color:var(--fg)}
 .sidebar-page svg{width:16px;height:16px;flex-shrink:0;opacity:0.5}
 .sidebar-topic{padding:8px 16px 2px;font-size:12px;font-weight:500;color:var(--fg-tertiary)}
+
+/* Sidebar TOC (article view) */
+.sidebar-toc{flex:1;overflow-y:auto;padding:4px 8px 16px}
+.sidebar-toc-head{
+  font-size:11px;font-weight:600;color:var(--fg-tertiary);
+  padding:12px 16px 6px;text-transform:uppercase;letter-spacing:0.04em;
+}
+.sidebar-toc-item{
+  display:block;padding:3px 8px 3px 12px;border-radius:var(--radius);
+  font-size:13px;color:var(--fg-secondary);cursor:pointer;
+  transition:background var(--t);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  border-left:2px solid transparent;margin-bottom:1px;
+}
+.sidebar-toc-item:hover{background:var(--bg-hover);color:var(--fg)}
+.sidebar-toc-item.h2{padding-left:12px}
+.sidebar-toc-item.h3{padding-left:24px;font-size:12px}
+.sidebar-toc-item.h4{padding-left:36px;font-size:12px}
 .sidebar-bottom{
   padding:6px 8px;display:flex;flex-direction:column;gap:1px;
 }
@@ -326,14 +343,8 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 }
 .article-save-indicator.show{opacity:1}
 
-/* Article action bar (delete etc) */
-.article-actions{display:flex;gap:4px;margin-bottom:8px}
-.article-action-btn{
-  padding:3px 8px;border-radius:var(--radius);font-size:12px;
-  color:var(--fg-tertiary);transition:background var(--t),color var(--t);
-}
-.article-action-btn:hover{background:var(--bg-hover);color:var(--fg-secondary)}
-.article-action-btn.danger:hover{color:var(--red);background:rgba(235,87,87,0.06)}
+/* Article topbar delete */
+#topbarDel:hover{color:var(--red)!important}
 
 /* ── Full Graph ── */
 .page-graph{height:100%;display:flex;flex-direction:column;padding:12px 16px;animation:fadeIn 150ms ease}
@@ -534,7 +545,7 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 <div class="main">
   <div class="topbar" id="topbar">
     <div class="topbar-breadcrumb" id="breadcrumb"></div>
-    <div class="topbar-actions">
+    <div class="topbar-actions" id="topbarActions">
       <button class="topbar-btn" onclick="openSearch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>搜索</button>
       <button class="topbar-btn topbar-btn-accent" onclick="openIngest()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>投喂</button>
     </div>
@@ -660,12 +671,15 @@ function updBC(r){
 function cancelGA(){if(gaf){cancelAnimationFrame(gaf);gaf=null}}
 async function render(){
   const r=route();cv=r.v;updNav(r.v);updBC(r);cancelGA();
+  // Clean up article-specific UI when leaving article view
+  const delBtn=document.getElementById('topbarDel');if(delBtn&&r.v!=='article')delBtn.remove();
+  if(r.v!=='article')updSidebarPages();
   const c=$('content');c.scrollTop=0;
   if(r.v==='dashboard')await rDash(c);
   else if(r.v==='graph')await rGraph(c);
   else if(r.v==='browse')await rBrowse(c);
   else if(r.v==='article')await rArticle(c,r.p);
-  updSidebarPages();
+  if(r.v!=='article')updSidebarPages();
 }
 window.addEventListener('hashchange',render);
 
@@ -838,19 +852,88 @@ async function rArticle(c,p){
     artMd=res.content||'';
     const lines=artMd.split('\n');
     let title='',bodyStart=0;
+    // Extract title (first # heading)
     if(lines[0]&&lines[0].startsWith('#')){title=lines[0].replace(/^#+\s*/,'');bodyStart=1;while(bodyStart<lines.length&&!lines[bodyStart].trim())bodyStart++}
-    const bodyMd=lines.slice(bodyStart).join('\n');
+    // Strip metadata lines from body for clean display
+    const bodyLines=lines.slice(bodyStart);
+    const cleanLines=[];
+    let skipMeta=true;
+    for(const line of bodyLines){
+      if(skipMeta){
+        const trimmed=line.trim();
+        // Skip: empty lines, word count, timestamps, source counts, blockquote metadata
+        if(!trimmed){continue}
+        if(/^\d+\s*(字|个来源|个引用)/.test(trimmed)){continue}
+        if(/^(创建|更新|Created|Updated|Published)\s*[:：]/.test(trimmed)){continue}
+        if(/^\d+\s*字\s*·/.test(trimmed)){continue}
+        if(/^>\s*(来源|原文|Source|Raw)[：:]/.test(trimmed)){cleanLines.push(line);continue}
+        // If it's a heading or normal paragraph, stop skipping
+        if(/^#{1,4}\s/.test(trimmed)||(!trimmed.startsWith('>')&&trimmed.length>0)){
+          skipMeta=false;
+          cleanLines.push(line);continue;
+        }
+        continue;
+      }
+      cleanLines.push(line);
+    }
+    const bodyMd=cleanLines.join('\n');
     const rendered=renderMd(bodyMd,p);
 
     let s='<div class="page-article"><div class="page-article-inner">';
-    s+='<div class="article-actions"><button class="article-action-btn danger" onclick="showDel()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg> 删除</button></div>';
     s+='<div class="article-title" contenteditable="true" id="artTitle" oninput="onArtChange()">'+h(title)+'</div>';
     s+='<div class="article-body" contenteditable="true" id="artBody" oninput="onArtChange()">'+rendered+'</div>';
     s+='</div></div>';
     s+='<div class="article-save-indicator" id="saveInd"></div>';
     c.innerHTML=s;
-    updSidebarPages();
+
+    // Add delete button to topbar
+    const topActs=$('topbarActions');
+    if(topActs&&!document.getElementById('topbarDel')){
+      const delBtn=document.createElement('button');
+      delBtn.id='topbarDel';delBtn.className='topbar-btn';delBtn.style.color='var(--fg-tertiary)';
+      delBtn.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>';
+      delBtn.title='删除文章';
+      delBtn.onclick=showDel;
+      topActs.insertBefore(delBtn,topActs.firstChild);
+    }
+
+    // Build TOC in sidebar (replaces page list)
+    buildSidebarTOC(artMd);
   }catch(e){c.innerHTML='<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败: '+h(e.message)+'</div>'}
+}
+
+function buildSidebarTOC(md){
+  const pages=$('sidebarPages');if(!pages)return;
+  const headings=[];
+  const lines=md.split('\n');
+  let inCode=false;
+  for(const line of lines){
+    if(line.trimStart().startsWith('```')){inCode=!inCode;continue}
+    if(inCode)continue;
+    const m=line.match(/^(#{1,4})\s+(.+)/);
+    if(m)headings.push({level:m[1].length,text:m[2].trim()});
+  }
+  if(headings.length<2)return; // Not enough headings for a TOC
+  let s='<div class="sidebar-toc-head">目录</div>';
+  headings.forEach(heading=>{
+    const cls='sidebar-toc-item h'+heading.level;
+    const id=heading.text.replace(/[^\w\u4e00-\u9fff]+/g,'-').replace(/^-|-$/g,'');
+    s+='<div class="'+cls+'" onclick="scrollToHeading(\''+h(id)+'\')">'+h(heading.text)+'</div>';
+  });
+  // Replace sidebar pages with TOC when viewing article
+  pages.innerHTML=s;
+}
+
+function scrollToHeading(id){
+  // Find heading in contenteditable body
+  const body=$('artBody');if(!body)return;
+  const headings=body.querySelectorAll('h1,h2,h3,h4');
+  for(const el of headings){
+    if(el.textContent.trim().replace(/[^\w\u4e00-\u9fff]+/g,'-').replace(/^-|-$/g,'')===id){
+      el.scrollIntoView({behavior:'smooth',block:'start'});
+      break;
+    }
+  }
 }
 
 function onArtChange(){
