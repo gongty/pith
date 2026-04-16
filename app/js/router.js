@@ -8,6 +8,7 @@ import { rChat } from './pages/chat.js';
 import { rGraph } from './pages/graph.js';
 import { rBrowse } from './pages/browse.js';
 import { rArticle } from './pages/article.js';
+import { rHealth } from './pages/health.js';
 
 export function route() {
   const hash = location.hash || '#/';
@@ -16,6 +17,7 @@ export function route() {
   if (hash.startsWith('#/chat/')) return { v: 'chat', id: hash.slice(7) };
   if (hash === '#/graph') return { v: 'graph' };
   if (hash === '#/browse') return { v: 'browse' };
+  if (hash === '#/health') return { v: 'health' };
   if (hash.startsWith('#/article/')) return { v: 'article', p: hash.slice(10) };
   return { v: 'dashboard' };
 }
@@ -34,6 +36,7 @@ function updBC(r) {
   if (r.v === 'dashboard') bc.innerHTML = '';
   else if (r.v === 'chat') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>对话';
   else if (r.v === 'graph') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>知识图谱';
+  else if (r.v === 'health') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>健康报告';
   else if (r.v === 'browse') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>全部文章';
   else if (r.v === 'article' && r.p) {
     const pts = r.p.split('/'), topic = pts.length > 1 ? pts[0] : '', f = pts[pts.length - 1].replace('.md', '');
@@ -49,12 +52,14 @@ function updBC(r) {
 export async function render() {
   const r = route(); state.cv = r.v; updNav(r.v); updBC(r); cancelGA(); hideFormatToolbar();
   const delBtn = document.getElementById('topbarDel'); if (delBtn && r.v !== 'article') delBtn.remove();
+  const precipBtn = document.getElementById('topbarPrecip'); if (precipBtn && r.v !== 'chat') precipBtn.remove();
   updSidebarPages(); updSidebarChats();
   const c = $('content'); c.scrollTop = 0;
   if (r.v === 'dashboard') await rDash(c);
   else if (r.v === 'chat') await rChat(c, r.id);
   else if (r.v === 'graph') await rGraph(c);
   else if (r.v === 'browse') await rBrowse(c);
+  else if (r.v === 'health') await rHealth(c);
   else if (r.v === 'article') await rArticle(c, r.p);
   updSidebarPages();
 }

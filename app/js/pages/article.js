@@ -126,9 +126,11 @@ async function autoSave() {
 }
 
 /* ── Format toolbar ── */
+let _selHandler = null;
 function setupFormatToolbar() {
   const body = $('artBody'); if (!body) return;
-  document.addEventListener('selectionchange', () => {
+  if (_selHandler) document.removeEventListener('selectionchange', _selHandler);
+  _selHandler = () => {
     const sel = window.getSelection();
     if (!sel.rangeCount || sel.isCollapsed || !body.contains(sel.anchorNode)) { hideFormatToolbar(); return; }
     const range = sel.getRangeAt(0); const rect = range.getBoundingClientRect();
@@ -136,7 +138,8 @@ function setupFormatToolbar() {
     tb.style.top = (rect.top + window.scrollY - 42) + 'px';
     tb.style.left = (rect.left + rect.width / 2 - tb.offsetWidth / 2) + 'px';
     tb.classList.add('show');
-  });
+  };
+  document.addEventListener('selectionchange', _selHandler);
 }
 
 export function hideFormatToolbar() { $('formatToolbar').classList.remove('show'); }

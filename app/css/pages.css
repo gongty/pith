@@ -18,6 +18,7 @@
 }
 .suggestion-card-title{font-size:13px;font-weight:600;color:var(--fg);margin-bottom:1px}
 .suggestion-card-desc{font-size:12px;color:var(--fg-tertiary)}
+@media(max-width:768px){.suggestion-cards{grid-template-columns:1fr 1fr}.suggestion-card{padding:10px 12px}.suggestion-card-icon{width:30px;height:30px}.chat-suggest-cards{grid-template-columns:1fr}}
 
 /* Section headers */
 .section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;margin-top:12px}
@@ -192,9 +193,10 @@
 .article-body tr:hover td{background:var(--bg-hover)}
 
 .article-save-indicator{
-  position:fixed;bottom:20px;right:20px;font-size:12px;color:var(--fg-tertiary);
-  background:var(--bg);padding:4px 10px;border-radius:var(--radius);
-  box-shadow:0 1px 4px rgba(0,0,0,0.08);opacity:0;transition:opacity var(--t);z-index:10;
+  position:fixed;bottom:20px;right:20px;font-size:12px;color:var(--green);
+  background:var(--bg);padding:6px 14px;border-radius:var(--radius);
+  border:1px solid var(--border);
+  box-shadow:0 2px 8px rgba(0,0,0,0.06);opacity:0;transition:opacity var(--t);z-index:10;
 }
 .article-save-indicator.show{opacity:1}
 
@@ -300,3 +302,65 @@
 [data-theme="dark"] .suggestion-card:hover{border-color:var(--accent-border);background:var(--accent-bg)}
 [data-theme="dark"] .chat-suggest-card{border-color:var(--border)}
 [data-theme="dark"] .chat-suggest-card:hover{border-color:var(--accent-border);background:var(--accent-bg)}
+
+/* ── Chat references ── */
+.chat-refs{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:6px}
+.chat-ref{font-size:12px;padding:2px 8px;border-radius:var(--radius);background:var(--bg-hover);color:var(--fg-secondary);text-decoration:none;display:inline-flex;align-items:center;gap:4px}
+.chat-ref:hover{background:var(--accent-bg);color:var(--accent)}
+.chat-ref::before{content:'📄';font-size:10px}
+
+/* ── Precipitate (沉淀) ── */
+.chat-msg.assistant{position:relative}
+.chat-msg-actions{position:absolute;top:4px;right:-40px;opacity:0;transition:opacity .15s}
+.chat-msg.assistant:hover .chat-msg-actions{opacity:1}
+.precip-btn{background:none;border:1px solid var(--border);border-radius:var(--radius);padding:4px;cursor:pointer;color:var(--fg-tertiary);display:flex;align-items:center}
+.precip-btn:hover{color:var(--accent);border-color:var(--accent)}
+.precip-badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;background:var(--accent-bg);color:var(--accent);text-decoration:none;cursor:pointer;border:1px solid transparent}
+.precip-badge:hover{background:var(--accent);color:#fff}
+.precip-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1200;display:none;align-items:center;justify-content:center}
+.precip-modal-bg.open{display:flex}
+.precip-modal-card{background:var(--bg);border-radius:var(--radius-lg);padding:24px;max-width:480px;width:90%;box-shadow:0 8px 30px rgba(0,0,0,.15)}
+.precip-modal-card h3{margin:0 0 12px;font-size:16px}
+.precip-preview-label{font-size:13px;color:var(--fg-tertiary);margin-bottom:6px}
+.precip-preview{font-size:13px;background:var(--bg-hover);padding:12px;border-radius:var(--radius);max-height:160px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin-bottom:16px;font-family:inherit}
+
+/* ── Dashboard health card ── */
+.dash-health-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 20px;margin-bottom:24px}
+
+/* ── Health report page ── */
+.page-health{max-width:var(--content-w);margin:0 auto;padding:40px 48px 80px;animation:fadeIn 150ms ease}
+.health-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+.health-title{margin:0;font-size:20px;font-weight:600}
+.health-time{font-size:13px;color:var(--fg-tertiary)}
+.health-score-section{display:flex;gap:24px;margin-bottom:24px;padding:20px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg)}
+.health-dims{flex:1;display:flex;flex-direction:column;gap:12px}
+.health-dim-head{display:flex;justify-content:space-between;margin-bottom:4px}
+.health-dim-label{font-size:13px;color:var(--fg-secondary)}
+.health-dim-val{font-size:13px;font-weight:600}
+.health-dim-bar{height:6px;background:var(--bg-hover);border-radius:3px;overflow:hidden}
+.health-dim-fill{height:100%;border-radius:3px;transition:width .4s ease}
+.health-total{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:100px;padding:0 16px;border-left:1px solid var(--border)}
+.health-total-val{font-size:48px;font-weight:700;line-height:1}
+.health-total-label{font-size:12px;color:var(--fg-tertiary);margin-top:4px}
+.health-stats{display:flex;gap:24px;margin-bottom:24px;padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);font-size:14px;color:var(--fg-secondary)}
+.health-stat-item{display:flex;align-items:center;gap:6px}
+.health-stat-icon{font-size:16px}
+.health-stat-num{font-weight:600;color:var(--fg)}
+.health-section-head{font-size:15px;font-weight:600;margin:24px 0 12px}
+.health-empty{padding:20px;text-align:center;color:var(--fg-tertiary);font-size:14px}
+.health-issues{margin-bottom:24px}
+.health-issue{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius);font-size:14px}
+.health-issue:hover{background:var(--bg-hover)}
+.health-issue-text{flex:1}
+.health-sev{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.health-sev-error{background:var(--red)}
+.health-sev-warning{background:var(--orange)}
+.health-sev-info{background:var(--accent)}
+.health-history{margin-bottom:24px}
+.health-history-item{display:flex;gap:16px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--fg-secondary)}
+.health-history-date{min-width:100px;font-weight:500}
+.health-history-score{font-weight:600}
+.health-history-issues{color:var(--fg-tertiary)}
+.health-history-loading{color:var(--fg-tertiary)}
+@media(max-width:640px){.health-score-section{flex-direction:column-reverse}.health-total{border-left:none;border-bottom:1px solid var(--border);padding:0 0 16px}.health-stats{flex-wrap:wrap;gap:12px}.page-health{padding:20px 16px 80px}}
+@media(max-width:768px){.article-save-indicator{bottom:70px}}

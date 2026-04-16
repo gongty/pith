@@ -1,4 +1,4 @@
-import { $, h, api, go, relTime } from '../utils.js';
+import { $, h, api, go, relTime, toast } from '../utils.js';
 
 function scoreColor(score) {
   if (score >= 90) return 'var(--green)';
@@ -50,7 +50,8 @@ export async function rHealth(c) {
     // Header
     s += '<div class="health-header">';
     s += '<h1 class="health-title">知识库健康报告</h1>';
-    s += '<span class="health-time">最后检查: ' + (data.timestamp ? relTime(data.timestamp) : '未知') + '</span>';
+    s += '<div style="display:flex;align-items:center;gap:12px"><span class="health-time">最后检查: ' + (data.timestamp ? relTime(data.timestamp) : '未知') + '</span>';
+    s += '<button class="btn-outline" style="font-size:12px;padding:4px 12px" onclick="runLintNow()">立即检查</button></div>';
     s += '</div>';
 
     // Score + dimensions
@@ -119,22 +120,38 @@ export async function rHealth(c) {
     s += '</div>';
     c.innerHTML = s;
 
-    // Load history details asynchronously
+    // Load history details in parallel
     const historyItems = c.querySelectorAll('.health-history-item');
-    for (const item of historyItems) {
+    const historyPromises = [...historyItems].map(item => {
       const date = item.dataset.date;
-      try {
-        const rpt = await api('/api/reports/' + date);
+      return api('/api/reports/' + date).then(rpt => {
         const issueCount = (rpt.issues || []).length;
         const loading = item.querySelector('.health-history-loading');
         if (loading) {
           loading.outerHTML = '<span class="health-history-score" style="color:' + scoreColor(rpt.score || 0) + '">' + (rpt.score || 0) + ' 分</span>' +
             '<span class="health-history-issues">' + issueCount + ' 个问题</span>';
         }
-      } catch {}
-    }
+      }).catch(() => {});
+    });
+    await Promise.all(historyPromises);
 
   } catch (e) {
     c.innerHTML = '<div class="page-health"><div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败: ' + h(e.message) + '</div></div>';
   }
 }
+
+// 手动触发检查并刷新页面
+window.runLintNow = async function () {
+  const btn = document.querySelector('.health-header .btn-outline');
+  if (btn) { btn.disabled = true; btn.textContent = '检查中...'; }
+  toast('正在检查...');
+  try {
+    await api('/api/wiki/lint');
+    toast('检查完成');
+    const c = $('content');
+    if (c) await rHealth(c);
+  } catch (e) {
+    toast('检查失败: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '立即检查'; }
+  }
+};

@@ -36,6 +36,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
       全部文章
     </div>
+    <div class="sidebar-item" data-view="health" onclick="go('#/health')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      健康报告
+    </div>
   </nav>
 
   <!-- Sidebar tabs -->
@@ -109,7 +113,7 @@
   <div class="search-box">
     <div class="search-input-row">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input class="search-field" id="searchInput" placeholder="搜索文章..." autocomplete="off">
+      <input class="search-field" id="searchInput" placeholder="搜索或提问..." autocomplete="off">
       <span class="search-hint">ESC</span>
     </div>
     <div class="search-results" id="searchResults"><div class="search-empty-msg">输入关键词搜索</div></div>
@@ -122,11 +126,11 @@
     <div class="ingest-head"><h3>投喂知识</h3><button class="topbar-btn" onclick="closeIngest()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
     <div class="ingest-form">
       <div>
-        <label class="field-label">拖拽文件或粘贴内容 · 链接自动识别</label>
+        <label class="field-label">拖拽文件或粘贴内容 · 支持 PDF/图片/音视频/文本/链接</label>
         <div class="ingest-drop-zone" id="ingestDropZone">
           <textarea id="ingestContent" placeholder="粘贴文本、拖入文件、或输入 https:// 链接..."></textarea>
           <div class="ingest-upload-bar">
-            <input type="file" id="ingestFile" accept=".txt,.md,.html,.json,.csv,.xml,.zip" multiple hidden>
+            <input type="file" id="ingestFile" accept=".txt,.md,.html,.json,.csv,.xml,.zip,.pdf,.png,.jpg,.jpeg,.webp,.gif,.mp3,.mp4,.wav,.m4a,.ogg,.webm" multiple hidden>
             <button class="ingest-upload-btn" onclick="document.getElementById('ingestFile').click()">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
               上传文件

@@ -14,7 +14,7 @@ WIKI_API_KEY=sk-xxx node server.js      # 手动指定
 PORT=3000 WIKI_API_KEY=sk-xxx node server.js  # 自定义端口
 ```
 
-Default port: 3456. No npm install, no build step. Pure Node.js stdlib + vanilla JS.
+Default port: 3456. First run `npm install` to install dependencies (pdf-parse, @mozilla/readability, jsdom). No build step. Node.js stdlib + vanilla JS frontend.
 
 ## Architecture
 
@@ -26,7 +26,7 @@ Raw Node.js HTTP server. Key subsystems:
 - **Compilation Engine** — `compileArticle()` takes raw content, calls LLM to produce structured wiki articles. Two modes: local CLI (spawns `claude` with tools) and API (server-driven JSON generation). Embedded rules in `COMPILE_RULES` constant.
 - **Chat System** — JSON file storage in `data/chats/`. Per-conversation files `conv_*.json` + `_index.json` index. Supports context retrieval from wiki for RAG.
 - **Wiki Data** — `buildGraph()` creates 3-layer knowledge graph (explicit links → keyword co-occurrence → topic affinity). `searchWiki()` for full-text search. `retrieveContext()` for chat RAG.
-- **Ingest Pipeline** — Single-task queue. Accepts text/URL/files/ZIP. Batch mode with progress tracking via `batchProgress` object polled by frontend.
+- **Ingest Pipeline** — Single-task queue. Accepts text/URL/PDF/image/audio/video/ZIP. Multi-format extraction: pdf-parse for PDF, Readability+jsdom for URL, LLM Vision for images, OpenAI Whisper or local ffmpeg+whisper for audio/video. Batch mode with progress tracking via `batchProgress` object polled by frontend. Files sent as base64 in JSON body (max 100MB).
 - **Static Files** — Serves `app/` directory. Path: `GET / → app/index.html`, `GET /css/base.css → app/css/base.css`, etc.
 
 ### Frontend (`app/`)

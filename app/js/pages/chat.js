@@ -12,7 +12,7 @@ export async function rChatList(c) {
     state.chatList = list;
     let s = '<div class="page-chat-list"><div class="chat-list-heading">对话</div>';
     if (!list.length) {
-      s += '<div class="chat-list-empty"><p style="margin-bottom:12px">还没有对话</p><button class="btn-fill" style="width:auto;padding:8px 20px" onclick="go(\'#/\')">开始提问</button></div>';
+      s += '<div class="chat-list-empty"><p style="margin-bottom:4px">还没有对话</p><p style="font-size:12px;color:var(--fg-tertiary);margin-bottom:14px">开始你的第一个提问，AI 会结合知识库内容回答</p><button class="btn-fill" style="width:auto;padding:8px 20px" onclick="go(\'#/\')">开始提问</button></div>';
     } else {
       list.forEach(ch => {
         const d = ch.updatedAt ? new Date(ch.updatedAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) : '';
@@ -96,7 +96,24 @@ function renderMsg(m) {
   const body = isUser ? h(m.content).replace(/\n/g, '<br>') : fmtChat(m.content);
   let s = '<div class="chat-msg ' + m.role + '">';
   if (isUser) { s += '<div class="chat-msg-body">' + body + '</div>'; }
-  else { s += '<div class="chat-msg-avatar">AI</div><div class="chat-msg-body">' + body + '</div>'; }
+  else {
+    s += '<div class="chat-msg-avatar">AI</div><div class="chat-msg-body">' + body;
+    // 显示引用的知识库文章
+    if (m.references && m.references.length > 0) {
+      s += '<div class="chat-refs">';
+      m.references.forEach(r => { s += '<a class="chat-ref" href="#/article/' + h(r.path) + '" title="' + h(r.path) + '">' + h(r.title || r.path) + '</a>'; });
+      s += '</div>';
+    }
+    s += '</div>';
+    // Precipitate button (hover-visible) + precipitated badge
+    s += '<div class="chat-msg-actions">';
+    if (m.precipitated) {
+      s += '<a class="precip-badge" href="#/article/' + h(m.precipitated.articlePath) + '" title="' + h(m.precipitated.articleTitle) + '">已沉淀</a>';
+    } else if (m.id) {
+      s += '<button class="precip-btn" onclick="precipitateMsg(\'' + h(m.id) + '\')" title="沉淀为知识"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg></button>';
+    }
+    s += '</div>';
+  }
   s += '</div>';
   return s;
 }
@@ -138,10 +155,31 @@ export async function chatSend() {
         const msgEl = document.createElement('div');
         msgEl.className = 'chat-msg assistant';
         msgEl.innerHTML = '<div class="chat-msg-avatar">AI</div><div class="chat-msg-body" id="aiTypeTarget"></div>';
+        // Add actions placeholder
+        const actionsEl = document.createElement('div');
+        actionsEl.className = 'chat-msg-actions';
+        actionsEl.style.opacity = '0';
+        msgEl.appendChild(actionsEl);
         inner.appendChild(msgEl);
         const target = document.getElementById('aiTypeTarget');
         const finalHtml = fmtChat(res.message.content);
-        typeEffect(target, finalHtml, () => { target.removeAttribute('id'); msgsEl.scrollTop = msgsEl.scrollHeight; });
+        const msg = res.message;
+        typeEffect(target, finalHtml, () => {
+          target.removeAttribute('id');
+          // Append references
+          if (msg.references && msg.references.length > 0) {
+            let refsHtml = '<div class="chat-refs">';
+            msg.references.forEach(r => { refsHtml += '<a class="chat-ref" href="#/article/' + h(r.path) + '" title="' + h(r.path) + '">' + h(r.title || r.path) + '</a>'; });
+            refsHtml += '</div>';
+            target.insertAdjacentHTML('beforeend', refsHtml);
+          }
+          // Show precipitate button
+          if (msg.id) {
+            actionsEl.innerHTML = '<button class="precip-btn" onclick="precipitateMsg(\'' + h(msg.id) + '\')" title="沉淀为知识"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg></button>';
+            actionsEl.style.opacity = '';
+          }
+          msgsEl.scrollTop = msgsEl.scrollHeight;
+        });
         msgsEl.scrollTop = msgsEl.scrollHeight;
       }
     }
@@ -155,3 +193,62 @@ export async function chatSend() {
   }
   state.chatBusy = false; $('cpSendBtn').disabled = false;
 }
+
+/* ── Precipitate (沉淀) ── */
+let _precipData = null;
+
+export function precipitateMsg(msgId) {
+  const idx = state.msgs.findIndex(m => m.id === msgId);
+  if (idx < 0) return;
+  const msg = state.msgs[idx];
+  const userMsg = idx > 0 && state.msgs[idx - 1].role === 'user' ? state.msgs[idx - 1] : null;
+  const preview = (userMsg ? '问：' + userMsg.content.slice(0, 100) + '\n' : '') + '答：' + msg.content.slice(0, 200);
+  const msgIds = userMsg ? [userMsg.id, msg.id].filter(Boolean) : [msg.id].filter(Boolean);
+  _showPrecipModal(preview, msgIds);
+}
+
+export function precipitateConv() {
+  if (!state.convId || !state.msgs.length) return;
+  const preview = state.msgs.filter(m => m.role !== 'system').slice(0, 4)
+    .map(m => (m.role === 'user' ? '问：' : '答：') + m.content.slice(0, 80)).join('\n');
+  _showPrecipModal(preview, []);
+}
+
+function _showPrecipModal(preview, msgIds) {
+  _precipData = { msgIds };
+  let modal = document.getElementById('precipModal');
+  if (!modal) { modal = document.createElement('div'); modal.id = 'precipModal'; modal.className = 'precip-modal-bg'; modal.onclick = e => { if (e.target === modal) closePrecipModal(); }; document.body.appendChild(modal); }
+  modal.innerHTML = '<div class="precip-modal-card"><h3>沉淀为知识</h3><div class="precip-preview-label">将沉淀以下内容：</div><pre class="precip-preview">' + h(preview) + '</pre><div class="modal-foot"><button class="btn-outline" onclick="closePrecipModal()">取消</button><button class="btn-sm-fill" onclick="doPrecipitate()">确认沉淀</button></div></div>';
+  modal.classList.add('open');
+}
+
+export function closePrecipModal() {
+  const modal = document.getElementById('precipModal');
+  if (modal) modal.classList.remove('open');
+  _precipData = null;
+}
+
+window.doPrecipitate = async function () {
+  if (!_precipData || !state.convId) return;
+  const msgIds = _precipData.msgIds;
+  closePrecipModal();
+  toast('正在沉淀...');
+  try {
+    const body = msgIds.length ? { messageIds: msgIds } : {};
+    const res = await post('/api/chat/' + state.convId + '/precipitate', body);
+    if (res.success && res.article) {
+      toast('已沉淀为《' + res.article.title + '》');
+      // 刷新知识库缓存（图谱、统计等）
+      state.gd = null; state.td = null; state.sd = null;
+      // Mark messages as precipitated
+      for (const mid of (msgIds.length ? msgIds : state.msgs.filter(m => m.role === 'assistant').map(m => m.id).filter(Boolean))) {
+        const m = state.msgs.find(x => x.id === mid);
+        if (m && m.role === 'assistant') m.precipitated = { articlePath: res.article.path, articleTitle: res.article.title, at: new Date().toISOString() };
+        try { await put('/api/chat/' + state.convId + '/message/' + mid + '/mark', { precipitated: { articlePath: res.article.path, articleTitle: res.article.title, at: new Date().toISOString() } }); } catch {}
+      }
+      // Re-render messages to show badge
+      const msgsEl = $('chatMsgs');
+      if (msgsEl) { const inner = msgsEl.querySelector('.chat-messages-inner'); if (inner) inner.innerHTML = state.msgs.map(m => renderMsg(m)).join(''); }
+    }
+  } catch (e) { toast('沉淀失败: ' + e.message); }
+};

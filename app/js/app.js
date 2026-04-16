@@ -5,13 +5,13 @@ import { initTheme, toggleTheme } from './theme.js';
 import { toggleSidebar, initSidebar, initSidebarPreview, toggleFold, switchSidebarTab } from './sidebar.js';
 import { toggleDD, pickModel } from './composer.js';
 import { openSearch, closeSearch, searchFor, handleSearchKeydown, initSearchInput } from './search.js';
-import { openSettings, closeSettings, onProvChange, saveSett, testConn } from './settings.js';
+import { openSettings, closeSettings, onProvChange, saveSett, testConn, switchSettingsTab } from './settings.js';
 import { openIngest, closeIngest, submitIngest, batchToggleAll, batchFileToggle, initIngestDragDrop } from './ingest.js';
 import { render } from './router.js';
 import { dashAsk } from './pages/dashboard.js';
-import { chatSend, delChat } from './pages/chat.js';
+import { chatSend, delChat, precipitateMsg, precipitateConv, closePrecipModal } from './pages/chat.js';
 import { toggleToc, scrollToH, onArtChange, fmtCmd, closeDel, doDel, newArticle } from './pages/article.js';
-import { gZoom, applyGF, switchGraphView } from './pages/graph.js';
+import { gZoom, applyGF } from './pages/graph.js';
 
 /* ── Expose functions to inline onclick handlers ── */
 window.go = go;
@@ -44,7 +44,10 @@ window.toggleFold = toggleFold;
 window.switchSidebarTab = switchSidebarTab;
 window.gZoom = gZoom;
 window.applyGF = applyGF;
-window.switchGraphView = switchGraphView;
+window.precipitateMsg = precipitateMsg;
+window.precipitateConv = precipitateConv;
+window.closePrecipModal = closePrecipModal;
+window.switchSettingsTab = switchSettingsTab;
 window.submitIngest = () => submitIngest(render);
 window.batchToggleAll = batchToggleAll;
 window.batchFileToggle = batchFileToggle;
@@ -76,7 +79,7 @@ document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openSearch(); }
   if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); go('#/'); }
   if ((e.metaKey || e.ctrlKey) && e.key === 'i') { e.preventDefault(); openIngest(); }
-  if (e.key === 'Escape') { closeSearch(); closeIngest(); closeSettings(); closeDel(); }
+  if (e.key === 'Escape') { closeSearch(); closeIngest(); closeSettings(); closeDel(); closePrecipModal(); }
   handleSearchKeydown(e);
 });
 

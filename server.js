@@ -2,8 +2,15 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
-const { spawn, execSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const os = require('os');
+const crypto = require('crypto');
+
+// ── 多格式导入依赖 ──
+let pdfParse, Readability, JSDOM;
+try { pdfParse = require('pdf-parse'); } catch {}
+try { ({ Readability } = require('@mozilla/readability')); } catch {}
+try { ({ JSDOM } = require('jsdom')); } catch {}
 
 const ROOT = __dirname;  // wiki-app/ is the project root
 const WIKI = path.join(ROOT, 'data', 'wiki');
@@ -17,6 +24,8 @@ const MEMORY_PATH = path.join(ROOT, 'data', 'memory.json');
 // Ensure data directories exist
 fs.mkdirSync(WIKI, { recursive: true });
 fs.mkdirSync(RAW, { recursive: true });
+const UPLOADS = path.join(ROOT, 'data', 'uploads');
+fs.mkdirSync(UPLOADS, { recursive: true });
 const CHATS = path.join(ROOT, 'data', 'chats');
 fs.mkdirSync(CHATS, { recursive: true });
 
@@ -263,6 +272,17 @@ function migrateMemory() {
 
 // ── LLM 调用层 ──
 
+function humanizeHttpError(status, body) {
+  const detail = body.slice(0, 200);
+  if (status === 401 || status === 403) return 'API Key 无效或已过期，请在设置中重新配置';
+  if (status === 429) return '请求过于频繁，已被限流，请稍后再试';
+  if (status === 402) return '账户额度已用完，请充值或更换服务商';
+  if (status === 404) return '模型不存在或 API 地址错误，请检查设置';
+  if (status === 500 || status === 502 || status === 503) return '服务商暂时不可用 (' + status + ')，请稍后再试';
+  if (status === 413) return '请求内容过大，请减少输入内容';
+  return 'HTTP ' + status + ': ' + detail;
+}
+
 function httpPost(url, headers, body) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
@@ -282,7 +302,8 @@ function httpPost(url, headers, body) {
           try { resolve(JSON.parse(data)); }
           catch { reject(new Error(`Invalid JSON: ${data.slice(0, 300)}`)); }
         } else {
-          reject(new Error(`HTTP ${res.statusCode}: ${data.slice(0, 500)}`));
+          const friendly = humanizeHttpError(res.statusCode, data);
+          reject(new Error(friendly));
         }
       });
     });
@@ -972,14 +993,203 @@ function stripHtml(html) {
   return text;
 }
 
-function fetchUrlContent(url) {
+// ── 多格式提取函数 ──
+
+async function extractPDF(b64) {
+  if (!pdfParse) throw new Error('pdf-parse 未安装，请运行 npm install pdf-parse');
+  const buf = Buffer.from(b64, 'base64');
+  const data = await pdfParse(buf);
+  if (!data.text || data.text.trim().length < 10) {
+    throw new Error('PDF 文本提取结果为空，该文件可能是扫描件（需要 OCR）');
+  }
+  return data.text;
+}
+
+async function extractURLReadability(url) {
   try {
-    const html = execSync(`curl -sL -m 30 "${url.replace(/"/g, '\\"')}"`, { encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024 });
+    // 安全：spawn 用数组参数，URL 不经过 shell 解析，防止命令注入
+    const html = await new Promise((resolve, reject) => {
+      const { spawn } = require('child_process');
+      const proc = spawn('curl', ['-sL', '-m', '30', url], { timeout: 35000 });
+      const chunks = [];
+      let size = 0;
+      proc.stdout.on('data', d => { size += d.length; if (size < 5 * 1024 * 1024) chunks.push(d); });
+      proc.stderr.on('data', () => {});
+      proc.on('error', reject);
+      proc.on('close', code => resolve(Buffer.concat(chunks).toString('utf-8')));
+    });
+    if (Readability && JSDOM) {
+      try {
+        const dom = new JSDOM(html, { url });
+        const reader = new Readability(dom.window.document);
+        const article = reader.parse();
+        if (article && article.textContent && article.textContent.trim().length > 100) {
+          return `# ${article.title || '未知标题'}\n\n${article.textContent}`;
+        }
+      } catch {}
+    }
     const text = stripHtml(html);
     if (text.length > 100) return text;
     return `[Fetched content too short]\n\nURL: ${url}\n\n${text}`;
   } catch (e) {
     return `[Fetch failed: ${e.message}]\n\nURL: ${url}`;
+  }
+}
+
+async function ocrImage(b64, filename) {
+  const config = getFullConfig();
+  const providerKey = config.provider || 'local';
+  const provider = PROVIDERS[providerKey];
+  const model = config.model || provider.defaultModel;
+
+  if (providerKey === 'local') {
+    throw new Error('本地 CLI 模式不支持图片识别，请切换到支持 Vision 的 provider（如 OpenAI gpt-4o、Anthropic Claude、百炼 qwen-vl）');
+  }
+  if (!config.apiKey) throw new Error('未配置 API Key，请在设置中配置');
+
+  const ext = (filename || '').split('.').pop().toLowerCase();
+  const mimeMap = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
+  const mediaType = mimeMap[ext] || 'image/png';
+
+  const baseUrl = (providerKey === 'custom' && config.customBaseUrl) ? config.customBaseUrl : provider.baseUrl;
+  const systemPrompt = '你是一个 OCR 和图片内容提取助手。请详细描述图片中的所有文字内容和关键视觉信息。如果图片包含文字，请完整准确地提取所有文字。如果是截图，请描述界面内容和文字。输出使用中文。';
+
+  if (provider.format === 'anthropic') {
+    const result = await httpPost(`${baseUrl}/v1/messages`, {
+      'x-api-key': config.apiKey,
+      'anthropic-version': '2023-06-01'
+    }, JSON.stringify({
+      model,
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: b64 } },
+          { type: 'text', text: '请提取并整理这张图片中的所有内容。' }
+        ]
+      }]
+    }));
+    return result.content[0].text;
+  }
+
+  // OpenAI-compatible Vision API
+  const headers = { 'Authorization': `Bearer ${config.apiKey}` };
+  if (providerKey === 'openrouter') {
+    headers['HTTP-Referer'] = `http://localhost:${PORT}`;
+    headers['X-Title'] = 'Wiki Knowledge Base';
+  }
+
+  let visionModel = model;
+  if (providerKey === 'bailian' && !model.startsWith('qwen-vl')) {
+    visionModel = 'qwen-vl-plus';
+  }
+  if (providerKey === 'openai' && !model.startsWith('gpt-4o') && !model.startsWith('gpt-4-turbo')) {
+    visionModel = 'gpt-4o';
+  }
+
+  const result = await httpPost(`${baseUrl}/chat/completions`, headers, JSON.stringify({
+    model: visionModel,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: [
+        { type: 'image_url', image_url: { url: `data:${mediaType};base64,${b64}` } },
+        { type: 'text', text: '请提取并整理这张图片中的所有内容。' }
+      ]}
+    ],
+    max_tokens: 4096
+  }));
+  return result.choices[0].message.content;
+}
+
+async function transcribeMedia(b64, filename) {
+  const config = getFullConfig();
+  const providerKey = config.provider || 'local';
+
+  if (providerKey === 'openai' && config.apiKey) {
+    const ext = (filename || 'audio.mp3').split('.').pop().toLowerCase();
+    const buf = Buffer.from(b64, 'base64');
+    const boundary = '----WikiAppBoundary' + Date.now();
+    const parts = [];
+    parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename || 'audio.' + ext}"\r\nContent-Type: application/octet-stream\r\n\r\n`));
+    parts.push(buf);
+    parts.push(Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-1`));
+    parts.push(Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="response_format"\r\n\r\ntext`));
+    parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+    const bodyBuf = Buffer.concat(parts);
+
+    const result = await new Promise((resolve, reject) => {
+      const options = {
+        hostname: 'api.openai.com',
+        port: 443,
+        path: '/v1/audio/transcriptions',
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.apiKey}`,
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Length': bodyBuf.length
+        }
+      };
+      const req = https.request(options, res => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve(data);
+          } else {
+            reject(new Error(`Whisper API HTTP ${res.statusCode}: ${data.slice(0, 500)}`));
+          }
+        });
+      });
+      req.on('error', reject);
+      req.setTimeout(600000, () => { req.destroy(); reject(new Error('转写超时 (600s)')); });
+      req.write(bodyBuf);
+      req.end();
+    });
+    return result;
+  }
+
+  try {
+    spawnSync('which', ['ffmpeg'], { stdio: 'pipe' }).status === 0 || (() => { throw new Error(); })();
+    const ext = (filename || 'media.mp3').split('.').pop().toLowerCase();
+    const tmpFile = path.join(os.tmpdir(), `wiki-media-${crypto.randomBytes(8).toString('hex')}.${ext}`);
+    const wavFile = path.join(os.tmpdir(), `wiki-media-${crypto.randomBytes(8).toString('hex')}.wav`);
+    fs.writeFileSync(tmpFile, Buffer.from(b64, 'base64'));
+    try {
+      const ffResult = spawnSync('ffmpeg', ['-i', tmpFile, '-ar', '16000', '-ac', '1', '-f', 'wav', wavFile, '-y'], { stdio: 'pipe', timeout: 120000 });
+      if (ffResult.status !== 0) throw new Error('ffmpeg failed');
+      try {
+        const whichWhisper = spawnSync('which', ['whisper'], { stdio: 'pipe' });
+        if (whichWhisper.status !== 0) throw new Error('whisper not found');
+        const whisperResult = spawnSync('whisper', [wavFile, '--model', 'base', '--output_format', 'txt', '--output_dir', os.tmpdir()], { encoding: 'utf-8', timeout: 300000 });
+        if (whisperResult.status !== 0) throw new Error('whisper failed');
+        const txtFile = wavFile.replace('.wav', '.txt');
+        if (fs.existsSync(txtFile)) {
+          const text = fs.readFileSync(txtFile, 'utf-8');
+          try { fs.unlinkSync(txtFile); } catch {}
+          try { fs.unlinkSync(tmpFile); } catch {}
+          try { fs.unlinkSync(wavFile); } catch {}
+          return text;
+        }
+      } catch {}
+    } finally {
+      try { fs.unlinkSync(tmpFile); } catch {}
+      try { fs.unlinkSync(wavFile); } catch {}
+    }
+  } catch {}
+
+  throw new Error('当前配置不支持音视频转写。可选方案：\n1. 切换到 OpenAI provider（使用 Whisper API）\n2. 安装 ffmpeg + whisper CLI 进行本地转写\n3. 手动转写后粘贴文本导入');
+}
+
+async function extractContent(type, content, filename, urlVal) {
+  switch (type) {
+    case 'text': return content;
+    case 'url': return await extractURLReadability(urlVal || content);
+    case 'pdf': return await extractPDF(content);
+    case 'image': return await ocrImage(content, filename);
+    case 'audio':
+    case 'video': return await transcribeMedia(content, filename);
+    default: return content;
   }
 }
 
@@ -989,6 +1199,15 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const p = url.pathname;
   const params = url.searchParams;
+
+  // ── Global POST/PUT body size guard (10 MB default; /api/ingest has its own 100 MB limit) ──
+  if (req.method === 'POST' || req.method === 'PUT') {
+    const cl = parseInt(req.headers['content-length'] || '0', 10);
+    if (p !== '/api/ingest' && p !== '/api/ingest/batch' && cl > 10 * 1024 * 1024) {
+      res.writeHead(413, { 'Content-Type': 'application/json; charset=utf-8' });
+      return res.end(JSON.stringify({ error: '请求体过大' }));
+    }
+  }
 
   // ── Chat API ──
   const chatMatch = p.match(/^\/api\/chat(?:\/(.*))?$/);
@@ -1357,7 +1576,22 @@ const server = http.createServer(async (req, res) => {
       const rel = path.relative(WIKI, f);
       const parts = rel.split(path.sep);
       const topic = parts.length > 1 ? parts[0] : '';
-      nodes.push({ id: rel, name: extractTitle(f), topic });
+      const kws = extractKeywords(f);
+      const kwArr = [...kws];
+      const genericKw = new Set(['概述', '总结', '背景', '简介', '引言', '正文', '结论', '附录', '参考', '说明', '定义', '目标', '方法', '结果', '讨论', '核心', '架构', '总览']);
+      const title = extractTitle(f);
+      // 按标点/空格/英文/中文连词分割标题，提取中文词汇
+      const cnSegments = title.split(/[^一-\u9fff]+|[与和的及或从到在]+/).filter(s => s.length >= 2);
+      // 短片段（≤4字）直接用；长片段用 2 字，但若首字是前缀（非/不/无/多）则取 3 字
+      const prefixChars = '非不无多';
+      const titleKw = cnSegments.map(s => {
+        if (s.length <= 4) return s;
+        return (s.length >= 3 && prefixChars.includes(s[0])) ? s.slice(0, 3) : s.slice(0, 2);
+      }).filter(w => !genericKw.has(w));
+      // 正文关键词（heading/bold）作备选
+      const bodyKw = kwArr.filter(w => !genericKw.has(w) && w.length >= 2 && w.length <= 4 && !/^[a-z]{1,3}$/i.test(w));
+      const keyword = titleKw[0] || bodyKw[0] || title.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '').slice(0, 4) || topic;
+      nodes.push({ id: rel, name: extractTitle(f), topic, keyword });
 
       // Read file content to distinguish See Also links from inline references
       let content = '';
@@ -1591,22 +1825,21 @@ const server = http.createServer(async (req, res) => {
     let body = '';
     req.on('data', c => body += c);
     req.on('end', () => {
+      let zipPath, tmpDir;
       try {
         const { data } = JSON.parse(body); // base64 encoded zip
-        const tmpDir = path.join(os.tmpdir(), 'wiki-zip-' + Date.now());
-        const zipPath = tmpDir + '.zip';
+        tmpDir = path.join(os.tmpdir(), 'wiki-zip-' + crypto.randomBytes(8).toString('hex'));
+        zipPath = tmpDir + '.zip';
         fs.mkdirSync(tmpDir, { recursive: true });
         fs.writeFileSync(zipPath, Buffer.from(data, 'base64'));
-        try { execSync(`unzip -o "${zipPath}" -d "${tmpDir}"`, { stdio: 'pipe' }); } catch (e) {
-          fs.unlinkSync(zipPath);
-          fs.rmSync(tmpDir, { recursive: true, force: true });
-          return json(res, 400, { error: 'ZIP 解压失败: ' + (e.stderr ? e.stderr.toString().slice(0, 200) : e.message) });
-        }
+        const unzipResult = spawnSync('unzip', ['-o', zipPath, '-d', tmpDir], { stdio: 'pipe' });
+        if (unzipResult.status !== 0) throw new Error('ZIP 解压失败: ' + (unzipResult.stderr ? unzipResult.stderr.toString().slice(0, 200) : 'unzip failed'));
         const files = [];
         function walkDir(dir) {
           for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
             if (entry.name.startsWith('.') || entry.name === '__MACOSX') continue;
             const full = path.join(dir, entry.name);
+            if (!path.resolve(full).startsWith(path.resolve(tmpDir))) continue; // path traversal guard
             if (entry.isDirectory()) { walkDir(full); continue; }
             if (/\.(md|txt|html|json|csv|xml)$/i.test(entry.name)) {
               const content = fs.readFileSync(full, 'utf-8');
@@ -1615,11 +1848,11 @@ const server = http.createServer(async (req, res) => {
           }
         }
         walkDir(tmpDir);
-        // Cleanup
-        fs.unlinkSync(zipPath);
-        fs.rmSync(tmpDir, { recursive: true, force: true });
         return json(res, 200, { files });
-      } catch (e) { return json(res, 400, { error: e.message }); }
+      } catch (e) { return json(res, 400, { error: e.message }); } finally {
+        try { if (zipPath) fs.unlinkSync(zipPath); } catch {}
+        try { if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+      }
     });
     return;
   }
@@ -1627,12 +1860,19 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/ingest' && req.method === 'POST') {
     const running = taskQueue.find(t => t.status === 'compiling');
     if (running) return json(res, 409, { error: '已有编译任务进行中' });
-    let body = '';
-    req.on('data', c => body += c);
+    const chunks = [];
+    let totalSize = 0;
+    const MAX_BODY = 100 * 1024 * 1024;
+    req.on('data', c => { totalSize += c.length; if (totalSize <= MAX_BODY) chunks.push(c); });
     req.on('end', () => {
+      if (totalSize > MAX_BODY) return json(res, 413, { error: '请求体过大，最大支持 100MB' });
       try {
+        const body = Buffer.concat(chunks).toString('utf-8');
         const parsed = JSON.parse(body);
-        const items = parsed.items || [{ type: parsed.type, content: parsed.content, topic: parsed.topic }];
+        const items = parsed.items || [{
+          type: parsed.type, content: parsed.content, topic: parsed.topic,
+          filename: parsed.filename, url: parsed.url
+        }];
         const modelOverrides = (parsed.provider && parsed.model) ? { provider: parsed.provider, model: parsed.model } : null;
         const isBatch = items.length > 1;
 
@@ -1642,10 +1882,10 @@ const server = http.createServer(async (req, res) => {
             total: items.length,
             completed: 0,
             failed: 0,
-            currentFile: items[0].name || items[0].content.slice(0, 40),
+            currentFile: items[0].name || items[0].filename || (items[0].content ? items[0].content.slice(0, 40) : ''),
             status: 'processing',
             startedAt: new Date().toISOString(),
-            files: items.map(it => ({ name: it.name || it.content.slice(0, 40), status: 'pending' }))
+            files: items.map(it => ({ name: it.name || it.filename || (it.content ? it.content.slice(0, 40) : ''), status: 'pending' }))
           };
         }
 
@@ -1654,32 +1894,55 @@ const server = http.createServer(async (req, res) => {
             if (isBatch) batchProgress.status = 'done';
             return;
           }
-          const { type, content, topic, name } = items[idx];
+          const { type, content, topic, name, filename: itemFilename, url: itemUrl } = items[idx];
           if (isBatch) {
-            batchProgress.currentFile = name || content.slice(0, 40);
+            batchProgress.currentFile = name || itemFilename || (content ? content.slice(0, 40) : '');
             batchProgress.files[idx].status = 'processing';
           }
           const topicDir = topic && topic !== 'auto' ? topic : 'general';
           const dir = path.join(RAW, topicDir);
           fs.mkdirSync(dir, { recursive: true });
           const date = new Date().toISOString().slice(0, 10);
-          let slug = 'source';
-          if (type === 'url') slug = content.replace(/https?:\/\//, '').replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-').slice(0, 40);
-          else slug = (content.slice(0, 40).replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-') || 'text');
-          const filename = `${date}-${slug}.md`;
-          const filePath = path.join(dir, filename);
-          let rawContent;
-          if (type === 'url') {
-            const fetched = fetchUrlContent(content);
-            rawContent = `# Source\n\n> Source: ${content}\n> Collected: ${date}\n> Published: Unknown\n\n${fetched}`;
-          } else {
-            rawContent = `# Source\n\n> Source: user input\n> Collected: ${date}\n\n${content}`;
+
+          const isBinaryType = ['pdf', 'image', 'audio', 'video'].includes(type);
+          let extractedText;
+          try {
+            extractedText = await extractContent(type, content, itemFilename || name, itemUrl);
+          } catch (extractErr) {
+            if (isBatch) {
+              batchProgress.files[idx].status = 'error';
+              batchProgress.files[idx].error = extractErr.message;
+              batchProgress.failed++;
+              batchProgress.completed++;
+            } else {
+              const task = pushTask(type);
+              task.status = 'error';
+              task.message = `内容提取失败: ${extractErr.message}`;
+            }
+            await processItem(idx + 1);
+            return;
           }
+
+          let slug = 'source';
+          if (type === 'url') {
+            slug = (itemUrl || content).replace(/https?:\/\//, '').replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-').slice(0, 40);
+          } else if (isBinaryType && (itemFilename || name)) {
+            slug = (itemFilename || name).replace(/\.[^.]+$/, '').replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-').slice(0, 40) || type;
+          } else {
+            slug = (extractedText.slice(0, 40).replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-') || 'text');
+          }
+          const rawFilename = `${date}-${slug}.md`;
+          const filePath = path.join(dir, rawFilename);
+
+          const sourceLabel = isBinaryType
+            ? `${type} file: ${itemFilename || name || 'unknown'}`
+            : (type === 'url' ? (itemUrl || content) : 'user input');
+          const rawContent = `# Source\n\n> Source: ${sourceLabel}\n> Collected: ${date}\n> Type: ${type}\n\n${extractedText}`;
           fs.writeFileSync(filePath, rawContent, 'utf-8');
 
           const task = pushTask(type);
           try {
-            await compileArticle(topicDir, filename, filePath, task, modelOverrides);
+            await compileArticle(topicDir, rawFilename, filePath, task, modelOverrides);
             if (isBatch) {
               batchProgress.files[idx].status = 'done';
               batchProgress.completed++;
@@ -1708,7 +1971,10 @@ const server = http.createServer(async (req, res) => {
     const task = latestTask();
     if (!task) return json(res, 200, { status: 'idle' });
     const resp = { id: task.id, status: task.status, message: task.message };
-    if (task.created) resp.created = task.created;
+    if (task.created) {
+      resp.created = task.created;
+      if (task.created.length > 0) resp.article = task.created[0];
+    }
     return json(res, 200, resp);
   }
 
