@@ -585,33 +585,22 @@ function retrieveContext(question) {
   const references = [];
   const seen = new Set();
 
-  for (const r of searchResults.slice(0, 5)) {
+  // Only include actual articles (skip index.md / log.md), max 5
+  const filtered = searchResults.filter(r => !['index.md', 'log.md'].includes(r.path.split('/').pop()));
+  for (const r of filtered.slice(0, 5)) {
     if (seen.has(r.path)) continue;
     seen.add(r.path);
     try {
       let content = wikiCache.get(r.path);
       if (!content) { content = fs.readFileSync(path.join(WIKI, r.path), 'utf-8'); wikiCache.set(r.path, content); }
-      articleContents.push(`### ${r.title} (${r.path})\n\n${content}`);
+      // Truncate long articles to avoid blowing up the context
+      const truncated = content.length > 4000 ? content.slice(0, 4000) + '\n\n...(内容已截断)' : content;
+      articleContents.push(`### ${r.title} (${r.path})\n\n${truncated}`);
       references.push({ path: r.path, title: r.title });
     } catch {}
   }
 
-  // If too few results, supplement with same-topic articles
-  if (articleContents.length < 3) {
-    const allFiles = walkMd(WIKI).filter(f => !['index.md', 'log.md'].includes(path.basename(f)));
-    for (const f of allFiles.slice(0, 8)) {
-      const rel = path.relative(WIKI, f);
-      if (seen.has(rel)) continue; seen.add(rel);
-      try {
-        let content = wikiCache.get(rel);
-        if (!content) { content = fs.readFileSync(f, 'utf-8'); wikiCache.set(rel, content); }
-        articleContents.push(`### ${extractTitle(f)} (${rel})\n\n${content}`);
-        references.push({ path: rel, title: extractTitle(f) });
-      } catch {}
-      if (articleContents.length >= 6) break;
-    }
-  }
-
+  // No fallback — if nothing matches, the AI answers from its own knowledge
   return { articleContents, references };
 }
 
@@ -664,24 +653,60 @@ function removeChatFromIndex(id) {
   saveChatIndex(index);
 }
 
-// ── Context Window Trimming ──
+// ── Context Window Management ──
+// Sliding window: keep recent messages up to ~80K tokens.
+// If total conversation exceeds 100K tokens, compress older messages into a summary.
 
-function trimMessages(messages, tokenBudget) {
-  // If all fit, return all
+const WINDOW_TOKEN_LIMIT = 80000;   // sliding window size
+const COMPRESS_THRESHOLD = 100000;  // trigger compression above this
+
+function trimMessages(messages, _unused) {
   const total = messages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
-  if (total <= tokenBudget) return messages;
 
-  // Keep first 2 messages + as many recent messages as fit
-  const keep = messages.slice(0, 2);
-  let used = keep.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+  // Under window limit — return all
+  if (total <= WINDOW_TOKEN_LIMIT) return messages;
+
+  // Sliding window: always keep first message (context) + recent messages that fit
+  const first = messages[0];
+  let budget = WINDOW_TOKEN_LIMIT - estimateTokens(first.content);
   const recent = [];
-  for (let i = messages.length - 1; i >= 2; i--) {
+  for (let i = messages.length - 1; i >= 1; i--) {
     const cost = estimateTokens(messages[i].content);
-    if (used + cost > tokenBudget) break;
+    if (budget - cost < 0) break;
     recent.unshift(messages[i]);
-    used += cost;
+    budget -= cost;
   }
-  return [...keep, ...recent];
+  return [first, ...recent];
+}
+
+async function compressHistory(conv, overrides) {
+  const total = conv.messages.reduce((s, m) => s + estimateTokens(m.content), 0);
+  if (total < COMPRESS_THRESHOLD) return;
+
+  // Compress the older half of messages into a summary
+  const mid = Math.floor(conv.messages.length / 2);
+  const oldMsgs = conv.messages.slice(0, mid);
+  const recentMsgs = conv.messages.slice(mid);
+
+  const summaryText = oldMsgs.map(m => `${m.role}: ${m.content.slice(0, 300)}`).join('\n');
+  try {
+    const summary = await callLLM(
+      '你是一个对话压缩器。把以下对话历史压缩成一段简洁的摘要（200字以内），保留关键信息和结论。只输出摘要，不要其他内容。',
+      summaryText,
+      overrides
+    );
+    const summaryMsg = {
+      id: genId('msg'), role: 'system', content: `[历史摘要] ${summary}`,
+      timestamp: new Date().toISOString()
+    };
+    conv.messages = [summaryMsg, ...recentMsgs];
+    conv.totalTokenEstimate = conv.messages.reduce((s, m) => s + estimateTokens(m.content), 0);
+    saveChat(conv);
+  } catch {
+    // Compression failed — just truncate to recent half
+    conv.messages = recentMsgs;
+    saveChat(conv);
+  }
 }
 
 // ── Chat Message Handler ──
@@ -703,44 +728,34 @@ async function handleChatMessage(conv, userContent, overrides) {
   const profile = loadProfile();
   const bioContext = profile && profile.bio ? `\n用户背景：${profile.bio}` : '';
 
-  const systemPrompt = `你是一个个人知识库助手。你可以访问用户的知识库文章来回答问题。
+  const articleSection = articleContents.length > 0
+    ? `## 相关文章内容（共 ${articleContents.length} 篇匹配）\n${articleContents.join('\n\n---\n\n')}`
+    : '## 相关文章内容\n无匹配文章。请用你自己的知识回答。';
+
+  const systemPrompt = `你是一个个人知识库助手。用户有一个包含文章的知识库，你可以引用其中的内容来回答问题。
 
 ## 知识库索引
 ${wikiIndex}
 
-## 相关文章内容
-${articleContents.join('\n\n---\n\n')}
+${articleSection}
 
 ## 规则
-1. 优先使用知识库内容回答，不编造知识库中没有的信息
-2. 引用文章时使用 [文章标题](路径) 格式
-3. 如果知识库中没有相关内容，可以用你的知识回答，但要说明这不是来自知识库
+1. 如果有匹配的文章，优先使用文章内容回答，引用时用 [文章标题](路径) 格式
+2. 如果没有匹配的文章，直接用你自己的知识回答即可，不需要特别说明
+3. 不要编造知识库中没有的文章
 4. 用中文回答
-5. 回答要有条理，自然对话风格${bioContext}`;
+5. 自然对话风格，简洁有条理${bioContext}`;
 
-  // Build messages array for multi-turn
+  // Build messages array for multi-turn (sliding window)
   const historyMsgs = conv.messages.map(m => ({ role: m.role, content: m.content }));
-  const trimmed = trimMessages(historyMsgs, 3500);
+  const trimmed = trimMessages(historyMsgs);
 
   // Call LLM
   const response = await callLLM(systemPrompt, trimmed, overrides);
 
-  // Extract referenced articles from response
-  const refSet = new Set(references.map(r => r.path));
-  const mentionedRefs = [];
-  const linkRe = /\[([^\]]+)\]\(([^)]+\.md)\)/g;
-  let lm;
-  while ((lm = linkRe.exec(response)) !== null) {
-    if (refSet.has(lm[2]) || references.find(r => r.path === lm[2])) {
-      mentionedRefs.push({ path: lm[2], title: lm[1] });
-    }
-  }
-  // Include all context references if AI didn't explicitly link any
-  const finalRefs = mentionedRefs.length > 0 ? mentionedRefs : references.filter((_, i) => i < 3);
-
   const assistantMsg = {
     id: genId('msg'), role: 'assistant', content: response, timestamp: new Date().toISOString(),
-    references: finalRefs
+    references: references
   };
   conv.messages.push(assistantMsg);
   conv.updatedAt = new Date().toISOString();
@@ -748,6 +763,9 @@ ${articleContents.join('\n\n---\n\n')}
 
   saveChat(conv);
   updateChatIndex(conv);
+
+  // Auto-compress if conversation exceeds 100K tokens (non-blocking)
+  compressHistory(conv, overrides).catch(() => {});
 
   return assistantMsg;
 }
