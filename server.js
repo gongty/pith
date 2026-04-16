@@ -153,17 +153,42 @@ const PROVIDERS = {
 };
 
 function loadConfig() {
+  let cfg = { provider: 'local', apiKey: '', model: '', customBaseUrl: '' };
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const saved = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
-      return { provider: saved.provider || 'local', apiKey: saved.apiKey || '', model: saved.model || '', customBaseUrl: saved.customBaseUrl || '' };
+      cfg.provider = saved.provider || 'local';
+      cfg.model = saved.model || '';
+      cfg.customBaseUrl = saved.customBaseUrl || '';
+      // config.json 不再存 key，仅作兼容读取
+      if (saved.apiKey) cfg.apiKey = saved.apiKey;
     }
   } catch {}
-  return { provider: 'local', apiKey: '', model: '', customBaseUrl: '' };
+  // 环境变量优先级最高
+  if (process.env.WIKI_API_KEY) cfg.apiKey = process.env.WIKI_API_KEY;
+  return cfg;
 }
 
 function saveConfig(cfg) {
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify({ provider: cfg.provider, apiKey: cfg.apiKey, model: cfg.model, customBaseUrl: cfg.customBaseUrl || '' }, null, 2), 'utf-8');
+  // 只存 provider/model/customBaseUrl，不存 apiKey
+  const toSave = { provider: cfg.provider, model: cfg.model, customBaseUrl: cfg.customBaseUrl || '' };
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(toSave, null, 2), 'utf-8');
+}
+
+// apiKey 单独存储到 .api-key 文件（不进 git）
+const API_KEY_PATH = path.join(ROOT, '.api-key');
+function saveApiKey(key) {
+  fs.writeFileSync(API_KEY_PATH, key, 'utf-8');
+  fs.chmodSync(API_KEY_PATH, 0o600); // 仅 owner 可读写
+}
+function loadApiKey() {
+  try { return fs.readFileSync(API_KEY_PATH, 'utf-8').trim(); } catch { return ''; }
+}
+// 加载时合并 .api-key
+function getFullConfig() {
+  const cfg = loadConfig();
+  if (!cfg.apiKey) cfg.apiKey = loadApiKey();
+  return cfg;
 }
 
 function loadProfile() {
@@ -277,7 +302,7 @@ async function callLLM(systemPrompt, messages, overrides) {
     ? [{ role: 'user', content: messages }]
     : messages;
 
-  const config = loadConfig();
+  const config = getFullConfig();
   const providerKey = (overrides && overrides.provider) || config.provider || 'local';
   const provider = PROVIDERS[providerKey] || PROVIDERS.local;
   const model = (overrides && overrides.model) || config.model || provider.defaultModel;
@@ -330,7 +355,7 @@ function callLocalCLI(prompt) {
 // ── 编译引擎 ──
 
 async function compileArticle(topicDir, filename, filePath, task, overrides) {
-  const config = loadConfig();
+  const config = getFullConfig();
   const providerKey = (overrides && overrides.provider) || config.provider || 'local';
   const provider = PROVIDERS[providerKey] || PROVIDERS.local;
 
@@ -452,7 +477,7 @@ ${COMPILE_RULES}
 }
 
 async function queryWiki(question) {
-  const config = loadConfig();
+  const config = getFullConfig();
   const providerKey = config.provider || 'local';
   const provider = PROVIDERS[providerKey] || PROVIDERS.local;
 
@@ -985,7 +1010,7 @@ const server = http.createServer(async (req, res) => {
       req.on('end', async () => {
         try {
           const parsed = body ? JSON.parse(body) : {};
-          const config = loadConfig();
+          const config = getFullConfig();
           const conv = {
             id: genId('conv'),
             title: '新对话',
@@ -1155,7 +1180,7 @@ const server = http.createServer(async (req, res) => {
 
             // Compile via engine
             const task = pushTask('precipitate');
-            const config = loadConfig();
+            const config = getFullConfig();
             const modelOverrides = { provider: conv.provider || config.provider, model: conv.model || config.model };
             try {
               await compileArticle(topicDir, filename, filePath, task, modelOverrides);
@@ -1778,7 +1803,7 @@ const server = http.createServer(async (req, res) => {
         totalWords += c.length;
       } catch {}
     }
-    const config = loadConfig();
+    const config = getFullConfig();
     const providerName = (PROVIDERS[config.provider] || {}).name || config.provider;
 
     return json(res, 200, { orphans, brokenLinks, missingFromIndex, totalArticles: allRels.size, totalConnections, rawCount: rawFiles.length, totalWords, provider: providerName, hasKey: !!(config.apiKey) || config.provider === 'local' });
@@ -1786,11 +1811,9 @@ const server = http.createServer(async (req, res) => {
 
   // GET /api/settings — 获取当前配置
   if (p === '/api/settings' && req.method === 'GET') {
-    const config = loadConfig();
-    const maskedKey = config.apiKey ? config.apiKey.slice(0, 4) + '****' + config.apiKey.slice(-4) : '';
+    const config = getFullConfig();
     return json(res, 200, {
       provider: config.provider,
-      apiKey: maskedKey,
       model: config.model,
       customBaseUrl: config.customBaseUrl || '',
       providers: PROVIDERS,
@@ -1807,10 +1830,11 @@ const server = http.createServer(async (req, res) => {
         const { provider, apiKey, model, customBaseUrl } = JSON.parse(body);
         const config = loadConfig();
         if (provider) config.provider = provider;
-        if (typeof apiKey === 'string' && !apiKey.includes('****')) config.apiKey = apiKey;
         if (typeof model === 'string') config.model = model;
         if (typeof customBaseUrl === 'string') config.customBaseUrl = customBaseUrl;
         saveConfig(config);
+        // apiKey 单独存储到 .api-key 文件
+        if (typeof apiKey === 'string' && apiKey.trim()) saveApiKey(apiKey.trim());
         return json(res, 200, { ok: true });
       } catch (e) { return json(res, 400, { error: e.message }); }
     });
