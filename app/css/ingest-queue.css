@@ -124,6 +124,9 @@
   background:var(--bg-hover);color:var(--fg-tertiary);
   font-size:10px;font-weight:500;vertical-align:middle;
 }
+.iq-retry-badge.iq-retry-inflight{
+  background:var(--accent);color:#fff;opacity:0.85;
+}
 .iq-item + .iq-item{margin-top:2px}
 .iq-item-main{flex:1;min-width:0}
 .iq-item-name{

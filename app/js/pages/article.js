@@ -205,14 +205,15 @@ async function autoSave() {
   const bodyHtml = bodyEl.innerHTML;
   const bodyMd = html2md(bodyHtml);
   // 保留原文件的 YAML frontmatter（tags 等元数据），避免编辑正文时被吞掉
+  // 用 parseFrontmatter 验证：仅在能成功解析出闭合 --- 的 frontmatter 时才保留原字节
   let fmBlock = '';
   const origMd = state.artMd || '';
-  if (origMd.startsWith('---\n')) {
-    const oLines = origMd.split('\n');
-    const MAX_SCAN = Math.min(oLines.length, 12);
-    for (let i = 1; i < MAX_SCAN; i++) {
-      if (oLines[i].trim() === '---') { fmBlock = oLines.slice(0, i + 1).join('\n') + '\n'; break; }
-    }
+  const fm = parseFrontmatter(origMd);
+  if (fm.body !== origMd) {
+    const origLines = origMd.split('\n');
+    const bodyLines = fm.body.split('\n');
+    const fmLen = origLines.length - bodyLines.length;
+    fmBlock = origLines.slice(0, fmLen).join('\n') + '\n';
   }
   const fullMd = fmBlock + (title ? '# ' + title + '\n\n' : '') + bodyMd;
   try {

@@ -9,12 +9,15 @@ Personal knowledge base app — AI-assisted wiki with chat, knowledge graph, con
 ## Running
 
 ```bash
-./start.sh                              # 推荐，内含环境变量
-WIKI_API_KEY=sk-xxx node server.js      # 手动指定
-PORT=3000 WIKI_API_KEY=sk-xxx node server.js  # 自定义端口
+./start.sh                                          # 推荐，内含环境变量（若存在）
+WIKI_API_KEY=$(cat .api-key) node server.js        # .api-key 是本地密钥文件（gitignored），内容为 sk-xxx
+WIKI_API_KEY=sk-xxx node server.js                 # 手动指定
+PORT=3000 WIKI_API_KEY=sk-xxx node server.js       # 自定义端口
 ```
 
 Default port: 3456. First run `npm install` to install dependencies (pdf-parse, @mozilla/readability, jsdom). No build step. Node.js stdlib + vanilla JS frontend.
+
+`.api-key` 是本地便利文件（gitignored），仅用于手动 `cat` 后喂给环境变量；server 本身只读 `process.env.WIKI_API_KEY`，从不直接读 `.api-key`。`start.sh` 也 gitignored，丢了就用上面第二行等价命令。
 
 **No tests, no lint, no CI.** `package.json` 只有 `start` 脚本，`npm test` 返回 `exit 1`。验证改动靠浏览器手测 + 服务端日志。
 
@@ -24,12 +27,13 @@ Default port: 3456. First run `npm install` to install dependencies (pdf-parse, 
 
 ### Server (`server.js`)
 
-Single-file raw Node.js HTTP server (~3000 lines). Key subsystems:
+Single-file raw Node.js HTTP server (~5400 lines). Key subsystems:
 
-- **LLM Integration** — 7 providers (Bailian/阿里云, OpenRouter, Anthropic, OpenAI, DeepSeek, custom, local Claude CLI). `callLLM()` is the universal entry point. `getFullConfig()` merges `loadConfig()` (provider/model) + `loadApiKey()` (env var only).
-- **Compilation Engine** — `compileArticle()` takes raw content, calls LLM to produce structured wiki articles. Two modes: local CLI (spawns `claude` with tools) and API (server-driven JSON generation). Embedded rules in `COMPILE_RULES` constant.
+- **LLM Integration** — 7 providers (Bailian/阿里云, OpenRouter, Anthropic, OpenAI, DeepSeek, custom, local Claude CLI). `callLLM()` is the universal entry point. `getFullConfig()` merges `loadConfig()` (provider/model) + `loadApiKey()` (env var only). `pickModelByUse(provider, use, cfg)` resolves use-key ('fast' / 'main' / 'strong') to concrete model id with fallback.
+- **Compilation Engine** — `runCompilePipeline()` is the 7-stage pipeline: title → topic → content+summary(parallel) → tags → filename → seealso → persist. Each stage tracked via `startStage`/`doneStage`/`errorStage`. Tags are piggybacked: LLM content stage emits `<!-- tags: a, b, c -->` trailer, extracted after content, stripped from body. Two compile modes: local CLI (spawns `claude` with tools) and API (server-driven JSON generation). Embedded rules in `COMPILE_RULES` constant.
+- **Tag System** — Articles store tags as YAML frontmatter: `---\ntags: [a, b, c]\n---\n`. Core functions around line 1290-1410: `parseFrontmatter(content)` / `serializeFrontmatter(data)` / `extractTitle(fp)` (skips fm) / `extractTags(fp)` (frontmatter first; falls back to `extractKeywords` with `TAG_FALLBACK_STOP` filter for legacy articles) / `collectExistingTags(limit)` (frequency-sorted, fed to LLM prompts for semantic convergence). `runBackfillTags({force, useModel})` regenerates tags for articles missing them; exposed via `POST /api/wiki/backfill-tags?force=1&useModel=main`. **Any code that writes .md files must preserve frontmatter** — use `parseFrontmatter` + `serializeFrontmatter`, never raw string concat.
 - **Chat System** — JSON file storage in `data/chats/`. Per-conversation files `conv_*.json` + `_index.json` index. Supports context retrieval from wiki for RAG.
-- **Wiki Data** — `buildGraph()` creates 3-layer knowledge graph (explicit links → keyword co-occurrence → topic affinity). `searchWiki()` for full-text search. `retrieveContext()` for chat RAG.
+- **Wiki Data & Graph** — `searchWiki()` for full-text search. `retrieveContext()` for chat RAG. `/api/wiki/tree` returns topic → children with `{title, tags, mtime}`. `/api/wiki/graph` builds 2-layer graph: explicit markdown links (see-also / reference edges) + tag co-occurrence edges with IDF weighting (tags shared by >50% of articles are dropped as too-common; dangling targets filtered via `fs.existsSync`). The standalone `buildGraph()` function (line ~1703) is legacy — the live graph API has its own inline logic.
 - **Ingest Pipeline** — Single-task queue. Accepts text/URL/PDF/image/audio/video/ZIP. Multi-format extraction: pdf-parse for PDF, Readability+jsdom for URL, LLM Vision for images, OpenAI Whisper or local ffmpeg+whisper for audio/video. Batch mode with progress tracking via `batchProgress` object polled by frontend.
 - **Automated Tasks** — `data/autotasks/` stores task configs, execution history, and dedup index. `executeAutotask()` engine: fetch source (RSS/webpage/API) → keyword filter → 3-layer dedup (URL normalization + content SHA-256 + existing check) → `extractContent()` + `compileArticle()` reuse. Scheduler runs every 5 min via `setInterval`, supports daily (with HH:MM), hourly, and manual schedules.
 - **Static Files** — Serves `app/` directory. Path: `GET / → app/index.html`, `GET /css/base.css → app/css/base.css`, etc.
@@ -46,7 +50,7 @@ app.js → router.js → pages/{dashboard,chat,article,graph,browse,autotask,hea
        → theme.js, markdown.js
 ```
 
-**Routing:** Hash-based. `#/` dashboard, `#/chat/:id` chat, `#/article/:path` article, `#/graph` graph, `#/browse` browse, `#/autotask` automated tasks. Router in `js/router.js`, `render()` is the main dispatch.
+**Routing:** Hash-based. `#/` dashboard, `#/chat/:id` chat, `#/article/:path` article, `#/graph` graph, `#/browse` browse (supports `?tag=xxx` filter), `#/autotask` automated tasks. Router in `js/router.js`, `render()` is the main dispatch. Router parses query string; add new query params by extending the block in `route()`.
 
 **Global state:** `js/state.js` exports a single mutable object. All modules import and mutate it directly.
 
@@ -110,6 +114,8 @@ data/uploads/       → Uploaded files
 - **Autotask execution** reuses the ingest pipeline (`extractContent()` + `compileArticle()`). Each task run records to `history.json` and marks URLs/hashes in `dedup.json`.
 - **server.js 无热加载** — 改 `server.js` 必须重启进程。`data/` 下 JSON 在进程内有内存缓存（如 autotasks 调度器、聊天索引），手改磁盘文件不会被感知，必须通过 API 改或重启。
 - **CSS overflow rule**: When `overflow-y` is non-`visible`, browsers force `overflow-x` from `visible` to `auto`. Always set `overflow-x:hidden` explicitly on scroll containers to prevent unwanted horizontal scrollbars.
+- **Article frontmatter 必须保留**：所有 `data/wiki/**/*.md` 都有 `---\ntags: [...]\n---\n` 开头。编辑代码（前后端）动 .md 内容时，先用 `parseFrontmatter` 拆分 → 改 body → 用 `serializeFrontmatter` + body 拼回。前端 `markdown.js` 也导出了 `parseFrontmatter`，`renderMd` 会自动剥离 fm。直接字符串拼接或 regex 截断会丢失元数据。
+- **Graph 端点 vs buildGraph**：`/api/wiki/graph` 端点有自己的内联边生成逻辑（line ~3737），不调用老的 `buildGraph()` 函数（line ~1703）。修边权重 / 边类型要改端点，不要改函数。
 
 ## Conventions
 

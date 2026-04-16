@@ -5,3 +5,4 @@ data/*
 !data/system-sources.json
 node_modules/
 start.sh
+.claude/

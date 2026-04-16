@@ -198,12 +198,13 @@ function renderPanel() {
       const timeText = r.finishedAt ? relTime(r.finishedAt) : '';
       const retryBadge = r.retryCount > 0 ? `<span class="iq-retry-badge">第 ${r.retryCount} 次重试</span>` : '';
       const interruptedTag = r.interruptedByRestart ? `<span class="iq-retry-badge">进程重启中断</span>` : '';
+      const inFlightTag = r.retryInFlight ? `<span class="iq-retry-badge iq-retry-inflight">重试进行中</span>` : '';
       return `
         <div class="iq-item iq-item-${r.status}${clickable ? ' iq-clickable' : ''}"
              ${clickable ? `data-article="${h(r.article)}"` : ''}>
           <span class="iq-dot iq-dot-${r.status}"></span>
           <div class="iq-item-main">
-            <div class="iq-item-name">${h(r.name)} ${retryBadge}${interruptedTag}</div>
+            <div class="iq-item-name">${h(r.name)} ${retryBadge}${interruptedTag}${inFlightTag}</div>
             ${isError ? `<div class="iq-item-sub iq-item-error">${h(r.error || '失败')}</div>` : ''}
             ${timeText ? `<div class="iq-item-time">${h(timeText)}</div>` : ''}
           </div>

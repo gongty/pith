@@ -1825,80 +1825,100 @@ let backfillProgress = {
   recent: []
 };
 
-async function runBackfillTags() {
+async function runBackfillTags(opts = {}) {
+  const force = !!opts.force;
+  const useModel = opts.useModel || 'fast'; // 'fast' | 'main'
   backfillProgress = {
     running: true, total: 0, done: 0, skipped: 0, failed: 0,
     currentFile: '', startedAt: new Date().toISOString(), finishedAt: null,
     error: null, recent: []
   };
-  const excluded = new Set(['index.md', 'log.md']);
-  const allFiles = walkMd(WIKI).filter(f => !excluded.has(path.basename(f)));
-  const todo = [];
-  for (const f of allFiles) {
-    try {
-      const content = fs.readFileSync(f, 'utf-8');
-      const { data } = parseFrontmatter(content);
-      if (!Array.isArray(data.tags) || data.tags.length === 0) todo.push(f);
-    } catch {}
-  }
-  backfillProgress.total = todo.length;
+  try {
+    const excluded = new Set(['index.md', 'log.md']);
+    const allFiles = walkMd(WIKI).filter(f => !excluded.has(path.basename(f)));
+    const todo = [];
+    for (const f of allFiles) {
+      try {
+        const content = fs.readFileSync(f, 'utf-8');
+        const { data } = parseFrontmatter(content);
+        const hasTags = Array.isArray(data.tags) && data.tags.length > 0;
+        if (force || !hasTags) todo.push(f);
+      } catch {}
+    }
+    backfillProgress.total = todo.length;
 
-  const config = getFullConfig();
-  const providerKey = config.provider || 'local';
-  const fastModel = pickModelByUse(providerKey, 'fast', config);
+    const config = getFullConfig();
+    const providerKey = config.provider || 'local';
+    const model = pickModelByUse(providerKey, useModel, config);
 
-  for (const f of todo) {
-    const rel = path.relative(WIKI, f);
-    backfillProgress.currentFile = rel;
-    try {
-      const content = fs.readFileSync(f, 'utf-8');
-      const { body } = parseFrontmatter(content);
-      const core = body.replace(/\n##\s+See\s+Also[\s\S]*$/i, '').slice(0, 6000);
-      const existingTagsCol = collectExistingTags(200);
-      const existingTagsStr = existingTagsCol.length ? existingTagsCol.map(t => t.tag).join('、') : '（暂无）';
+    for (const f of todo) {
+      const rel = path.relative(WIKI, f);
+      backfillProgress.currentFile = rel;
+      try {
+        // 每次重新读盘，避免 compile 并发写入后用陈旧 body
+        const content = fs.readFileSync(f, 'utf-8');
+        const existing = parseFrontmatter(content);
+        if (!force && Array.isArray(existing.data.tags) && existing.data.tags.length > 0) {
+          backfillProgress.skipped++;
+          continue;
+        }
+        const core = existing.body.replace(/\n##\s+See\s+Also[\s\S]*$/i, '').slice(0, 6000);
+        const existingTagsCol = collectExistingTags(200);
+        const existingTagsStr = existingTagsCol.length ? existingTagsCol.map(t => t.tag).join('、') : '（暂无）';
 
-      const sys = `你是知识库标签助手。根据文章内容输出 3-5 个精准标签，用于知识图谱连接。
+        const sys = `你是知识库标签助手。根据文章内容输出 3-5 个精准标签，用于知识图谱连接。
 规则：
 - 每个标签 ≤ 10 字，精准、有区分度
 - 优先从"已有标签"里选语义相近的，让同一概念在不同文章里复用
-- 避免过宽的词（如"技术"、"方法"、"分析"）和碎片（如"据收集"）
-- 不要 emoji、引号、书名号
+- 避免过宽的词（如"技术"、"方法"、"分析"）和碎片（如"据收集"、"核心能力与性"）
+- 必须是完整词或概念，不能是截断的半句话
+- 不要 emoji、引号、书名号、HTML 标签
 - 只输出一行：标签1, 标签2, 标签3，不要加任何解释或前缀
 
 已有标签（频次降序）：${existingTagsStr}`;
 
-      const user = `文章标题：${extractTitle(f)}\n\n文章正文（截断）：\n${core}`;
+        const user = `文章标题：${extractTitle(f)}\n\n文章正文（截断）：\n${core}`;
 
-      const resp = await callLLM(sys, user, { model: fastModel }, { maxTokens: 120, temperature: 0.2 });
-      const tagsLine = (resp || '').trim().split('\n')[0].replace(/^[-*•]\s*/, '').replace(/^标签[:：]\s*/, '');
-      const tags = tagsLine
-        .split(/[,，、]/)
-        .map(t => t.trim().replace(/^["'《「『]+|["'》」』]+$/g, ''))
-        .filter(t => t && t.length <= 10)
-        .slice(0, 5);
+        const resp = await callLLM(sys, user, { model }, { maxTokens: 120, temperature: 0.2 });
+        const tagsLine = (resp || '').trim().split('\n')[0].replace(/^[-*•]\s*/, '').replace(/^标签[:：]\s*/, '');
+        const tags = tagsLine
+          .split(/[,，、]/)
+          .map(t => t.trim().replace(/^["'《「『]+|["'》」』]+$/g, ''))
+          .filter(t => t && t.length <= 10)
+          .slice(0, 5);
 
-      if (tags.length === 0) {
+        if (tags.length === 0) {
+          backfillProgress.failed++;
+          backfillProgress.recent.unshift({ file: rel, error: 'empty tags' });
+          if (backfillProgress.recent.length > 10) backfillProgress.recent.pop();
+          continue;
+        }
+
+        // 写盘前再读一次合并最新 body，避免覆盖 compile 刚写入的新正文
+        const freshContent = fs.readFileSync(f, 'utf-8');
+        const fresh = parseFrontmatter(freshContent);
+        if (!force && Array.isArray(fresh.data.tags) && fresh.data.tags.length > 0) {
+          backfillProgress.skipped++;
+          continue;
+        }
+        const newData = { ...fresh.data, tags };
+        const newContent = serializeFrontmatter(newData) + fresh.body;
+        fs.writeFileSync(f, newContent, 'utf-8');
+        backfillProgress.done++;
+        backfillProgress.recent.unshift({ file: rel, tags });
+        if (backfillProgress.recent.length > 10) backfillProgress.recent.pop();
+      } catch (e) {
         backfillProgress.failed++;
-        continue;
+        backfillProgress.recent.unshift({ file: rel, error: e.message });
+        if (backfillProgress.recent.length > 10) backfillProgress.recent.pop();
       }
-
-      const existing = parseFrontmatter(content);
-      const newData = { ...existing.data, tags };
-      const newContent = serializeFrontmatter(newData) + existing.body;
-      fs.writeFileSync(f, newContent, 'utf-8');
-      backfillProgress.done++;
-      backfillProgress.recent.unshift({ file: rel, tags });
-      if (backfillProgress.recent.length > 10) backfillProgress.recent.pop();
-    } catch (e) {
-      backfillProgress.failed++;
-      backfillProgress.recent.unshift({ file: rel, error: e.message });
-      if (backfillProgress.recent.length > 10) backfillProgress.recent.pop();
     }
+  } finally {
+    backfillProgress.running = false;
+    backfillProgress.finishedAt = new Date().toISOString();
+    backfillProgress.currentFile = '';
+    if (typeof wikiCache !== 'undefined' && wikiCache && wikiCache.invalidate) wikiCache.invalidate();
   }
-  backfillProgress.running = false;
-  backfillProgress.finishedAt = new Date().toISOString();
-  backfillProgress.currentFile = '';
-  if (typeof wikiCache !== 'undefined' && wikiCache && wikiCache.invalidate) wikiCache.invalidate();
 }
 
 // 全局并发池：默认 10，环境变量覆盖
@@ -2008,8 +2028,6 @@ function tryDispatch() {
         console.error('[ingest] processTask 异常', e);
         next.status = 'error';
         next.message = String(e && e.message || e);
-        next.phase = 'error';
-        next.phaseLabel = '失败';
         next.finishedAt = new Date().toISOString();
       })
       .finally(() => {
@@ -2017,7 +2035,10 @@ function tryDispatch() {
         if (next.status === 'done') {
           setPhase(next, 'done', '已完成');
         } else if (next.status === 'error' || next.status === 'partial') {
+          // phase 与 status 一致：error/partial 时进度条锁到终态（phaseIndex=4），不停在中间阶段
           next.phase = next.status;
+          next.phaseIndex = PHASE_TOTAL - 1;
+          next.phaseTotal = PHASE_TOTAL;
           next.phaseLabel = next.status === 'error' ? '失败' : '部分完成';
         }
         activeCount--;
@@ -2132,58 +2153,109 @@ function setPhase(task, phaseKey, msg) {
 
 // ── 任务队列持久化 ──
 // 设计：debounced 300ms 全量写盘；启动时加载，pending/processing 标记为中断可重试
+// 兜底：MAX_WAIT ms 内必 flush 一次，避免高频状态变动让 debounce 无限推后
+const QUEUE_SAVE_DEBOUNCE_MS = 300;
+const QUEUE_SAVE_MAX_WAIT_MS = 2000;
+// payload 持久化 size cap：text/url 类型超过 32KB 也 strip（避免巨型 content 撑爆 json 文件）
+const PAYLOAD_PERSIST_MAX_BYTES = 32 * 1024;
 let _saveTimer = null;
+let _saveFirstDirtyAt = 0;
 function scheduleSaveQueue() {
-  if (_saveTimer) return;
+  if (!_saveFirstDirtyAt) _saveFirstDirtyAt = Date.now();
+  if (_saveTimer) {
+    // 已经在等；若积压超过 MAX_WAIT 立即强制 flush
+    if (Date.now() - _saveFirstDirtyAt >= QUEUE_SAVE_MAX_WAIT_MS) {
+      clearTimeout(_saveTimer);
+      _saveTimer = null;
+      flushSaveQueueSync();
+    }
+    return;
+  }
   _saveTimer = setTimeout(() => {
     _saveTimer = null;
-    try {
-      const snapshot = taskQueue.map(serializeTaskForPersist);
-      // 原子写：先写 .tmp 再 rename，避免中途崩溃留下半截 JSON
-      const tmp = QUEUE_FILE + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify(snapshot, null, 2), 'utf-8');
-      fs.renameSync(tmp, QUEUE_FILE);
-    } catch (e) {
-      console.error('[queue] save failed', e.message);
-    }
-  }, 300);
+    flushSaveQueueSync();
+  }, QUEUE_SAVE_DEBOUNCE_MS);
+}
+function flushSaveQueueSync() {
+  _saveFirstDirtyAt = 0;
+  try {
+    const snapshot = taskQueue.map(serializeTaskForPersist);
+    const tmp = QUEUE_FILE + '.tmp';
+    // 无 pretty-print：size/CPU 对半砍
+    fs.writeFileSync(tmp, JSON.stringify(snapshot), 'utf-8');
+    fs.renameSync(tmp, QUEUE_FILE);
+  } catch (e) {
+    console.error('[queue] save failed', e.message);
+  }
 }
 function serializeTaskForPersist(t) {
   const out = Object.assign({}, t);
-  // 二进制类型的大 base64 不落盘（PDF/图片/音频/视频）；stripped 后 retry 失效
-  if (out.payload && ['pdf', 'image', 'audio', 'video'].includes(out.payload.type)) {
+  if (!out.payload) return out;
+  // 二进制类型：大 base64 不落盘
+  if (['pdf', 'image', 'audio', 'video'].includes(out.payload.type)) {
     if (out.payload.content && String(out.payload.content).length > 10000) {
       out.payload = Object.assign({}, out.payload, { content: null, _contentStripped: true });
       out.retryable = false;
+      return out;
     }
+  }
+  // text/url 等：按序列化后 size 统一 cap
+  try {
+    const approxSize = JSON.stringify(out.payload).length;
+    if (approxSize > PAYLOAD_PERSIST_MAX_BYTES) {
+      const stripped = Object.assign({}, out.payload);
+      if (stripped.content) stripped.content = null;
+      stripped._contentStripped = true;
+      stripped._strippedReason = 'oversize:' + approxSize;
+      out.payload = stripped;
+      out.retryable = false;
+    }
+  } catch {
+    out.payload = { _contentStripped: true, _strippedReason: 'unserializable' };
+    out.retryable = false;
   }
   return out;
 }
 function loadQueue() {
-  try {
-    if (!fs.existsSync(QUEUE_FILE)) return;
-    const raw = fs.readFileSync(QUEUE_FILE, 'utf-8');
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return;
-    const now = new Date().toISOString();
-    taskQueue = arr.map(t => {
-      // 进程重启前未结束的任务一律标记为错误，可重试
-      if (t.status === 'pending' || t.status === 'processing') {
-        t.status = 'error';
-        t.message = '进程重启前中断，可重试';
-        t.interruptedByRestart = true;
-        t.finishedAt = t.finishedAt || now;
-        t.phase = 'error';
-        t.phaseLabel = '已中断';
-      }
-      return t;
-    });
-    console.log('[queue] 已加载 ' + taskQueue.length + ' 条历史记录');
-    // 立即 debounced save 一次，把中断恢复状态落盘
-    if (arr.some(t => t.interruptedByRestart)) scheduleSaveQueue();
-  } catch (e) {
-    console.error('[queue] load failed', e.message);
+  if (!fs.existsSync(QUEUE_FILE)) return;
+  let raw;
+  try { raw = fs.readFileSync(QUEUE_FILE, 'utf-8'); }
+  catch (e) { console.error('[queue] read failed', e.message); return; }
+  let arr;
+  try { arr = JSON.parse(raw); }
+  catch (e) {
+    // 关键：损坏的队列文件绝不能被下一次 save 覆盖丢失历史
+    const backup = QUEUE_FILE + '.corrupt-' + Date.now();
+    try { fs.renameSync(QUEUE_FILE, backup); } catch {}
+    console.error('[queue] 损坏的 tasks.json 已备份至 ' + backup + '，以空队列启动:', e.message);
+    return;
   }
+  if (!Array.isArray(arr)) {
+    // 同损坏 JSON：非数组结构也可能覆盖历史，必须备份而不是忽略
+    const backup = QUEUE_FILE + '.corrupt-' + Date.now();
+    try { fs.renameSync(QUEUE_FILE, backup); } catch {}
+    console.error('[queue] tasks.json 不是数组，已备份至 ' + backup + '，以空队列启动');
+    return;
+  }
+  const now = new Date().toISOString();
+  let interruptedCount = 0;
+  taskQueue = arr.map(t => {
+    if (t.status === 'pending' || t.status === 'processing') {
+      t.status = 'error';
+      t.message = '进程重启前中断，可重试';
+      t.interruptedByRestart = true;
+      t.finishedAt = t.finishedAt || now;
+      t.phase = 'error';
+      t.phaseLabel = '已中断';
+      // 如果 payload 已被 strip，重试不可行
+      if (t.payload && t.payload._contentStripped) t.retryable = false;
+      interruptedCount++;
+    }
+    return t;
+  });
+  console.log('[queue] 已加载 ' + taskQueue.length + ' 条历史记录' + (interruptedCount ? '（其中 ' + interruptedCount + ' 条标记为中断）' : ''));
+  // 中断恢复状态必须立刻同步落盘，否则二次崩溃会丢失此次 mark
+  if (interruptedCount > 0) flushSaveQueueSync();
 }
 
 
@@ -3714,6 +3786,8 @@ const server = http.createServer(async (req, res) => {
           const linkPath = m[2];
           // Skip external URLs
           if (/^https?:\/\//.test(linkPath)) continue;
+          // Skip frontend hash routes like #/article/xxx.md（LLM 有时会错写）
+          if (linkPath.startsWith('#')) continue;
           // Skip raw/ links
           if (/(?:^|\/)raw\//.test(linkPath)) continue;
           // Only .md files
@@ -3722,6 +3796,8 @@ const server = http.createServer(async (req, res) => {
           const resolved = resolveLink(f, linkPath);
           if (!resolved) continue;
           if (excluded.has(path.basename(resolved))) continue;
+          // 确认目标文件真实存在，避免悬空边（LLM 有时会引用不存在的文章）
+          if (!fs.existsSync(path.join(WIKI, resolved))) continue;
 
           const key = `${rel}|${resolved}`;
           if (edgeSet.has(key)) continue;
@@ -3922,11 +3998,13 @@ const server = http.createServer(async (req, res) => {
     if (backfillProgress.running) {
       return json(res, 409, { error: '已有回填任务在进行中', progress: backfillProgress });
     }
-    runBackfillTags().catch(e => {
+    const force = params.get('force') === '1' || params.get('force') === 'true';
+    const useModel = params.get('useModel') === 'main' ? 'main' : 'fast';
+    runBackfillTags({ force, useModel }).catch(e => {
       backfillProgress.running = false;
       backfillProgress.error = e.message;
     });
-    return json(res, 200, { ok: true, message: '已启动', progress: backfillProgress });
+    return json(res, 200, { ok: true, message: '已启动', progress: backfillProgress, force, useModel });
   }
   // 回填进度查询
   if (p === '/api/wiki/backfill-tags' && req.method === 'GET') {
@@ -4129,6 +4207,12 @@ const server = http.createServer(async (req, res) => {
         const displayName = (typeof articlePath === 'string' && articlePath)
           ? path.basename(articlePath, '.md')
           : (t.name || t.kind || t.type || 'ingest');
+        // 当前已有 in-flight 重试 → UI 不再展示"重试"按钮（避免重复点击）
+        let retryInFlight = false;
+        if (t.retryingTaskId) {
+          const rt = taskQueue.find(x => x.id === t.retryingTaskId);
+          if (rt && (rt.status === 'pending' || rt.status === 'processing')) retryInFlight = true;
+        }
         return {
           id: t.id,
           status: t.status === 'partial' ? 'done' : t.status,
@@ -4137,7 +4221,8 @@ const server = http.createServer(async (req, res) => {
           error: t.status === 'error' ? (t.message || '').slice(0, 200) : null,
           kind: t.kind || t.type,
           finishedAt: t.finishedAt,
-          retryable: !!t.retryable && !!t.payload,
+          retryable: !!t.retryable && !!t.payload && !retryInFlight,
+          retryInFlight,
           interruptedByRestart: !!t.interruptedByRestart,
           retryOf: t.retryOf || null,
           retryCount: t.retryCount || 0,
@@ -4159,26 +4244,42 @@ const server = http.createServer(async (req, res) => {
     const oldId = p.slice('/api/ingest/retry/'.length);
     const orig = taskQueue.find(t => t.id === oldId);
     if (!orig) return json(res, 404, { error: '任务不存在' });
+    // autotask 路径任务显式拒绝：其编译管线不走 ingest runner，重试会绕开 dedup/history
+    if (orig.kind === 'autotask' || orig.type === 'autotask') {
+      return json(res, 400, { error: '自动任务请到自动任务页重新执行' });
+    }
     if (!orig.payload) {
-      return json(res, 400, {
-        error: orig.kind === 'autotask'
-          ? '自动任务无法从队列重试，请到自动任务页重新执行'
-          : '该任务缺少重试所需的原始载荷（可能是大文件投喂，重启后不可重试）'
-      });
+      return json(res, 400, { error: '该任务缺少重试所需的原始载荷（可能是大文件投喂，重启后不可重试）' });
     }
     if (orig.payload._contentStripped) {
-      return json(res, 400, { error: '该任务是大文件投喂，原始内容未持久化，无法重试' });
+      return json(res, 400, { error: '该任务的原始内容未持久化（超过 size cap），无法重试' });
+    }
+    // 幂等锁：双击 / 重发不会创建多个重试
+    if (orig.retryingTaskId) {
+      const existing = taskQueue.find(t => t.id === orig.retryingTaskId);
+      if (existing && (existing.status === 'pending' || existing.status === 'processing')) {
+        return json(res, 200, {
+          taskId: existing.id,
+          retryOf: orig.id,
+          retryCount: existing.retryCount,
+          deduped: true,
+        });
+      }
+      // 之前那个重试已终结，允许新建
     }
     const newTask = enqueueTask(orig.payload, {
       kind: orig.kind || orig.type,
       name: orig.name,
       batchId: null,
-      retryOf: orig.id,
+      // retryOf 始终指向链首（原始任务），方便排查；retryCount 沿链递增
+      retryOf: orig.retryOf || orig.id,
       retryCount: (orig.retryCount || 0) + 1,
     });
+    orig.retryingTaskId = newTask.id;
+    scheduleSaveQueue();
     return json(res, 200, {
       taskId: newTask.id,
-      retryOf: orig.id,
+      retryOf: newTask.retryOf,
       retryCount: newTask.retryCount,
     });
   }

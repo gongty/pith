@@ -27,25 +27,43 @@ function extractSummary(title) {
   return s.length > 60 ? s.slice(0, 58) + '…' : s;
 }
 
-export async function rBrowse(c) {
+export async function rBrowse(c, tagFilter) {
   c.innerHTML = '<div class="page-browse">' + skelLines(5) + '</div>';
   try {
     const tree = state.td || await api('/api/wiki/tree'); state.td = tree;
     if (!tree || !tree.length) {
       c.innerHTML = '<div class="page-browse"><div class="browse-header"><h1 class="browse-heading">全部文章</h1></div>'
-        + '<div class="browse-empty"><div class="browse-empty-icon">📚</div><p>知识库还是空的</p>'
+        + '<div class="browse-empty"><p>知识库还是空的</p>'
         + '<button class="btn-fill" style="width:auto;padding:10px 24px" onclick="openIngest()">投喂第一篇</button></div></div>';
       return;
     }
-    const totalArticles = tree.reduce((n, t) => n + t.children.length, 0);
+    // 如果有 tag 过滤，先筛选每个 topic 的 children
+    let view = tree;
+    if (tagFilter) {
+      view = tree.map(t => ({
+        ...t,
+        children: t.children.filter(ch => Array.isArray(ch.tags) && ch.tags.includes(tagFilter))
+      })).filter(t => t.children.length);
+    }
+    const totalArticles = view.reduce((n, t) => n + t.children.length, 0);
     let s = '<div class="page-browse">';
     // Header with stats
-    s += '<div class="browse-header"><h1 class="browse-heading">全部文章</h1>'
+    s += '<div class="browse-header"><h1 class="browse-heading">' + (tagFilter ? '标签 · ' + h(tagFilter) : '全部文章') + '</h1>'
       + '<div class="browse-stats"><span class="browse-stat">' + totalArticles + ' 篇文章</span>'
-      + '<span class="browse-stat-sep">·</span><span class="browse-stat">' + tree.length + ' 个主题</span></div></div>';
+      + '<span class="browse-stat-sep">·</span><span class="browse-stat">' + view.length + ' 个主题</span>';
+    if (tagFilter) {
+      s += '<span class="browse-stat-sep">·</span><a class="browse-clear-tag" href="#/browse">清除筛选</a>';
+    }
+    s += '</div></div>';
+
+    if (!totalArticles) {
+      s += '<div class="browse-empty"><p>没有文章使用此标签</p><a class="btn-fill" style="width:auto;padding:10px 24px;text-decoration:none" href="#/browse">返回全部文章</a></div></div>';
+      c.innerHTML = s;
+      return;
+    }
 
     // Topic groups
-    tree.forEach((t, ti) => {
+    view.forEach((t, ti) => {
       const color = TOPIC_COLORS[ti % TOPIC_COLORS.length];
       s += '<div class="browse-group">'
         + '<div class="browse-group-head" onclick="this.parentElement.classList.toggle(\'closed\')">'
