@@ -17,7 +17,7 @@
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-resize" id="sidebarResize"></div>
   <div class="sidebar-header">
-    知识库
+    <span class="sidebar-title" id="sidebarTitle" onclick="go('#/')">知识库</span>
     <button class="sidebar-collapse-btn" onclick="toggleSidebar()" title="收起侧边栏">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
     </button>
@@ -123,6 +123,7 @@
       <div>
         <label class="field-label">拖拽文件或粘贴内容 · 支持 PDF/图片/音视频/文本/链接</label>
         <div class="ingest-drop-zone" id="ingestDropZone">
+          <div class="ingest-url-chips" id="ingestUrlChips" style="display:none"></div>
           <textarea id="ingestContent" placeholder="粘贴文本、拖入文件、或输入 https:// 链接..."></textarea>
           <div class="ingest-upload-bar">
             <input type="file" id="ingestFile" accept=".txt,.md,.html,.json,.csv,.xml,.zip,.pdf,.png,.jpg,.jpeg,.webp,.gif,.mp3,.mp4,.wav,.m4a,.ogg,.webm" multiple hidden>
@@ -157,10 +158,23 @@
   <div class="modal-card modal-card-tabs">
     <div class="modal-top"><h3>设置</h3><button onclick="closeSettings()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
     <div class="settings-tabs">
-      <button class="settings-tab active" data-tab="provider" onclick="switchSettingsTab('provider')">模型配置</button>
+      <button class="settings-tab active" data-tab="general" onclick="switchSettingsTab('general')">通用</button>
       <button class="settings-tab" data-tab="memory" onclick="switchSettingsTab('memory')">记忆</button>
+      <button class="settings-tab" data-tab="provider" onclick="switchSettingsTab('provider')">模型配置</button>
     </div>
-    <div class="settings-tab-content" id="settingsTabProvider">
+    <div class="settings-tab-content" id="settingsTabGeneral">
+      <div class="modal-form">
+        <div><label class="field-label">用户名</label><input class="field-input" id="sNickname" placeholder="设置后显示为「XX 的知识库」"></div>
+        <div><label class="field-label">知识库语言</label><select class="field-select" id="sLang">
+          <option value="zh">中文</option><option value="en">English</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="auto">跟随原文</option>
+        </select></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-sm-fill" onclick="saveSett()">保存</button>
+      </div>
+    </div>
+    <div class="settings-tab-content" id="settingsTabMemory" style="display:none"></div>
+    <div class="settings-tab-content" id="settingsTabProvider" style="display:none">
       <div class="modal-form">
         <div><label class="field-label">提供商</label><select class="field-select" id="sProv" onchange="onProvChange()"></select></div>
         <div><label class="field-label">API Key</label><input class="field-input" type="password" id="sKey" placeholder="输入 API Key..."></div>
@@ -171,7 +185,6 @@
         <button class="btn-sm-fill" onclick="saveSett()">保存</button>
       </div>
     </div>
-    <div class="settings-tab-content" id="settingsTabMemory" style="display:none"></div>
   </div>
 </div>
 

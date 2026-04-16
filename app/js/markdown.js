@@ -7,14 +7,19 @@ export function renderMd(md, ap) {
   const aDir = ap ? ap.split('/').slice(0, -1).join('/') : '';
   function resLink(href) {
     if (/^https?:\/\//.test(href)) return href;
+    if (href.startsWith('#/article/')) return href;
     if (!href.endsWith('.md')) return href;
+    if (href.includes('/raw/') || href.startsWith('../../raw/')) return href;
     let r = href;
     if (href.startsWith('../') || href.startsWith('./')) {
       const b = aDir ? aDir.split('/') : []; const p = href.split('/'); const c = [...b];
       for (const x of p) { if (x === '..') c.pop(); else if (x !== '.') c.push(x); }
       r = c.join('/');
-    } else if (aDir && !href.includes('/')) r = aDir + '/' + href;
-    if (r.includes('raw/')) return href;
+    } else if (href.includes('/')) {
+      r = href;
+    } else if (aDir) {
+      r = aDir + '/' + href;
+    }
     return '#/article/' + r;
   }
   function inl(t) {
@@ -49,6 +54,7 @@ export function renderMd(md, ap) {
     if (inList && !line.trim()) fList();
     if (!line.trim()) continue;
     fList(); fTbl(); fBq();
+    if (/^\s*<img\s/.test(line)) { html += line; continue; }
     html += '<p>' + inl(line) + '</p>';
   }
   if (inCode) html += '<pre><code>' + h(cLines.join('\n')) + '</code></pre>';
@@ -90,7 +96,14 @@ function node2md(node) {
     if (tag === 'CODE') { if (child.parentElement && child.parentElement.tagName === 'PRE') continue; md += '`' + child.textContent + '`'; continue; }
     if (tag === 'PRE') { const code = child.querySelector('code'); md += '\n\n```\n' + (code ? code.textContent : child.textContent) + '\n```'; continue; }
     if (tag === 'A') { const href = child.getAttribute('href') || ''; md += '[' + child.innerText + '](' + href + ')'; continue; }
-    if (tag === 'IMG') { md += '![' + child.alt + '](' + child.src + ')'; continue; }
+    if (tag === 'IMG') {
+      const src = child.getAttribute('src') || child.src;
+      const alt = child.getAttribute('alt') || '';
+      const style = child.getAttribute('style') || '';
+      if (style) { md += '\n\n<img src="' + src + '" alt="' + alt + '" style="' + style + '">'; }
+      else { md += '![' + alt + '](' + src + ')'; }
+      continue;
+    }
     if (tag === 'BLOCKQUOTE') { const lines = node2md(child).split('\n'); md += '\n\n' + lines.map(l => '> ' + l).join('\n'); continue; }
     if (tag === 'UL') { for (const li of child.children) { if (li.tagName === 'LI') md += '\n- ' + node2md(li); } md += '\n'; continue; }
     if (tag === 'OL') { let n = 1; for (const li of child.children) { if (li.tagName === 'LI') { md += '\n' + n + '. ' + node2md(li); n++; } } md += '\n'; continue; }

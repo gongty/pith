@@ -5,12 +5,12 @@ import { initTheme, toggleTheme } from './theme.js';
 import { toggleSidebar, initSidebar, initSidebarPreview, toggleFold, switchSidebarTab } from './sidebar.js';
 import { toggleDD, pickModel } from './composer.js';
 import { openSearch, closeSearch, searchFor, handleSearchKeydown, initSearchInput } from './search.js';
-import { openSettings, closeSettings, onProvChange, saveSett, testConn, switchSettingsTab } from './settings.js';
-import { openIngest, closeIngest, submitIngest, batchToggleAll, batchFileToggle, initIngestDragDrop, checkActiveIngest } from './ingest.js';
+import { openSettings, closeSettings, onProvChange, saveSett, testConn, switchSettingsTab, initSidebarTitle } from './settings.js';
+import { openIngest, closeIngest, submitIngest, batchToggleAll, batchFileToggle, initIngestDragDrop, checkActiveIngest, removeIngestUrl } from './ingest.js';
 import { render } from './router.js';
 import { dashAsk } from './pages/dashboard.js';
 import { chatSend, delChat, precipitateMsg, precipitateConv, closePrecipModal } from './pages/chat.js';
-import { toggleToc, scrollToH, onArtChange, fmtCmd, closeDel, doDel, newArticle } from './pages/article.js';
+import { toggleToc, scrollToH, onArtChange, fmtCmd, closeDel, doDel, newArticle, pickSlash, closeSlashMenu, imgAlign, imgSize, deselectImg } from './pages/article.js';
 import { gZoom, applyGF } from './pages/graph.js';
 
 /* ── Expose functions to inline onclick handlers ── */
@@ -40,6 +40,8 @@ window.fmtCmd = fmtCmd;
 window.closeDel = closeDel;
 window.doDel = doDel;
 window.newArticle = newArticle;
+window.pickSlash = pickSlash;
+window.closeSlashMenu = closeSlashMenu;
 window.toggleFold = toggleFold;
 window.switchSidebarTab = switchSidebarTab;
 window.gZoom = gZoom;
@@ -50,7 +52,11 @@ window.closePrecipModal = closePrecipModal;
 window.switchSettingsTab = switchSettingsTab;
 window.submitIngest = submitIngest;
 window.batchToggleAll = batchToggleAll;
+window.removeIngestUrl = removeIngestUrl;
 window.batchFileToggle = batchFileToggle;
+window.imgAlign = imgAlign;
+window.imgSize = imgSize;
+window.deselectImg = deselectImg;
 
 /* ── Sidebar resize ── */
 (function () {
@@ -79,13 +85,14 @@ document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openSearch(); }
   if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); go('#/'); }
   if ((e.metaKey || e.ctrlKey) && e.key === 'i') { e.preventDefault(); openIngest(); }
-  if (e.key === 'Escape') { closeSearch(); closeIngest(); closeSettings(); closeDel(); closePrecipModal(); }
+  if (e.key === 'Escape') { closeSearch(); closeIngest(); closeSettings(); closeDel(); closePrecipModal(); deselectImg(); }
   handleSearchKeydown(e);
 });
 
 /* ── Init ── */
 initTheme();
 initSidebar();
+initSidebarTitle();
 initSearchInput();
 initIngestDragDrop();
 initSidebarPreview();

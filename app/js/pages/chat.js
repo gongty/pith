@@ -137,11 +137,29 @@ export async function chatSend() {
     const inner = msgsEl.querySelector('.chat-messages-inner');
     if (inner) {
       inner.innerHTML += renderMsg({ role: 'user', content: t });
-      inner.innerHTML += '<div class="chat-msg assistant" id="chatTyp"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body"><div class="chat-typing-dots"><span></span><span></span><span></span></div></div></div>';
+      inner.innerHTML += '<div class="chat-msg assistant" id="chatTyp"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body"><div class="chat-thinking"><span class="thinking-icon">🔍</span> 检索知识库…</div></div></div>';
       msgsEl.scrollTop = msgsEl.scrollHeight;
     }
   }
   inp.value = ''; inp.style.height = 'auto';
+  // 先检索，显示引用来源
+  try {
+    const sr = await api('/api/search?q=' + encodeURIComponent(t));
+    const hits = (Array.isArray(sr) ? sr : sr.results || []).filter(r => !r.path.endsWith('index.md') && !r.path.endsWith('log.md')).slice(0, 5);
+    const typ0 = document.getElementById('chatTyp');
+    if (typ0 && hits.length > 0) {
+      const body = typ0.querySelector('.chat-msg-body');
+      if (body) {
+        body.innerHTML = '<div class="chat-thinking"><span class="thinking-icon">📖</span> 参考 ' + hits.length + ' 篇文章'
+          + '<div class="chat-thinking-refs">' + hits.map(r => '<a href="#/article/' + h(r.path) + '">' + h(r.title || r.path) + '</a>').join('') + '</div>'
+          + '</div><div class="chat-typing-dots"><span></span><span></span><span></span></div>';
+        msgsEl.scrollTop = msgsEl.scrollHeight;
+      }
+    } else if (typ0) {
+      const body = typ0.querySelector('.chat-msg-body');
+      if (body) body.innerHTML = '<div class="chat-thinking"><span class="thinking-icon">💭</span> 思考中…</div><div class="chat-typing-dots"><span></span><span></span><span></span></div>';
+    }
+  } catch {}
   try {
     if (!state.convId) {
       const newRes = await post('/api/chat/new', { firstMessage: t });
@@ -209,14 +227,32 @@ async function sendNewChat(text) {
   const sendBtn = document.getElementById('cpSendBtn');
   if (sendBtn) sendBtn.disabled = true;
   const msgsEl = $('chatMsgs');
-  // Show typing indicator
+  // Show retrieval indicator
   if (msgsEl) {
     const inner = msgsEl.querySelector('.chat-messages-inner');
     if (inner) {
-      inner.innerHTML += '<div class="chat-msg assistant" id="chatTyp"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body"><div class="chat-typing-dots"><span></span><span></span><span></span></div></div></div>';
+      inner.innerHTML += '<div class="chat-msg assistant" id="chatTyp"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body"><div class="chat-thinking"><span class="thinking-icon">🔍</span> 检索知识库…</div></div></div>';
       msgsEl.scrollTop = msgsEl.scrollHeight;
     }
   }
+  // Prefetch search results to show references
+  try {
+    const sr = await api('/api/search?q=' + encodeURIComponent(text));
+    const hits = (Array.isArray(sr) ? sr : sr.results || []).filter(r => !r.path.endsWith('index.md') && !r.path.endsWith('log.md')).slice(0, 5);
+    const typ0 = document.getElementById('chatTyp');
+    if (typ0 && hits.length > 0) {
+      const body = typ0.querySelector('.chat-msg-body');
+      if (body) {
+        body.innerHTML = '<div class="chat-thinking"><span class="thinking-icon">📖</span> 参考 ' + hits.length + ' 篇文章'
+          + '<div class="chat-thinking-refs">' + hits.map(r => '<a href="#/article/' + h(r.path) + '">' + h(r.title || r.path) + '</a>').join('') + '</div>'
+          + '</div><div class="chat-typing-dots"><span></span><span></span><span></span></div>';
+        msgsEl.scrollTop = msgsEl.scrollHeight;
+      }
+    } else if (typ0) {
+      const body = typ0.querySelector('.chat-msg-body');
+      if (body) body.innerHTML = '<div class="chat-thinking"><span class="thinking-icon">💭</span> 思考中…</div><div class="chat-typing-dots"><span></span><span></span><span></span></div>';
+    }
+  } catch {}
   try {
     const res = await post('/api/chat/new', { firstMessage: text });
     state.convId = res.conversation.id;

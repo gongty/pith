@@ -162,21 +162,22 @@ const PROVIDERS = {
 };
 
 function loadConfig() {
-  let cfg = { provider: 'local', model: '', customBaseUrl: '' };
+  let cfg = { provider: 'local', model: '', customBaseUrl: '', wikiLang: 'zh' };
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const saved = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
       cfg.provider = saved.provider || 'local';
       cfg.model = saved.model || '';
       cfg.customBaseUrl = saved.customBaseUrl || '';
+      cfg.wikiLang = saved.wikiLang || 'zh';
     }
   } catch {}
   return cfg;
 }
 
 function saveConfig(cfg) {
-  // 只存 provider/model/customBaseUrl，不存 apiKey
-  const toSave = { provider: cfg.provider, model: cfg.model, customBaseUrl: cfg.customBaseUrl || '' };
+  // 只存 provider/model/customBaseUrl/wikiLang，不存 apiKey
+  const toSave = { provider: cfg.provider, model: cfg.model, customBaseUrl: cfg.customBaseUrl || '', wikiLang: cfg.wikiLang || 'zh' };
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(toSave, null, 2), 'utf-8');
 }
 
@@ -392,30 +393,67 @@ async function compileArticle(topicDir, filename, filePath, task, overrides) {
     const rawContent = fs.readFileSync(filePath, 'utf-8');
 
     const existingTopics = [];
+    const existingArticles = [];
     if (fs.existsSync(WIKI)) {
       for (const d of fs.readdirSync(WIKI, { withFileTypes: true })) {
-        if (d.isDirectory() && !d.name.startsWith('.')) existingTopics.push(d.name);
+        if (d.isDirectory() && !d.name.startsWith('.')) {
+          existingTopics.push(d.name);
+          const topicPath = path.join(WIKI, d.name);
+          for (const f of fs.readdirSync(topicPath)) {
+            if (f.endsWith('.md')) {
+              const title = extractTitle(path.join(topicPath, f));
+              existingArticles.push(`${d.name}/${f} — ${title}`);
+            }
+          }
+        }
       }
     }
 
     const memCtxApi = buildMemoryContext();
     const bioContext = memCtxApi ? `\n\n${memCtxApi}\n请根据用户背景调整文章深度和侧重点。` : '';
 
-    const systemPrompt = `你是知识库编译助手。将原始素材编译成一篇结构化中文知识库文章。
+    const wikiLang = loadConfig().wikiLang || 'zh';
+    const LANG_MAP = { zh: '中文', en: 'English', ja: '日本語', ko: '한국어', auto: null };
+    const langName = LANG_MAP[wikiLang] || wikiLang;
+    const langInstruction = wikiLang === 'auto'
+      ? '跟随原文语言（原文是什么语言就用什么语言输出）'
+      : langName;
 
-文章格式：
+    const systemPrompt = `你是知识库编译助手。将原始素材编译为结构清晰、信息保真的知识库文章。
+
+## 文章模板
 # 标题
 > 来源：作者/机构，日期
-> 原文：[文件名](../../raw/${topicDir}/${filename})
-## 概述（一段话）
-## 正文（按逻辑分章节）
-## See Also（相关主题链接）
+> 原文：[${filename}](../../raw/${topicDir}/${filename})
 
-约定：输出语言中文；topic 目录名英文 kebab-case；文件名基于概念命名。
-已有主题：${existingTopics.join(', ') || '（暂无）'}
+## 概述
+一段话概括核心论点和价值（3-5 句）。
+
+## 正文
+按逻辑分章节（## 二级标题）。章节内可用 ### 三级标题。
+
+## See Also
+- [相关文章标题](相关文章相对路径.md)
+
+## 编译原则（重要）
+1. **信息保真**：原文的数据、数字、对比、决策理由必须保留，不可概括为"等"
+2. **保留结构**：原文中的表格、列表、对比矩阵照搬为 Markdown 表格，不要摊平成散文
+3. **保留图片**：原文中的 ![图片](images/xxx) 原样保留在对应位置，路径不要改
+4. **保留引用**：原文中有价值的原话用 > 引用块保留
+5. **决策要有 Why**：如果原文提到"做了 X"，必须保留"为什么做 X"的理由
+6. **不要发明内容**：只编译原文中有的信息，不添加原文没有的分析
+7. **概述要精准**：概述段要提炼核心观点，不是泛泛的"本文介绍了…"
+
+## 约定
+- 输出语言：${langInstruction}
+- topic 目录名：英文 kebab-case
+- filename：基于核心概念命名，如 ai-distillation-skills.md
+- 已有主题：${existingTopics.join(', ') || '（暂无）'}（优先归入已有主题，无匹配才建新的）
+- See Also：**只链接已存在的文章**，不要虚构不存在的链接。同 topic 内用 filename.md，跨 topic 用 ../topic/filename.md。如果没有相关的已有文章，See Also 章节留空或省略。
+- 已有文章：${existingArticles.length ? existingArticles.join('；') : '（暂无）'}
 
 输出纯 JSON，不要代码块：
-{"title":"中文标题","topic":"目录名","filename":"文件名.md","content":"完整Markdown","summary":"一句话摘要20字内"}${bioContext}`;
+{"title":"中文标题","topic":"目录名","filename":"文件名.md","content":"完整Markdown内容","summary":"≤15字摘要"}${bioContext}`;
 
     const response = await callLLM(systemPrompt, rawContent, overrides);
 
@@ -431,7 +469,11 @@ async function compileArticle(topicDir, filename, filePath, task, overrides) {
     fs.mkdirSync(articleDir, { recursive: true });
     const articleFilename = result.filename || `${Date.now()}.md`;
     const articlePath = path.join(articleDir, articleFilename);
-    fs.writeFileSync(articlePath, result.content, 'utf-8');
+    // 后处理：把 images/xxx 路径修正为相对于 wiki 文章指向 raw 目录
+    let articleContent = result.content;
+    articleContent = articleContent.replace(/!\[([^\]]*)\]\(images\/([^)]+)\)/g,
+      `![$1](../../raw/${topicDir}/images/$2)`);
+    fs.writeFileSync(articlePath, articleContent, 'utf-8');
 
     const relPath = `${articleTopic}/${articleFilename}`;
     const today = new Date().toISOString().slice(0, 10);
@@ -513,7 +555,7 @@ async function queryWiki(question) {
   return await callLLM(systemPrompt, userMessage);
 }
 
-const MIME = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
+const MIME = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 
 // ── 工具函数 ──
 
@@ -535,9 +577,14 @@ function tree(dir) {
     .filter(d => !d.name.startsWith('.'))
     .map(d => {
       if (d.isDirectory()) {
-        const children = fs.readdirSync(path.join(dir, d.name), { withFileTypes: true })
+        const topicDir = path.join(dir, d.name);
+        const children = fs.readdirSync(topicDir, { withFileTypes: true })
           .filter(f => f.isFile() && f.name.endsWith('.md'))
-          .map(f => ({ name: f.name.replace('.md', ''), file: f.name, path: d.name + '/' + f.name, title: extractTitle(path.join(dir, d.name, f.name)) }));
+          .map(f => {
+            const fp = path.join(topicDir, f.name);
+            return { name: f.name.replace('.md', ''), file: f.name, path: d.name + '/' + f.name, title: extractTitle(fp), mtime: fs.statSync(fp).mtimeMs };
+          })
+          .sort((a, b) => b.mtime - a.mtime);
         return { name: d.name, children };
       }
       return null;
@@ -990,19 +1037,155 @@ async function extractPDF(b64) {
   return data.text;
 }
 
-async function extractURLReadability(url) {
-  try {
-    // 安全：spawn 用数组参数，URL 不经过 shell 解析，防止命令注入
-    const html = await new Promise((resolve, reject) => {
-      const { spawn } = require('child_process');
-      const proc = spawn('curl', ['-sL', '-m', '30', url], { timeout: 35000 });
-      const chunks = [];
-      let size = 0;
-      proc.stdout.on('data', d => { size += d.length; if (size < 5 * 1024 * 1024) chunks.push(d); });
-      proc.stderr.on('data', () => {});
-      proc.on('error', reject);
-      proc.on('close', code => resolve(Buffer.concat(chunks).toString('utf-8')));
+function fetchHTML(url) {
+  const isWechat = /mp\.weixin\.qq\.com/.test(url);
+  const args = ['-sL', '-m', '30'];
+  if (isWechat) {
+    // Full browser headers to avoid WeChat anti-scraping
+    args.push('-H', 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+    args.push('-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
+    args.push('-H', 'Accept-Language: zh-CN,zh;q=0.9,en;q=0.8');
+    args.push('-H', 'Cache-Control: no-cache');
+  }
+  args.push(url);
+  return new Promise((resolve, reject) => {
+    const { spawn } = require('child_process');
+    const proc = spawn('curl', args, { timeout: 35000 });
+    const chunks = []; let size = 0;
+    proc.stdout.on('data', d => { size += d.length; if (size < 5 * 1024 * 1024) chunks.push(d); });
+    proc.stderr.on('data', () => {});
+    proc.on('error', reject);
+    proc.on('close', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+  });
+}
+
+function downloadImage(imgUrl) {
+  return new Promise((resolve, reject) => {
+    const { spawn } = require('child_process');
+    const proc = spawn('curl', [
+      '-sL', '-m', '20',
+      '-H', 'Referer: https://mp.weixin.qq.com/',
+      '-H', 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      imgUrl
+    ], { timeout: 25000 });
+    const chunks = []; let size = 0;
+    proc.stdout.on('data', d => { size += d.length; if (size < 10 * 1024 * 1024) chunks.push(d); });
+    proc.stderr.on('data', () => {});
+    proc.on('error', reject);
+    proc.on('close', code => {
+      if (code !== 0) return reject(new Error('curl exit ' + code));
+      resolve(Buffer.concat(chunks));
     });
+  });
+}
+
+function htmlToMd(el) {
+  let md = '';
+  for (const node of el.childNodes) {
+    if (node.nodeType === 3) { const t = node.textContent.replace(/\n/g, ' ').trim(); if (t) md += t; continue; }
+    if (node.nodeType !== 1) continue;
+    const tag = node.tagName;
+    if (tag === 'BR') { md += '\n'; continue; }
+    if (tag === 'IMG') {
+      const src = node.getAttribute('src') || node.getAttribute('data-src') || '';
+      if (src) md += '\n\n![图片](' + src + ')\n\n';
+      continue;
+    }
+    if (/^H[1-6]$/.test(tag)) { md += '\n\n' + '#'.repeat(+tag[1]) + ' ' + node.textContent.trim() + '\n\n'; continue; }
+    if (tag === 'P' || tag === 'SECTION') {
+      const inner = htmlToMd(node).trim();
+      if (inner) md += '\n\n' + inner;
+      continue;
+    }
+    if (tag === 'STRONG' || tag === 'B') { const t = htmlToMd(node).trim(); if (t) md += '**' + t + '**'; continue; }
+    if (tag === 'EM' || tag === 'I') { const t = htmlToMd(node).trim(); if (t) md += '*' + t + '*'; continue; }
+    if (tag === 'BLOCKQUOTE') { const t = htmlToMd(node).trim(); if (t) md += '\n\n> ' + t.replace(/\n/g, '\n> ') + '\n\n'; continue; }
+    if (tag === 'A') { const href = node.getAttribute('href') || ''; const t = node.textContent.trim(); if (t && href) md += '[' + t + '](' + href + ')'; else if (t) md += t; continue; }
+    if (tag === 'UL' || tag === 'OL') {
+      let i = 1;
+      for (const li of node.children) {
+        if (li.tagName === 'LI') { const t = htmlToMd(li).trim(); md += '\n' + (tag === 'OL' ? i++ + '. ' : '- ') + t; }
+      }
+      md += '\n'; continue;
+    }
+    if (tag === 'PRE' || tag === 'CODE') { md += '\n\n```\n' + node.textContent + '\n```\n\n'; continue; }
+    md += htmlToMd(node);
+  }
+  return md;
+}
+
+async function extractWechat(url, rawDir) {
+  if (!JSDOM) throw new Error('jsdom 未安装，无法提取微信文章');
+  const html = await fetchHTML(url);
+  if (!html || html.length < 200) throw new Error('微信文章抓取失败（返回内容为空）');
+  if (html.includes('环境异常') || html.includes('请在微信客户端打开')) {
+    throw new Error('微信文章抓取被拦截（需要验证或仅限微信客户端打开）');
+  }
+
+  // WeChat lazy-loads ALL images via data-src; swap every data-src to src
+  const fixed = html.replace(/\bdata-src\s*=\s*"([^"]+)"/g, (_, u) => 'src="' + u.replace(/&amp;/g, '&') + '"');
+  const dom = new JSDOM(fixed, { url });
+  const doc = dom.window.document;
+
+  // Title: og:title > #activity-name > fallback
+  const title = doc.querySelector('meta[property="og:title"]')?.content?.trim()
+    || doc.querySelector('#activity-name')?.textContent?.trim()
+    || '微信文章';
+  // Author: meta author > #js_name (公众号名称)
+  const author = doc.querySelector('meta[name="author"]')?.content?.trim()
+    || doc.querySelector('#js_name')?.textContent?.trim() || '';
+
+  const content = doc.querySelector('#js_content');
+  if (!content || content.textContent.trim().length < 50) {
+    throw new Error('微信文章内容提取失败（可能需要验证或文章已过期）');
+  }
+
+  // Convert to markdown
+  let mdBody = htmlToMd(content);
+  mdBody = mdBody.replace(/\n{3,}/g, '\n\n').trim();
+
+  // Collect ALL image URLs from markdown (not just mmbiz — WeChat can use various CDNs)
+  const imgRegex = /!\[图片\]\((https?:\/\/[^)]+)\)/g;
+  const imgUrls = []; const seen = new Set();
+  let m;
+  while ((m = imgRegex.exec(mdBody)) !== null) {
+    if (!seen.has(m[1])) { seen.add(m[1]); imgUrls.push(m[1]); }
+  }
+
+  if (imgUrls.length > 0 && rawDir) {
+    const imgDir = path.join(rawDir, 'images');
+    fs.mkdirSync(imgDir, { recursive: true });
+    const ts = Date.now();
+    const downloads = imgUrls.map(async (imgUrl, i) => {
+      // Try up to 2 times
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const buf = await downloadImage(imgUrl);
+          if (buf.length < 100) { if (attempt === 0) continue; return null; }
+          const ext = /wx_fmt=(\w+)/.exec(imgUrl)?.[1] || (/\.(png|jpg|jpeg|gif|webp|svg)/i.exec(imgUrl)?.[1]) || 'jpg';
+          const fname = `img_${ts}_${String(i).padStart(3, '0')}.${ext}`;
+          fs.writeFileSync(path.join(imgDir, fname), buf);
+          return { url: imgUrl, local: `images/${fname}` };
+        } catch { if (attempt === 1) return null; }
+      }
+      return null;
+    });
+    const results = await Promise.all(downloads);
+    for (const r of results) {
+      if (r) mdBody = mdBody.split(r.url).join(r.local); // replace ALL occurrences
+    }
+  }
+
+  return `# ${title}\n\n> 作者：${author}\n> 来源：微信公众号\n> 链接：${url}\n\n${mdBody}`;
+}
+
+async function extractURLReadability(url, rawDir) {
+  // 微信公众号文章走专用提取
+  if (/mp\.weixin\.qq\.com/.test(url)) {
+    return await extractWechat(url, rawDir);
+  }
+  try {
+    const html = await fetchHTML(url);
     if (Readability && JSDOM) {
       try {
         const dom = new JSDOM(html, { url });
@@ -1166,10 +1349,10 @@ async function transcribeMedia(b64, filename) {
   throw new Error('当前配置不支持音视频转写。可选方案：\n1. 切换到 OpenAI provider（使用 Whisper API）\n2. 安装 ffmpeg + whisper CLI 进行本地转写\n3. 手动转写后粘贴文本导入');
 }
 
-async function extractContent(type, content, filename, urlVal) {
+async function extractContent(type, content, filename, urlVal, rawDir) {
   switch (type) {
     case 'text': return content;
-    case 'url': return await extractURLReadability(urlVal || content);
+    case 'url': return await extractURLReadability(urlVal || content, rawDir);
     case 'pdf': return await extractPDF(content);
     case 'image': return await ocrImage(content, filename);
     case 'audio':
@@ -1888,7 +2071,7 @@ const server = http.createServer(async (req, res) => {
           const isBinaryType = ['pdf', 'image', 'audio', 'video'].includes(type);
           let extractedText;
           try {
-            extractedText = await extractContent(type, content, itemFilename || name, itemUrl);
+            extractedText = await extractContent(type, content, itemFilename || name, itemUrl, dir);
           } catch (extractErr) {
             if (isBatch) {
               batchProgress.files[idx].status = 'error';
@@ -2227,6 +2410,7 @@ const server = http.createServer(async (req, res) => {
       provider: config.provider,
       model: config.model,
       customBaseUrl: config.customBaseUrl || '',
+      wikiLang: config.wikiLang || 'zh',
       providers: PROVIDERS,
       hasKey: !!config.apiKey
     });
@@ -2238,11 +2422,12 @@ const server = http.createServer(async (req, res) => {
     req.on('data', c => body += c);
     req.on('end', () => {
       try {
-        const { provider, apiKey, model, customBaseUrl } = JSON.parse(body);
+        const { provider, apiKey, model, customBaseUrl, wikiLang } = JSON.parse(body);
         const config = loadConfig();
         if (provider) config.provider = provider;
         if (typeof model === 'string') config.model = model;
         if (typeof customBaseUrl === 'string') config.customBaseUrl = customBaseUrl;
+        if (typeof wikiLang === 'string') config.wikiLang = wikiLang;
         saveConfig(config);
         // apiKey 单独存储到 .api-key 文件
         if (typeof apiKey === 'string' && apiKey.trim()) saveApiKey(apiKey.trim());
@@ -2279,8 +2464,7 @@ const server = http.createServer(async (req, res) => {
     req.on('end', () => {
       try {
         const { nickname, bio } = JSON.parse(body);
-        if (!nickname || !nickname.trim()) return json(res, 400, { error: '昵称不能为空' });
-        saveProfile({ nickname: nickname.trim(), bio: (bio || '').trim() });
+        saveProfile({ nickname: (nickname || '').trim(), bio: (bio || '').trim() });
         return json(res, 200, { ok: true });
       } catch (e) { return json(res, 400, { error: e.message }); }
     });
@@ -2304,6 +2488,20 @@ const server = http.createServer(async (req, res) => {
       } catch (e) { return json(res, 400, { error: e.message }); }
     });
     return;
+  }
+
+  // raw 目录图片（wiki 文章中的 ../../raw/... 解析后变成 /raw/...）
+  if (p.startsWith('/raw/')) {
+    const rel = p.slice(5); // strip /raw/
+    if (rel.includes('..') || path.isAbsolute(rel)) { res.writeHead(403); return res.end(); }
+    const rawFile = path.join(RAW, rel);
+    if (!rawFile.startsWith(RAW)) { res.writeHead(403); return res.end(); }
+    try {
+      const data = fs.readFileSync(rawFile);
+      const ext = path.extname(rawFile);
+      res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': 'max-age=86400' });
+      return res.end(data);
+    } catch { res.writeHead(404); return res.end('Not Found'); }
   }
 
   // 静态文件

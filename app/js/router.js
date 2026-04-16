@@ -1,6 +1,6 @@
 import { $, h, go } from './utils.js';
 import state from './state.js';
-import { updSidebarPages, updSidebarChats } from './sidebar.js';
+import { updSidebarPages, updSidebarChats, switchSidebarTab } from './sidebar.js';
 import { hideFormatToolbar } from './pages/article.js';
 import { cancelGA } from './pages/graph.js';
 import { rDash } from './pages/dashboard.js';
@@ -51,6 +51,8 @@ function updBC(r) {
 
 export async function render() {
   const r = route(); state.cv = r.v; updNav(r.v); updBC(r); cancelGA(); hideFormatToolbar();
+  if (r.v === 'article' || r.v === 'browse') switchSidebarTab('pages');
+  else if (r.v === 'chat') switchSidebarTab('chat');
   const delBtn = document.getElementById('topbarDel'); if (delBtn && r.v !== 'article') delBtn.remove();
   const precipBtn = document.getElementById('topbarPrecip'); if (precipBtn && r.v !== 'chat') precipBtn.remove();
   updSidebarPages(); updSidebarChats();

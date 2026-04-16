@@ -9,8 +9,8 @@ export function buildComposer(ctx) {
   s += '</div><div class="chat-toolbar-right">';
   s += '<span class="chat-model-tag" id="' + ctx + 'ModelTag" onclick="toggleDD(\'' + ctx + 'ModelDD\')"><span id="' + ctx + 'ModelName">选择模型</span> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span>';
   s += '<button class="chat-send-btn" id="' + ctx + 'SendBtn" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>';
-  s += '</div></div></div>';
-  s += '<div class="chat-model-dropdown" id="' + ctx + 'ModelDD"></div></div>';
+  s += '<div class="chat-model-dropdown" id="' + ctx + 'ModelDD"></div>';
+  s += '</div></div></div></div>';
   return s;
 }
 
@@ -30,11 +30,10 @@ export async function loadModels(ddId, tagId) {
     const s = state.sCache || await api('/api/settings'); state.sCache = s;
     const dd = $(ddId); const tag = $(tagId); if (!dd || !tag) return;
     let html = '';
-    if (s.providers) {
-      for (const [k, v] of Object.entries(s.providers)) {
-        if (k === 'custom') continue;
-        v.models.forEach(m => { const active = (s.provider === k && s.model === m) ? ' active' : ''; html += '<div class="chat-model-opt' + active + '" data-v="' + k + '|' + m + '" onclick="pickModel(this,\'' + ddId + '\',\'' + tagId + '\')">' + h(m) + '</div>'; });
-      }
+    const provKey = s.provider || 'local';
+    const prov = s.providers && s.providers[provKey];
+    if (prov) {
+      prov.models.forEach(m => { const active = (s.model === m) ? ' active' : ''; html += '<div class="chat-model-opt' + active + '" data-v="' + provKey + '|' + m + '" onclick="pickModel(this,\'' + ddId + '\',\'' + tagId + '\')">' + h(m) + '</div>'; });
     }
     dd.innerHTML = html;
     const nameEl = document.getElementById(tagId.replace('Tag', 'Name'));

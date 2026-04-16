@@ -52,21 +52,97 @@ function readFileAsText(file) {
   });
 }
 
+// ── URL chips ──
+
+const MAX_URLS = 10;
+let _ingestUrls = [];
+
+function isUrl(s) { return /^https?:\/\/.{3,}/.test(s.trim()); }
+
+function addIngestUrl(url) {
+  url = url.trim();
+  if (!url || !isUrl(url)) return false;
+  if (_ingestUrls.length >= MAX_URLS) { toast('最多 ' + MAX_URLS + ' 个链接'); return false; }
+  if (_ingestUrls.includes(url)) return false;
+  _ingestUrls.push(url);
+  renderUrlChips();
+  return true;
+}
+
+export function removeIngestUrl(i) {
+  _ingestUrls.splice(i, 1);
+  renderUrlChips();
+}
+
+function renderUrlChips() {
+  const wrap = $('ingestUrlChips');
+  const ta = $('ingestContent');
+  if (!_ingestUrls.length) {
+    wrap.style.display = 'none';
+    ta.placeholder = '粘贴文本、拖入文件、或输入 https:// 链接...';
+    ta.style.minHeight = '200px';
+    $('ingestBtn').textContent = '开始编译';
+    return;
+  }
+  wrap.style.display = 'flex';
+  wrap.innerHTML = _ingestUrls.map((u, i) => {
+    const short = u.replace(/^https?:\/\//, '').slice(0, 45) + (u.length > 55 ? '...' : '');
+    return '<div class="url-chip"><span class="url-chip-icon">🔗</span><span class="url-chip-text" title="' + h(u) + '">' + h(short) + '</span><button class="url-chip-del" onclick="removeIngestUrl(' + i + ')">×</button></div>';
+  }).join('');
+  ta.placeholder = _ingestUrls.length < MAX_URLS ? '继续粘贴链接，或输入补充说明...' : '已达上限 ' + MAX_URLS + ' 个链接';
+  ta.style.minHeight = '60px';
+  $('ingestBtn').textContent = _ingestUrls.length > 1 ? '开始编译 (' + _ingestUrls.length + ' 个链接)' : '开始编译';
+}
+
+function initIngestUrlDetect() {
+  const ta = $('ingestContent'); if (!ta) return;
+  ta.addEventListener('paste', e => {
+    const text = (e.clipboardData || window.clipboardData).getData('text').trim();
+    // Check if pasted text contains one or more URLs
+    const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean);
+    const urls = lines.filter(l => isUrl(l));
+    if (urls.length > 0 && urls.length === lines.length) {
+      // All lines are URLs — add as chips
+      e.preventDefault();
+      urls.forEach(u => addIngestUrl(u));
+      ta.value = '';
+    } else if (urls.length === 1 && lines.length === 1) {
+      // Single URL pasted
+      e.preventDefault();
+      addIngestUrl(urls[0]);
+      ta.value = '';
+    }
+  });
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      const val = ta.value.trim();
+      if (isUrl(val)) {
+        e.preventDefault();
+        addIngestUrl(val);
+        ta.value = '';
+      }
+    }
+  });
+}
+
 // ── 面板开关 ──
 
-export function openIngest() { $('ingestOverlay').classList.add('open'); loadTopics(); loadModels2('ingestModel'); resetIngestUI(); }
+export function openIngest() { $('ingestOverlay').classList.add('open'); loadTopics(); loadModels2('ingestModel'); resetIngestUI(); initIngestUrlDetect(); }
 export function closeIngest() { $('ingestOverlay').classList.remove('open'); }
 
 function resetIngestUI() {
   state.batchFiles = [];
   state.pendingBinaryFile = null;
+  _ingestUrls = [];
   $('ingestContent').value = '';
   $('ingestBtn').disabled = false;
-  $('ingestBtn').textContent = '\u5F00\u59CB\u7F16\u8BD1';
+  $('ingestBtn').textContent = '开始编译';
   $('ingestBatchPreview').style.display = 'none';
   $('ingestBatchList').innerHTML = '';
   $('ingestFileName').textContent = '';
-  $('ingestContent').placeholder = '\u7C98\u8D34\u6587\u672C\u3001\u62D6\u5165\u6587\u4EF6\u3001\u6216\u8F93\u5165 https:// \u94FE\u63A5...';
+  $('ingestUrlChips').innerHTML = '';
+  $('ingestUrlChips').style.display = 'none';
+  $('ingestContent').placeholder = '粘贴文本、拖入文件、或输入 https:// 链接...';
   $('ingestFile').value = '';
 }
 
@@ -236,22 +312,36 @@ export async function submitIngest() {
   const checkedBatch = state.batchFiles.filter(f => f.checked);
   const content = $('ingestContent').value.trim();
   const hasPendingBinary = !!state.pendingBinaryFile && !content;
-  const isBatch = checkedBatch.length > 1;
+  const hasUrls = _ingestUrls.length > 0;
+  const isBatch = checkedBatch.length > 1 || _ingestUrls.length > 1;
 
-  if (!isBatch && !content && !hasPendingBinary && checkedBatch.length === 0) { toast('\u8BF7\u8F93\u5165\u5185\u5BB9'); return; }
+  if (!isBatch && !hasUrls && !content && !hasPendingBinary && checkedBatch.length === 0) { toast('请输入内容'); return; }
 
   const topic = $('ingestTopic').value;
   const model = $('ingestModel');
   const btn = $('ingestBtn');
   btn.disabled = true;
-  btn.textContent = '\u63D0\u4EA4\u4E2D...';
+  btn.textContent = '提交中...';
 
   let modelBody = {};
   if (model && model.value) { const p = model.value.split('|'); if (p.length === 2) { modelBody.provider = p[0]; modelBody.model = p[1]; } }
 
   // 构建请求体
   let bodyData;
-  if (isBatch) {
+  if (hasUrls) {
+    // URL chips mode — single or batch
+    if (_ingestUrls.length === 1 && !checkedBatch.length) {
+      bodyData = { type: 'url', content: _ingestUrls[0], topic, ...modelBody };
+    } else {
+      const items = _ingestUrls.map(u => ({ type: 'url', content: u, url: u, topic, name: u.replace(/^https?:\/\//, '').slice(0, 40) }));
+      // Also include any checked file batch items
+      checkedBatch.forEach(f => {
+        if (f.isBinary) items.push({ type: f.fileType, content: f.content, topic, name: f.name, filename: f.filename || f.name });
+        else items.push({ type: 'text', content: f.content, topic, name: f.name });
+      });
+      bodyData = { items, ...modelBody };
+    }
+  } else if (isBatch) {
     const items = checkedBatch.map(f => {
       if (f.isBinary) return { type: f.fileType, content: f.content, topic, name: f.name, filename: f.filename || f.name };
       return { type: 'text', content: f.content, topic, name: f.name };
@@ -266,7 +356,7 @@ export async function submitIngest() {
   } else if (checkedBatch.length === 1) {
     bodyData = { type: 'text', content: checkedBatch[0].content, topic, ...modelBody };
   } else {
-    const type = /^https?:\/\//.test(content) ? 'url' : 'text';
+    const type = isUrl(content) ? 'url' : 'text';
     bodyData = { type, content, topic, ...modelBody };
   }
 
@@ -282,8 +372,10 @@ export async function submitIngest() {
     }
 
     // 成功 → 立即关闭面板，启动后台进度追踪
+    const totalItems = hasUrls ? _ingestUrls.length + checkedBatch.length : checkedBatch.length;
+    const trackBatch = isBatch || totalItems > 1;
     closeIngest();
-    startProgressTracking(isBatch, isBatch ? checkedBatch.length : 0);
+    startProgressTracking(trackBatch, trackBatch ? totalItems : 0);
   } catch (e) {
     toast('\u63D0\u4EA4\u5931\u8D25: ' + e.message);
     btn.disabled = false;

@@ -48,6 +48,25 @@
 .ingest-drop-zone.dragover textarea{opacity:0.1}
 .ingest-drop-hint svg{width:32px;height:32px;opacity:0.4}
 
+/* URL chips */
+.ingest-url-chips{
+  display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px 4px;
+}
+.url-chip{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:5px 8px 5px 10px;border-radius:8px;
+  background:var(--accent-bg);border:1px solid var(--accent-border);
+  font-size:13px;color:var(--accent);max-width:100%;animation:fadeIn 150ms ease;
+}
+.url-chip-icon{font-size:12px;flex-shrink:0}
+.url-chip-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.url-chip-del{
+  width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:14px;line-height:1;color:var(--accent);background:transparent;border:none;
+  cursor:pointer;flex-shrink:0;transition:background var(--t);
+}
+.url-chip-del:hover{background:var(--accent);color:#fff}
+
 /* Batch ingest preview (in panel) */
 .ingest-batch-list{max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);margin:4px 0}
 .ingest-batch-item{display:flex;align-items:center;gap:8px;padding:7px 12px;font-size:13px;border-bottom:1px solid var(--border)}
