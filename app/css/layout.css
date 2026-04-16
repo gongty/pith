@@ -42,11 +42,11 @@
   position:relative;
 }
 .sidebar-item:hover{background:var(--bg-hover);color:var(--fg)}
-.sidebar-item.active{color:var(--accent);background:var(--accent-bg)}
+.sidebar-item.active{color:var(--fg);font-weight:600;background:none}
 .sidebar-item.active::before{content:'';position:absolute;left:2px;top:8px;bottom:8px;width:3px;background:var(--accent);border-radius:2px}
 .sidebar-item svg{width:17px;height:17px;flex-shrink:0;opacity:0.55}
 .sidebar-item:hover svg{opacity:0.8}
-.sidebar-item.active svg{opacity:1;color:var(--accent)}
+.sidebar-item.active svg{opacity:0.7}
 .sidebar-section{
   font-size:11px;font-weight:600;color:var(--fg-tertiary);
   padding:18px 14px 6px;text-transform:uppercase;letter-spacing:0.05em;
@@ -107,7 +107,7 @@
 
 /* Chat list in sidebar */
 .sidebar-new-chat-btn{
-  display:flex;align-items:center;gap:6px;margin:4px 8px 6px;
+  display:flex;align-items:center;justify-content:center;gap:6px;margin:4px 8px 6px;
   padding:7px 12px;border-radius:var(--radius);font-size:13px;font-weight:500;
   color:var(--accent);background:var(--accent-bg);
   border:1px solid var(--accent-border);
