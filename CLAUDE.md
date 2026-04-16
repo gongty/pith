@@ -21,7 +21,7 @@ Default port: 3456. First run `npm install` to install dependencies (pdf-parse, 
 
 **No tests, no lint, no CI.** `package.json` 只有 `start` 脚本，`npm test` 返回 `exit 1`。验证改动靠浏览器手测 + 服务端日志。
 
-**运行时外部依赖（PATH 上需要）**：本地 CLI compile 模式需要 `claude`；音视频本地转录路径需要 `ffmpeg` + `whisper`。缺失时 ingest/compile 会尝试 fallback 到云端 API，失败时看 stderr。
+**运行时外部依赖（PATH 上需要）**：本地 CLI compile 模式需要 `claude`；音视频本地转录路径需要 `ffmpeg` + `whisper`；autotask `aggregator` 源类型需要 `python3`（subprocess 调用 `../plugins/news-skills/news-aggregator-skill/scripts/fetch_news.py`）。缺失时 ingest/compile 会尝试 fallback 到云端 API，失败时看 stderr。
 
 ## Architecture
 
@@ -35,7 +35,9 @@ Single-file raw Node.js HTTP server (~5400 lines). Key subsystems:
 - **Chat System** — JSON file storage in `data/chats/`. Per-conversation files `conv_*.json` + `_index.json` index. Supports context retrieval from wiki for RAG.
 - **Wiki Data & Graph** — `searchWiki()` for full-text search. `retrieveContext()` for chat RAG. `/api/wiki/tree` returns topic → children with `{title, tags, mtime}`. `/api/wiki/graph` builds 2-layer graph: explicit markdown links (see-also / reference edges) + tag co-occurrence edges with IDF weighting (tags shared by >50% of articles are dropped as too-common; dangling targets filtered via `fs.existsSync`). The standalone `buildGraph()` function (line ~1703) is legacy — the live graph API has its own inline logic.
 - **Ingest Pipeline** — Single-task queue. Accepts text/URL/PDF/image/audio/video/ZIP. Multi-format extraction: pdf-parse for PDF, Readability+jsdom for URL, LLM Vision for images, OpenAI Whisper or local ffmpeg+whisper for audio/video. Batch mode with progress tracking via `batchProgress` object polled by frontend.
-- **Automated Tasks** — `data/autotasks/` stores task configs, execution history, and dedup index. `executeAutotask()` engine: fetch source (RSS/webpage/API) → keyword filter → 3-layer dedup (URL normalization + content SHA-256 + existing check) → `extractContent()` + `compileArticle()` reuse. Scheduler runs every 5 min via `setInterval`, supports daily (with HH:MM), hourly, and manual schedules.
+- **Automated Tasks (AI 研究助手)** — 任务模型 v3：`{intent (NL 描述用户想要什么), sources[] (从 catalog 选), preferences{topics, deny}, feedback[] (up/down 历史)}`。Source 适配器在 `lib/sources.js`，五种类型：rss / changelog / aggregator (spawn `python3 fetch_news.py`) / webpage / api。**SSRF 防护** (`assertSafeUrl()`)：协议白名单 (http/https) + DNS 解析 + 私网/loopback/link-local/IPv4-mapped-IPv6/bracketed-IPv6 全拦截 + 重定向重新校验 + 响应硬上限 10 MB。**9 阶段 pipeline**: fetch → 跨源 URL 规范化去重 (`dedup.json` 30 天窗口) → 关键词预过滤 → LLM relevance gate (qwen-turbo / 廉价快速模型) → smart_fill (前 3 天补抓机制) → process (compile per item) → brief (LLM 生成本次简报 .md，写入 `data/wiki/`)。Item dedup 用复合键 `(url||title)+sourceId`，避免同一 URL 在不同 source 下被错杀。`history.json` 写入用 `withAutotaskWriteLock(fn)` 链式 Promise 串行化。Scheduler 每 5 min `setInterval`，支持 daily(HH:MM)/hourly/manual。
+- **Autotask API** — `POST /api/autotask/configure` (envelope `{ok, config, warnings[]}` 创建/更新任务)、`POST /api/autotask/feedback` (action 映射：前端 `up`/`down` → 后端持久化为 `keep`/`drop`，喂 LLM gate)、`GET /api/autotask/sources` (列 catalog)、`POST /api/autotask/run/:id` (手动触发)、`GET /api/autotask/history` (含 sourceStatus / topGatedReasons / items[].confidence)。
+- **system-sources.json** — `data/system-sources.json` 是 51 个内置源 catalog (arxiv RSS, github changelogs, news aggregators 等)，`.gitignore` 用 `data/* + !data/system-sources.json` 例外放行（**唯一被 git 跟踪的 data/ 文件**）。新建任务 UI 从这里挑源；新增源直接编辑这个 JSON。
 - **Static Files** — Serves `app/` directory. Path: `GET / → app/index.html`, `GET /css/base.css → app/css/base.css`, etc.
 
 ### Frontend (`app/`)
@@ -82,7 +84,8 @@ data/wiki/index.md  → Master index (topic tables)
 data/wiki/log.md    → Activity log
 data/raw/           → Immutable source materials (fetched/pasted content)
 data/chats/         → JSON conversation files + _index.json
-data/autotasks/     → tasks.json (configs), history.json (runs), dedup.json (URL+hash index)
+data/autotasks/     → tasks.json (intent+sources[]+preferences+feedback[] 配置), history.json (runs，含 sourceStatus / topGatedReasons / items[].confidence), dedup.json (跨任务跨源 URL+hash 30 天窗口)
+data/system-sources.json → 51 个内置源 catalog (git 跟踪，via .gitignore !data/system-sources.json 例外)
 data/reports/       → Lint/health check reports
 data/uploads/       → Uploaded files
 ```
@@ -102,7 +105,7 @@ data/uploads/       → Uploaded files
 - 在 API 响应里返回密钥的任何部分（包括 mask 后的）
 - 把 data/、config.json、profile.json、start.sh 加入 git
 
-`.gitignore` 排除: `config.json`, `profile.json`, `.api-key`, `data/`, `node_modules/`, `start.sh`
+`.gitignore` 排除: `config.json`, `profile.json`, `.api-key`, `data/*` (但 `!data/system-sources.json` 例外), `node_modules/`, `start.sh`, `.claude/` (运行时 lock 目录)
 
 ## Key Patterns
 
@@ -112,6 +115,7 @@ data/uploads/       → Uploaded files
 - **Force graph** parameters in `pages/graph.js`: repulsion `2500/(d²)`, spring length `160`, center gravity `0.005`. Tune these if node count changes significantly.
 - **Ingest is single-threaded** — one compilation at a time. Batch mode processes items sequentially and updates `batchProgress` which frontend polls via `/api/ingest/batch/status`.
 - **Autotask execution** reuses the ingest pipeline (`extractContent()` + `compileArticle()`). Each task run records to `history.json` and marks URLs/hashes in `dedup.json`.
+- **Autotask 写锁**：`history.json` 高频并发写（LLM gate / smart_fill / process 各阶段并发完成）必须经过 `withAutotaskWriteLock(fn)` 链式 Promise 串行化，**不要绕开直接 fs.writeFileSync**，否则会撕扯并发结果。
 - **server.js 无热加载** — 改 `server.js` 必须重启进程。`data/` 下 JSON 在进程内有内存缓存（如 autotasks 调度器、聊天索引），手改磁盘文件不会被感知，必须通过 API 改或重启。
 - **CSS overflow rule**: When `overflow-y` is non-`visible`, browsers force `overflow-x` from `visible` to `auto`. Always set `overflow-x:hidden` explicitly on scroll containers to prevent unwanted horizontal scrollbars.
 - **Article frontmatter 必须保留**：所有 `data/wiki/**/*.md` 都有 `---\ntags: [...]\n---\n` 开头。编辑代码（前后端）动 .md 内容时，先用 `parseFrontmatter` 拆分 → 改 body → 用 `serializeFrontmatter` + body 拼回。前端 `markdown.js` 也导出了 `parseFrontmatter`，`renderMd` 会自动剥离 fm。直接字符串拼接或 regex 截断会丢失元数据。
