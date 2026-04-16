@@ -6,7 +6,7 @@ import { toggleSidebar, initSidebar, initSidebarPreview, toggleFold, switchSideb
 import { toggleDD, pickModel } from './composer.js';
 import { openSearch, closeSearch, searchFor, handleSearchKeydown, initSearchInput } from './search.js';
 import { openSettings, closeSettings, onProvChange, saveSett, testConn, switchSettingsTab } from './settings.js';
-import { openIngest, closeIngest, submitIngest, batchToggleAll, batchFileToggle, initIngestDragDrop } from './ingest.js';
+import { openIngest, closeIngest, submitIngest, batchToggleAll, batchFileToggle, initIngestDragDrop, checkActiveIngest } from './ingest.js';
 import { render } from './router.js';
 import { dashAsk } from './pages/dashboard.js';
 import { chatSend, delChat, precipitateMsg, precipitateConv, closePrecipModal } from './pages/chat.js';
@@ -89,5 +89,6 @@ initSidebar();
 initSearchInput();
 initIngestDragDrop();
 initSidebarPreview();
+checkActiveIngest();
 window.addEventListener('hashchange', render);
 render();

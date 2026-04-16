@@ -364,3 +364,25 @@ function hideProgress() {
   el.style.cursor = '';
   el.onclick = null;
 }
+
+// ── 页面加载时恢复进行中的编译进度 ──
+
+export async function checkActiveIngest() {
+  try {
+    // 先检查批量任务
+    const batch = await api('/api/ingest/batch/status');
+    if (batch && batch.status === 'processing') {
+      startProgressTracking(true, batch.total);
+      // 立即同步当前进度到 UI
+      const pct = batch.total > 0 ? Math.round(batch.completed / batch.total * 100) : 0;
+      $('itFill').style.width = pct + '%';
+      $('itTitle').textContent = '\u7F16\u8BD1\u4E2D... ' + batch.completed + '/' + batch.total;
+      return;
+    }
+    // 再检查单文件任务
+    const task = await api('/api/ingest/status');
+    if (task && task.status === 'compiling') {
+      startProgressTracking(false, 0);
+    }
+  } catch {}
+}
