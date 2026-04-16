@@ -207,9 +207,17 @@ async function loadTopics() {
 
 async function loadModels2(id) {
   try {
-    const s = state.sCache || await api('/api/settings'); state.sCache = s; const sel = $(id); if (!sel) return; sel.innerHTML = '';
-    if (s.providers) for (const [k, v] of Object.entries(s.providers)) { if (k === 'custom') continue; v.models.forEach(m => { const o = document.createElement('option'); o.value = k + '|' + m; o.textContent = m; sel.appendChild(o); }); }
-    if (s.provider && s.model) sel.value = s.provider + '|' + s.model;
+    const s = state.sCache || await api('/api/settings'); state.sCache = s;
+    const sel = $(id); if (!sel) return; sel.innerHTML = '';
+    // 只显示当前配置的提供商的模型，没配 key 的渠道不展示
+    const provKey = s.provider || 'local';
+    const prov = s.providers && s.providers[provKey];
+    if (prov) prov.models.forEach(m => { const o = document.createElement('option'); o.value = provKey + '|' + m; o.textContent = m; sel.appendChild(o); });
+    // 恢复上次选择，没有则用设置默认值
+    const saved = localStorage.getItem('ingestModel');
+    if (saved) sel.value = saved;
+    if (!sel.value && s.provider && s.model) sel.value = s.provider + '|' + s.model;
+    sel.onchange = () => localStorage.setItem('ingestModel', sel.value);
   } catch {}
 }
 
