@@ -1,6 +1,6 @@
 import { $, h, api, put, apiDel, toast, go, skelLines } from '../utils.js';
 import state from '../state.js';
-import { renderMd, html2md } from '../markdown.js';
+import { renderMd, html2md, parseFrontmatter } from '../markdown.js';
 
 export async function rArticle(c, p) {
   c.innerHTML = '<div class="page-article"><div class="page-article-inner">' + skelLines(8) + '</div></div>';
@@ -44,7 +44,11 @@ export async function rArticle(c, p) {
       }
       return;
     }
-    const lines = md.split('\n');
+    // 先剥离 YAML frontmatter，拿到 tags 等元数据
+    const fm = parseFrontmatter(md);
+    const mdNoFm = fm.body;
+    const tags = Array.isArray(fm.data && fm.data.tags) ? fm.data.tags.filter(t => typeof t === 'string' && t.trim()) : [];
+    const lines = mdNoFm.split('\n');
     let title = '', bodyStart = 0;
     if (lines[0] && lines[0].startsWith('#')) { title = lines[0].replace(/^#+\s*/, ''); bodyStart = 1; while (bodyStart < lines.length && !lines[bodyStart].trim()) bodyStart++; }
     const bodyLines = lines.slice(bodyStart);
@@ -67,10 +71,17 @@ export async function rArticle(c, p) {
 
     let s = '<div class="page-article"><div class="page-article-inner">';
     s += '<div class="article-title" contenteditable="true" spellcheck="false" autocorrect="off" autocapitalize="off" id="artTitle" oninput="onArtChange()">' + h(title) + '</div>';
+    if (tags.length) {
+      s += '<div class="article-tags" id="artTags">';
+      for (const t of tags) {
+        s += '<a class="article-tag-chip" href="#/browse?tag=' + encodeURIComponent(t) + '">' + h(t) + '</a>';
+      }
+      s += '</div>';
+    }
     s += '<div class="article-body" contenteditable="true" spellcheck="false" autocorrect="off" autocapitalize="off" id="artBody" oninput="onArtChange()">' + rendered + '</div>';
     s += await buildRelated(p);
     s += '</div>';
-    s += buildArticleTOC(state.artMd);
+    s += buildArticleTOC(mdNoFm);
     s += '</div>';
     s += '<div class="article-save-indicator" id="saveInd"></div>';
     c.innerHTML = s;
@@ -193,7 +204,17 @@ async function autoSave() {
   const title = titleEl.innerText.trim();
   const bodyHtml = bodyEl.innerHTML;
   const bodyMd = html2md(bodyHtml);
-  const fullMd = (title ? '# ' + title + '\n\n' : '') + bodyMd;
+  // 保留原文件的 YAML frontmatter（tags 等元数据），避免编辑正文时被吞掉
+  let fmBlock = '';
+  const origMd = state.artMd || '';
+  if (origMd.startsWith('---\n')) {
+    const oLines = origMd.split('\n');
+    const MAX_SCAN = Math.min(oLines.length, 12);
+    for (let i = 1; i < MAX_SCAN; i++) {
+      if (oLines[i].trim() === '---') { fmBlock = oLines.slice(0, i + 1).join('\n') + '\n'; break; }
+    }
+  }
+  const fullMd = fmBlock + (title ? '# ' + title + '\n\n' : '') + bodyMd;
   try {
     await put('/api/wiki/article', { path: state.artPath, content: fullMd });
     state.artMd = fullMd; state.td = null;

@@ -56,6 +56,9 @@ const CHATS = path.join(ROOT, 'data', 'chats');
 fs.mkdirSync(CHATS, { recursive: true });
 const AUTOTASKS_DIR = path.join(ROOT, 'data', 'autotasks');
 fs.mkdirSync(AUTOTASKS_DIR, { recursive: true });
+const QUEUE_DIR = path.join(ROOT, 'data', 'queue');
+fs.mkdirSync(QUEUE_DIR, { recursive: true });
+const QUEUE_FILE = path.join(QUEUE_DIR, 'tasks.json');
 
 // ── 崩溃诊断 & 访问日志 ──
 // 目的：进程挂掉时能还原现场（最近请求 + 堆栈 + 触发来源 + 信号）
@@ -873,6 +876,13 @@ async function runCompilePipeline(topicDir, filename, filePath, task, overrides)
 
   const memCtxApi = buildMemoryContext();
   const bioContext = memCtxApi ? `\n\n${memCtxApi}\n请根据用户背景调整文章深度和侧重点。` : '';
+
+  // 收集已有 tags，引导 LLM 复用语义相近的词（让图谱能连起来）
+  const existingTagsList = collectExistingTags(200);
+  const existingTagsStr = existingTagsList.length
+    ? existingTagsList.map(t => t.tag).join('、')
+    : '（暂无，这是前几篇文章）';
+
   const contentSystemPrompt = `你是知识库编译助手。将原始素材编译为结构清晰、信息保真的纯 Markdown 知识库文章。
 
 ## 文章模板
@@ -903,9 +913,31 @@ async function runCompilePipeline(topicDir, filename, filePath, task, overrides)
 - 禁止以引号、书名号、括号包裹整个标题
 - 好的标题：简洁、信息量大、读者一眼能看出在讲什么
 
+## 标签要求（非常重要，用于图谱连接）
+在文章最末尾追加一行 HTML 注释，格式严格如下：
+\`<!-- tags: 标签1, 标签2, 标签3, 标签4, 标签5 -->\`
+
+规则：
+- 3-5 个标签，每个标签 ≤ 10 个字符
+- 标签应精准、有区分度：能代表这篇文章最核心的概念/实体/方法（例如：分布式系统、Raft、Rust、共识协议、键值存储）
+- 避免过于宽泛的词（如 "技术"、"科技"、"方法"、"分析"、"指南"）——这些词对建立有效关联没帮助
+- 避免碎片（如 "据收集"、"能基准"）——必须是完整的、人能看懂的概念
+- 不要用 emoji、引号、书名号包裹
+- 标签语言：${langInstruction}
+
+**已有标签词表**（按使用频次，从高到低）：
+${existingTagsStr}
+
+规则：如果已有标签里有语义相近的，必须优先用已有的；只有确实没合适的才新增标签。目的是让同一个概念在不同文章里用同一个词，图谱才能连成一片。
+
+示例：
+- 已有"大模型"，就不要新增"LLM"或"大语言模型"
+- 已有"Rust"，就不要新增"rust 语言"或"Rustlang"
+
 ## 输出要求（重要）
 - 输出**纯 Markdown 文章**，不要用 JSON 包裹、不要用代码块 fence 包裹整篇文章
 - **不要写 See Also 章节**（系统会自动追加）
+- 文章最后一行必须是 \`<!-- tags: ... -->\` 注释
 - 输出语言：${langInstruction}
 - 已有主题：${existingTopics.join(', ') || '（暂无）'}${bioContext}`;
 
@@ -995,8 +1027,8 @@ async function runCompilePipeline(topicDir, filename, filePath, task, overrides)
     articleContent = `# ${articleTitle}\n\n> 注意：正文编译失败，以下为原始素材（已清理截断）。\n\n${safeRaw}`;
   } else {
     articleContent = stripOuterCodeFences(articleContent);
-    // 从 content 第一行 "# ..." 提取 LLM 生成的标题
-    const titleMatch = articleContent.match(/^\s*#\s+(.+?)\s*$/m);
+    // 从 content 第一行 "#..#### ..." 提取 LLM 生成的标题（优先 H1，兜底 H2-H6）
+    const titleMatch = articleContent.match(/^\s*#{1,6}\s+(.+?)\s*$/m);
     if (titleMatch) {
       articleTitle = titleMatch[1]
         .trim()
@@ -1008,8 +1040,40 @@ async function runCompilePipeline(topicDir, filename, filePath, task, overrides)
       if (articleTitle.length > 80) articleTitle = articleTitle.slice(0, 80);
     }
     if (!articleTitle) articleTitle = fallbackTitle;
-    // 规范化正文第一行为 "# <articleTitle>"
-    articleContent = articleContent.replace(/^\s*#\s+.+\s*$/m, `# ${articleTitle}`);
+    // 规范化正文第一个标题行为 "# <articleTitle>"（无论原来是 H1-H6）
+    if (titleMatch) {
+      articleContent = articleContent.replace(/^\s*#{1,6}\s+.+\s*$/m, `# ${articleTitle}`);
+    } else {
+      // 没有任何标题行：在开头注入 H1
+      articleContent = `# ${articleTitle}\n\n${articleContent.replace(/^\s+/, '')}`;
+    }
+  }
+
+  // ─ Stage 5: tags（搭 content 阶段便车，从输出末尾的 <!-- tags: ... --> 注释里提取） ─
+  let articleTags = [];
+  {
+    const s = startStage(task, 'tags', '提取标签', { source: 'piggyback_on_content' });
+    try {
+      const tagsMatch = articleContent.match(/<!--\s*tags\s*:\s*([^>]+?)\s*-->/i);
+      if (tagsMatch) {
+        articleTags = tagsMatch[1]
+          .split(/[,，、]/)
+          .map(t => t.trim().replace(/^["'《「『]+|["'》」』]+$/g, ''))
+          .filter(t => t && t.length <= 10)
+          .slice(0, 5);
+        // 从正文移除 tags 注释（避免显示在正文里）
+        articleContent = articleContent.replace(/<!--\s*tags\s*:\s*[^>]+?\s*-->\s*/gi, '').trimEnd() + '\n';
+      }
+      // 去重
+      articleTags = [...new Set(articleTags)];
+      if (articleTags.length > 0) {
+        doneStage(s, { detail: articleTags.join('、') });
+      } else {
+        doneStage(s, { detail: '未生成（LLM 未输出 tags 注释）' });
+      }
+    } catch (e) {
+      errorStage(s, e);
+    }
   }
 
   // ─ Stage 5: filename（移到 content 之后，使用 LLM 生成的标题） ─
@@ -1117,7 +1181,10 @@ async function runCompilePipeline(topicDir, filename, filePath, task, overrides)
     const articleDir = path.join(WIKI, articleTopic);
     fs.mkdirSync(articleDir, { recursive: true });
     const articlePath = path.join(articleDir, articleFilename);
-    fs.writeFileSync(articlePath, articleContent, 'utf-8');
+    // 把 tags 写成 YAML frontmatter 放文章最前面
+    const frontmatter = serializeFrontmatter({ tags: articleTags });
+    const fileContent = frontmatter ? `${frontmatter}${articleContent}` : articleContent;
+    fs.writeFileSync(articlePath, fileContent, 'utf-8');
     relPath = `${articleTopic}/${articleFilename}`;
     const today = new Date().toISOString().slice(0, 10);
 
@@ -1163,7 +1230,7 @@ async function runCompilePipeline(topicDir, filename, filePath, task, overrides)
     return;
   }
 
-  task.created = [{ path: relPath, title: articleTitle }];
+  task.created = [{ path: relPath, title: articleTitle, tags: articleTags }];
   if (contentErrored) {
     task.status = 'partial';
     task.message = '编译完成（正文降级为原文）';
@@ -1283,12 +1350,85 @@ function walkMd(dir) {
   return files;
 }
 
+// 解析文章开头的 YAML frontmatter（极简：只支持 tags: [a, b, c] 形式）
+function parseFrontmatter(content) {
+  if (!content) return { data: {}, body: '' };
+  const m = content.match(/^\uFEFF?\s*---\s*\n([\s\S]*?)\n---\s*\n?/);
+  if (!m) return { data: {}, body: content };
+  const block = m[1];
+  const data = {};
+  for (const line of block.split('\n')) {
+    const kv = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$/);
+    if (!kv) continue;
+    const key = kv[1], val = kv[2].trim();
+    if (/^\[.*\]$/.test(val)) {
+      data[key] = val.slice(1, -1).split(',').map(s => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+    } else {
+      data[key] = val.replace(/^["']|["']$/g, '');
+    }
+  }
+  return { data, body: content.slice(m[0].length) };
+}
+
+// 序列化极简 frontmatter：只输出 tags 数组
+function serializeFrontmatter(data) {
+  if (!data || !data.tags || !data.tags.length) return '';
+  const arr = data.tags.map(t => String(t).replace(/[,\n]/g, ' ').trim()).filter(Boolean);
+  if (!arr.length) return '';
+  return `---\ntags: [${arr.join(', ')}]\n---\n`;
+}
+
 function extractTitle(filePath) {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
-    const m = content.match(/^#+\s+(.+)/m);
+    const { body } = parseFrontmatter(content);
+    const m = body.match(/^#+\s+(.+)/m);
     return m ? m[1].trim() : path.basename(filePath, '.md');
   } catch { return path.basename(filePath, '.md'); }
+}
+
+// 读文章的 tags：优先 frontmatter，没有就回退到 extractKeywords 筛选（兼容老文章）
+const TAG_FALLBACK_STOP = new Set([
+  '概述', '总结', '背景', '简介', '引言', '正文', '结论', '附录', '参考', '说明',
+  '定义', '目标', '方法', '结果', '讨论', '核心', '架构', '总览', '分析', '指南',
+  '原理', '实现', '优化', '要点', '要求', '技术', '方案', '过程', '流程', '步骤',
+  '注意', '备注', '前言', '后记', '致谢', '摘要', '纲要', '概念', '详解', '详情',
+  '内容', '功能', '特性', '示例', '案例', '场景', '用法', '介绍', '概要', '一览'
+]);
+function extractTags(filePath) {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const { data } = parseFrontmatter(content);
+    if (Array.isArray(data.tags) && data.tags.length > 0) {
+      return data.tags.map(t => String(t).trim()).filter(t => t && t.length <= 20);
+    }
+  } catch {}
+  // 兜底：老文章用 extractKeywords 并挑出相对像样的词（过滤通用段落词）
+  try {
+    const kws = extractKeywords(filePath);
+    return [...kws]
+      .filter(w => /^[\u4e00-\u9fff]{2,6}$/.test(w) || /^[A-Za-z][\w-]{2,}$/.test(w))
+      .filter(w => !TAG_FALLBACK_STOP.has(w))
+      .slice(0, 5);
+  } catch { return []; }
+}
+
+// 扫全库收集已有 tags，按频次降序；用于 prompt 里引导 LLM 复用
+function collectExistingTags(limit = 200) {
+  const freq = {};
+  try {
+    const allFiles = walkMd(WIKI).filter(f => {
+      const b = path.basename(f);
+      return b !== 'index.md' && b !== 'log.md';
+    });
+    for (const f of allFiles) {
+      for (const t of extractTags(f)) freq[t] = (freq[t] || 0) + 1;
+    }
+  } catch {}
+  return Object.entries(freq)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([tag, count]) => ({ tag, count }));
 }
 
 function extractLinks(filePath) {
@@ -1566,7 +1706,17 @@ function buildGraph() {
   const edges = [];
   const edgeSet = new Set(); // 去重: "source|target"
   const excluded = new Set(['index.md', 'log.md']);
-  const kwMap = {}; // rel -> Set of keywords
+  const tagMap = {}; // rel -> Set of tags
+
+  // 统计全局 tag 频次，用作共现打分（过度常见的 tag 降权）
+  const globalTagFreq = {};
+  for (const f of allFiles) {
+    const rel = path.relative(WIKI, f);
+    if (excluded.has(path.basename(f))) continue;
+    const tags = extractTags(f);
+    tagMap[rel] = new Set(tags);
+    for (const t of tags) globalTagFreq[t] = (globalTagFreq[t] || 0) + 1;
+  }
 
   for (const f of allFiles) {
     const rel = path.relative(WIKI, f);
@@ -1574,7 +1724,6 @@ function buildGraph() {
     const parts = rel.split(path.sep);
     const topic = parts.length > 1 ? parts[0] : '';
     nodes.push({ id: rel, label: extractTitle(f), topic });
-    kwMap[rel] = extractKeywords(f);
 
     // Layer 1: 显式链接 (weight=1.0)
     const links = extractLinks(f);
@@ -1590,23 +1739,31 @@ function buildGraph() {
     }
   }
 
-  // Layer 2: 关键词共现 — 即使已有显式链接也附加关键词信息
-  const rels = Object.keys(kwMap);
+  // Layer 2: tag 共现 — 用文章的 tags 集合求交集，阈值 ≥1（tag 已经是语义级别的精准词）
+  const totalArticles = Object.keys(tagMap).length || 1;
+  const rels = Object.keys(tagMap);
   for (let i = 0; i < rels.length; i++) {
     for (let j = i + 1; j < rels.length; j++) {
       const a = rels[i], b = rels[j];
-      const kwA = kwMap[a], kwB = kwMap[b];
+      const tA = tagMap[a], tB = tagMap[b];
+      if (!tA.size || !tB.size) continue;
       const shared = [];
-      for (const w of kwA) { if (kwB.has(w)) shared.push(w); }
-      if (shared.length < 2) continue;
+      for (const t of tA) { if (tB.has(t)) shared.push(t); }
+      if (shared.length < 1) continue;
+      // 过滤只通过"太宽泛"的 tag 连起来的边：全部共享 tag 都覆盖 >50% 文章时丢弃
+      const allTooCommon = shared.every(t => (globalTagFreq[t] || 0) / totalArticles > 0.5);
+      if (allTooCommon) continue;
       const key = [a, b].sort().join('|');
       const existing = edges.find(e => [e.source, e.target].sort().join('|') === key);
+      // IDF 打分：越稀有的 tag 权重越高
+      const idfScore = shared.reduce((sum, t) => {
+        const f = globalTagFreq[t] || 1;
+        return sum + Math.log((totalArticles + 1) / (f + 1));
+      }, 0);
+      const weight = Math.min(0.9, 0.25 + idfScore * 0.15);
       if (existing) {
-        // 把关键词附加到已有的显式链接边上
         existing.keywords = shared.slice(0, 5);
       } else {
-        const minSize = Math.min(kwA.size, kwB.size) || 1;
-        const weight = Math.min(0.8, 0.3 + (shared.length / minSize) * 0.5);
         edgeSet.add(key);
         edges.push({ source: a, target: b, type: 'keyword', weight, keywords: shared.slice(0, 5) });
       }
@@ -1654,6 +1811,96 @@ function parseLogEntries() {
 let taskQueue = [];
 let writeLock = Promise.resolve(); // 串行锁：保护 index.md/log.md 并发写入
 
+// ── Tags 批量回填状态 ──
+let backfillProgress = {
+  running: false,
+  total: 0,
+  done: 0,
+  skipped: 0,
+  failed: 0,
+  currentFile: '',
+  startedAt: null,
+  finishedAt: null,
+  error: null,
+  recent: []
+};
+
+async function runBackfillTags() {
+  backfillProgress = {
+    running: true, total: 0, done: 0, skipped: 0, failed: 0,
+    currentFile: '', startedAt: new Date().toISOString(), finishedAt: null,
+    error: null, recent: []
+  };
+  const excluded = new Set(['index.md', 'log.md']);
+  const allFiles = walkMd(WIKI).filter(f => !excluded.has(path.basename(f)));
+  const todo = [];
+  for (const f of allFiles) {
+    try {
+      const content = fs.readFileSync(f, 'utf-8');
+      const { data } = parseFrontmatter(content);
+      if (!Array.isArray(data.tags) || data.tags.length === 0) todo.push(f);
+    } catch {}
+  }
+  backfillProgress.total = todo.length;
+
+  const config = getFullConfig();
+  const providerKey = config.provider || 'local';
+  const fastModel = pickModelByUse(providerKey, 'fast', config);
+
+  for (const f of todo) {
+    const rel = path.relative(WIKI, f);
+    backfillProgress.currentFile = rel;
+    try {
+      const content = fs.readFileSync(f, 'utf-8');
+      const { body } = parseFrontmatter(content);
+      const core = body.replace(/\n##\s+See\s+Also[\s\S]*$/i, '').slice(0, 6000);
+      const existingTagsCol = collectExistingTags(200);
+      const existingTagsStr = existingTagsCol.length ? existingTagsCol.map(t => t.tag).join('、') : '（暂无）';
+
+      const sys = `你是知识库标签助手。根据文章内容输出 3-5 个精准标签，用于知识图谱连接。
+规则：
+- 每个标签 ≤ 10 字，精准、有区分度
+- 优先从"已有标签"里选语义相近的，让同一概念在不同文章里复用
+- 避免过宽的词（如"技术"、"方法"、"分析"）和碎片（如"据收集"）
+- 不要 emoji、引号、书名号
+- 只输出一行：标签1, 标签2, 标签3，不要加任何解释或前缀
+
+已有标签（频次降序）：${existingTagsStr}`;
+
+      const user = `文章标题：${extractTitle(f)}\n\n文章正文（截断）：\n${core}`;
+
+      const resp = await callLLM(sys, user, { model: fastModel }, { maxTokens: 120, temperature: 0.2 });
+      const tagsLine = (resp || '').trim().split('\n')[0].replace(/^[-*•]\s*/, '').replace(/^标签[:：]\s*/, '');
+      const tags = tagsLine
+        .split(/[,，、]/)
+        .map(t => t.trim().replace(/^["'《「『]+|["'》」』]+$/g, ''))
+        .filter(t => t && t.length <= 10)
+        .slice(0, 5);
+
+      if (tags.length === 0) {
+        backfillProgress.failed++;
+        continue;
+      }
+
+      const existing = parseFrontmatter(content);
+      const newData = { ...existing.data, tags };
+      const newContent = serializeFrontmatter(newData) + existing.body;
+      fs.writeFileSync(f, newContent, 'utf-8');
+      backfillProgress.done++;
+      backfillProgress.recent.unshift({ file: rel, tags });
+      if (backfillProgress.recent.length > 10) backfillProgress.recent.pop();
+    } catch (e) {
+      backfillProgress.failed++;
+      backfillProgress.recent.unshift({ file: rel, error: e.message });
+      if (backfillProgress.recent.length > 10) backfillProgress.recent.pop();
+    }
+  }
+  backfillProgress.running = false;
+  backfillProgress.finishedAt = new Date().toISOString();
+  backfillProgress.currentFile = '';
+  if (typeof wikiCache !== 'undefined' && wikiCache && wikiCache.invalidate) wikiCache.invalidate();
+}
+
 // 全局并发池：默认 10，环境变量覆盖
 const INGEST_CONCURRENCY = Number(process.env.WIKI_INGEST_CONCURRENCY) || 10;
 let activeCount = 0;
@@ -1670,23 +1917,33 @@ function latestTask() {
 }
 
 // 只用于 autotask / precipitate：直接创建 processing 状态的 task，不走并发池（调用方自己 await compileArticle）
-function pushTask(type) {
+function pushTask(type, opts) {
+  opts = opts || {};
   const task = {
     id: genTaskId(),
     status: 'processing',
-    message: '编译中...',
+    message: 'AI 编译',
     type: type || 'ingest',
     kind: type || 'ingest',
-    name: type || 'ingest',
+    name: opts.name || type || 'ingest',
     created: null,
     submittedAt: new Date().toISOString(),
     startedAt: new Date().toISOString(),
     finishedAt: null,
     batchId: null,
     stages: [],
+    // autotask 直接进入 compiling（提取/保存已在 autotask runner 内完成）
+    phase: 'compiling',
+    phaseIndex: 3,
+    phaseTotal: PHASE_TOTAL,
+    phaseLabel: 'AI 编译',
+    retryable: false,
+    retryOf: opts.retryOf || null,
+    retryCount: opts.retryCount || 0,
   };
   taskQueue.push(task);
   _trimQueue();
+  scheduleSaveQueue();
   return task;
 }
 
@@ -1694,6 +1951,8 @@ function pushTask(type) {
 function enqueueTask(payload, opts) {
   opts = opts || {};
   const kind = opts.kind || 'ingest';
+  // payload 是否可用于重试：默认有 payload 就可重试；大 base64 在 persist 时会被 strip 掉
+  const retryable = !!payload && payload._contentStripped !== true;
   const task = {
     id: genTaskId(),
     kind,
@@ -1705,13 +1964,21 @@ function enqueueTask(payload, opts) {
     finishedAt: null,
     batchId: opts.batchId || null,
     batchIndex: typeof opts.batchIndex === 'number' ? opts.batchIndex : null,
-    message: '排队中...',
+    message: '排队中',
     stages: [],
     created: null,
     payload,
+    phase: 'queued',
+    phaseIndex: 0,
+    phaseTotal: PHASE_TOTAL,
+    phaseLabel: '排队中',
+    retryable,
+    retryOf: opts.retryOf || null,
+    retryCount: opts.retryCount || 0,
   };
   taskQueue.push(task);
   _trimQueue();
+  scheduleSaveQueue();
   tryDispatch();
   return task;
 }
@@ -1733,18 +2000,28 @@ function tryDispatch() {
     activeCount++;
     next.status = 'processing';
     next.startedAt = new Date().toISOString();
-    next.message = '编译中...';
+    // 先进入 extracting 阶段（真正的子步骤由 _defaultProcessTask 推进）
+    setPhase(next, 'extracting');
     Promise.resolve()
       .then(() => processTask(next))
       .catch(e => {
         console.error('[ingest] processTask 异常', e);
         next.status = 'error';
         next.message = String(e && e.message || e);
+        next.phase = 'error';
+        next.phaseLabel = '失败';
         next.finishedAt = new Date().toISOString();
       })
       .finally(() => {
         if (!next.finishedAt) next.finishedAt = new Date().toISOString();
+        if (next.status === 'done') {
+          setPhase(next, 'done', '已完成');
+        } else if (next.status === 'error' || next.status === 'partial') {
+          next.phase = next.status;
+          next.phaseLabel = next.status === 'error' ? '失败' : '部分完成';
+        }
         activeCount--;
+        scheduleSaveQueue();
         tryDispatch();
       });
   }
@@ -1760,7 +2037,7 @@ async function processTask(task) {
 async function _defaultProcessTask(task) {
   task.status = 'processing';
   if (!task.startedAt) task.startedAt = new Date().toISOString();
-  task.message = '编译中...';
+  setPhase(task, 'extracting');
 
   const payload = task.payload || {};
   const { type, content, topic, filename, url: itemUrl, modelOverrides } = payload;
@@ -1788,6 +2065,8 @@ async function _defaultProcessTask(task) {
     return;
   }
 
+  setPhase(task, 'saving');
+
   let slug = 'source';
   if (type === 'url') {
     slug = (itemUrl || content || '').replace(/https?:\/\//, '').replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-').slice(0, 40);
@@ -1812,6 +2091,8 @@ async function _defaultProcessTask(task) {
     return;
   }
 
+  setPhase(task, 'compiling');
+
   try {
     await compileArticle(topicDir, rawFilename, filePath, task, modelOverrides);
   } catch (e) {
@@ -1826,6 +2107,85 @@ function externalStatus(s) {
   if (s === 'pending' || s === 'processing') return 'compiling';
   return s;
 }
+
+// ── 任务阶段模型 ──
+// 5 个高层阶段，便于前端展示 N/5 进度
+const PHASES = [
+  { key: 'queued',     label: '排队中' },
+  { key: 'extracting', label: '提取内容' },
+  { key: 'saving',     label: '保存原文' },
+  { key: 'compiling',  label: 'AI 编译' },
+  { key: 'done',       label: '已完成' },
+];
+const PHASE_TOTAL = PHASES.length; // 5
+function setPhase(task, phaseKey, msg) {
+  const idx = PHASES.findIndex(p => p.key === phaseKey);
+  if (idx < 0) return;
+  task.phase = phaseKey;
+  task.phaseIndex = idx;
+  task.phaseTotal = PHASE_TOTAL;
+  task.phaseLabel = PHASES[idx].label;
+  if (msg) task.message = msg;
+  else task.message = PHASES[idx].label;
+  scheduleSaveQueue();
+}
+
+// ── 任务队列持久化 ──
+// 设计：debounced 300ms 全量写盘；启动时加载，pending/processing 标记为中断可重试
+let _saveTimer = null;
+function scheduleSaveQueue() {
+  if (_saveTimer) return;
+  _saveTimer = setTimeout(() => {
+    _saveTimer = null;
+    try {
+      const snapshot = taskQueue.map(serializeTaskForPersist);
+      // 原子写：先写 .tmp 再 rename，避免中途崩溃留下半截 JSON
+      const tmp = QUEUE_FILE + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify(snapshot, null, 2), 'utf-8');
+      fs.renameSync(tmp, QUEUE_FILE);
+    } catch (e) {
+      console.error('[queue] save failed', e.message);
+    }
+  }, 300);
+}
+function serializeTaskForPersist(t) {
+  const out = Object.assign({}, t);
+  // 二进制类型的大 base64 不落盘（PDF/图片/音频/视频）；stripped 后 retry 失效
+  if (out.payload && ['pdf', 'image', 'audio', 'video'].includes(out.payload.type)) {
+    if (out.payload.content && String(out.payload.content).length > 10000) {
+      out.payload = Object.assign({}, out.payload, { content: null, _contentStripped: true });
+      out.retryable = false;
+    }
+  }
+  return out;
+}
+function loadQueue() {
+  try {
+    if (!fs.existsSync(QUEUE_FILE)) return;
+    const raw = fs.readFileSync(QUEUE_FILE, 'utf-8');
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return;
+    const now = new Date().toISOString();
+    taskQueue = arr.map(t => {
+      // 进程重启前未结束的任务一律标记为错误，可重试
+      if (t.status === 'pending' || t.status === 'processing') {
+        t.status = 'error';
+        t.message = '进程重启前中断，可重试';
+        t.interruptedByRestart = true;
+        t.finishedAt = t.finishedAt || now;
+        t.phase = 'error';
+        t.phaseLabel = '已中断';
+      }
+      return t;
+    });
+    console.log('[queue] 已加载 ' + taskQueue.length + ' 条历史记录');
+    // 立即 debounced save 一次，把中断恢复状态落盘
+    if (arr.some(t => t.interruptedByRestart)) scheduleSaveQueue();
+  } catch (e) {
+    console.error('[queue] load failed', e.message);
+  }
+}
+
 
 function getBatchSummary(batchId) {
   const tasks = taskQueue.filter(t => t.batchId === batchId);
@@ -2444,12 +2804,24 @@ function pruneDedup(dedup) {
   return { urls: prune(dedup.urls), hashes: prune(dedup.hashes) };
 }
 
+// In-process serialization for autotask state files (dedup.json, history.json).
+// Multiple concurrent autotask runs (scheduler + manual) all do read-modify-write;
+// without this lock the latter writer would clobber the former's updates.
+let __autotaskWriteLock = Promise.resolve();
+function withAutotaskWriteLock(fn) {
+  const next = __autotaskWriteLock.then(() => fn(), () => fn());
+  __autotaskWriteLock = next.catch(() => {});
+  return next;
+}
+
 function markIngestedTimed(url, content, runId) {
-  const dedup = pruneDedup(loadDedup());
-  const ts = Date.now();
-  if (url) dedup.urls[normalizeUrl(url)] = { runId, ts };
-  if (content) dedup.hashes[contentHash(content)] = { runId, ts };
-  saveDedup(dedup);
+  return withAutotaskWriteLock(() => {
+    const dedup = pruneDedup(loadDedup());
+    const ts = Date.now();
+    if (url) dedup.urls[normalizeUrl(url)] = { runId, ts };
+    if (content) dedup.hashes[contentHash(content)] = { runId, ts };
+    saveDedup(dedup);
+  });
 }
 
 // ── Concurrency limiter ──
@@ -2594,13 +2966,19 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
     progress: { phase: 'fetching', current: 0, total: (task.sources || []).length, currentTitle: null }
   };
 
+  // Serialize history.json writes under the same in-process lock so concurrent runs
+  // do not clobber each other's updates. Snapshot the current run state at call time
+  // so a later persistRun() does not lose intermediate updates from before this write completes.
   const persistRun = () => {
-    try {
-      const h = loadHistory();
-      const i = h.findIndex(r => r.id === runId);
-      if (i >= 0) h[i] = run; else h.push(run);
-      saveHistory(h);
-    } catch (e) { console.error('[AutoTask] persist run failed:', e.message); }
+    const snapshot = JSON.parse(JSON.stringify(run));
+    withAutotaskWriteLock(() => {
+      try {
+        const h = loadHistory();
+        const i = h.findIndex(r => r.id === runId);
+        if (i >= 0) h[i] = snapshot; else h.push(snapshot);
+        saveHistory(h);
+      } catch (e) { console.error('[AutoTask] persist run failed:', e.message); }
+    });
   };
   persistRun();
 
@@ -2657,8 +3035,19 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
       if (!expanded.length) return true;
       return expanded.some(kw => kw && text.includes(String(kw).toLowerCase()));
     };
-    const preGateItems = items.filter(passesPrefilter);
+    let preGateItems = items.filter(passesPrefilter);
     const preGateDropped = items.filter(it => !passesPrefilter(it));
+
+    // Hard cap: at most 200 items go to the LLM gate per run.
+    // Without this, a misconfigured/abusive feed returning thousands of items
+    // would burn unbounded LLM cost. 200 is well above any realistic per-run need.
+    const GATE_CANDIDATE_CAP = 200;
+    let gateOverflowDropped = [];
+    if (preGateItems.length > GATE_CANDIDATE_CAP) {
+      gateOverflowDropped = preGateItems.slice(GATE_CANDIDATE_CAP);
+      preGateItems = preGateItems.slice(0, GATE_CANDIDATE_CAP);
+      console.warn(`[AutoTask] gate candidate cap hit: dropping ${gateOverflowDropped.length} items beyond ${GATE_CANDIDATE_CAP}`);
+    }
 
     // 4. LLM relevance gate (concurrency 5)
     run.progress = { phase: 'gating', current: 0, total: preGateItems.length, currentTitle: null };
@@ -2695,7 +3084,10 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
           const started = new Date(h.startedAt || 0).getTime();
           if (!started || started < weekAgo) continue;
           for (const hi of (h.items || [])) {
-            if (hi.status === 'gated_out' && hi.url && !seenUrls.has(normalizeUrl(hi.url))) {
+            // Respect both in-run seenUrls AND the persistent 30-day dedup file,
+            // otherwise smart_fill could re-feed URLs already ingested in a prior run.
+            const nu = hi.url ? normalizeUrl(hi.url) : '';
+            if (hi.status === 'gated_out' && nu && !seenUrls.has(nu) && !dedup.urls[nu]) {
               candidates.push({
                 title: hi.title,
                 url: hi.url,
@@ -2744,6 +3136,12 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
         status: 'gated_out', reason: 'prefilter keyword mismatch'
       });
     }
+    for (const d of gateOverflowDropped) {
+      itemRecords.push({
+        title: d.title, url: d.url, sourceId: d.sourceId,
+        status: 'gated_out', reason: 'gate candidate cap exceeded'
+      });
+    }
     run.items = itemRecords;
     persistRun();
 
@@ -2758,7 +3156,14 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
       persistRun();
       processedIdx += 1;
 
-      const recIdx = itemRecords.findIndex(r => r.url === item.url && (r.status === 'kept_pending' || r.status === 'smart_fill_pending'));
+      // Composite key (url||title + sourceId): two pending items with empty URLs from the same source
+      // would otherwise collide on the same record and one's processing result would overwrite the other's.
+      const itemKey = (item.url || item.title || '') + '::' + (item.sourceId || '');
+      const recIdx = itemRecords.findIndex(r => {
+        if (!(r.status === 'kept_pending' || r.status === 'smart_fill_pending')) return false;
+        const rKey = (r.url || r.title || '') + '::' + (r.sourceId || '');
+        return rKey === itemKey;
+      });
       const rec = recIdx >= 0 ? itemRecords[recIdx] : null;
 
       try {
@@ -2788,7 +3193,7 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
         const compileTask = pushTask('autotask');
         await compileArticle(topicDir, rawFilename, filePath, compileTask, modelOverrides);
 
-        markIngestedTimed(item.url, extractedText, runId);
+        await markIngestedTimed(item.url, extractedText, runId);
 
         if (rec) {
           rec.status = item.__smartFill ? 'smart_fill' : 'ingested';
@@ -3223,7 +3628,9 @@ const server = http.createServer(async (req, res) => {
     const kwArticles = {};
     for (const f of allFiles) {
       const rel = path.relative(WIKI, f);
-      const kws = extractKeywords(f);
+      // 优先用 LLM 生成的 tags；老文章没 tags 时用 extractKeywords 兜底
+      const tags = extractTags(f);
+      const kws = tags.length > 0 ? tags : [...extractKeywords(f)];
       for (const w of kws) {
         if (!kwArticles[w]) kwArticles[w] = [];
         kwArticles[w].push(rel);
@@ -3269,22 +3676,25 @@ const server = http.createServer(async (req, res) => {
       const rel = path.relative(WIKI, f);
       const parts = rel.split(path.sep);
       const topic = parts.length > 1 ? parts[0] : '';
-      const kws = extractKeywords(f);
-      const kwArr = [...kws];
-      const genericKw = new Set(['概述', '总结', '背景', '简介', '引言', '正文', '结论', '附录', '参考', '说明', '定义', '目标', '方法', '结果', '讨论', '核心', '架构', '总览']);
       const title = extractTitle(f);
-      // 按标点/空格/英文/中文连词分割标题，提取中文词汇
-      const cnSegments = title.split(/[^一-\u9fff]+|[与和的及或从到在]+/).filter(s => s.length >= 2);
-      // 短片段（≤4字）直接用；长片段用 2 字，但若首字是前缀（非/不/无/多）则取 3 字
-      const prefixChars = '非不无多';
-      const titleKw = cnSegments.map(s => {
-        if (s.length <= 4) return s;
-        return (s.length >= 3 && prefixChars.includes(s[0])) ? s.slice(0, 3) : s.slice(0, 2);
-      }).filter(w => !genericKw.has(w));
-      // 正文关键词（heading/bold）作备选
-      const bodyKw = kwArr.filter(w => !genericKw.has(w) && w.length >= 2 && w.length <= 4 && !/^[a-z]{1,3}$/i.test(w));
-      const keyword = titleKw[0] || bodyKw[0] || title.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '').slice(0, 4) || topic;
-      nodes.push({ id: rel, name: extractTitle(f), topic, keyword });
+      const tags = extractTags(f);
+      // 图谱节点显示的标签：优先用 LLM 生成的 tags[0]；老文章走兜底 regex 切词
+      let keyword;
+      if (tags.length > 0) {
+        keyword = tags[0];
+      } else {
+        const genericKw = new Set(['概述', '总结', '背景', '简介', '引言', '正文', '结论', '附录', '参考', '说明', '定义', '目标', '方法', '结果', '讨论', '核心', '架构', '总览']);
+        const cnSegments = title.split(/[^一-\u9fff]+|[与和的及或从到在]+/).filter(s => s.length >= 2);
+        const prefixChars = '非不无多';
+        const titleKw = cnSegments.map(s => {
+          if (s.length <= 4) return s;
+          return (s.length >= 3 && prefixChars.includes(s[0])) ? s.slice(0, 3) : s.slice(0, 2);
+        }).filter(w => !genericKw.has(w));
+        const kwArr = [...extractKeywords(f)];
+        const bodyKw = kwArr.filter(w => !genericKw.has(w) && w.length >= 2 && w.length <= 4 && !/^[a-z]{1,3}$/i.test(w));
+        keyword = titleKw[0] || bodyKw[0] || title.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '').slice(0, 4) || topic;
+      }
+      nodes.push({ id: rel, name: title, topic, keyword, tags });
 
       // Read file content to distinguish See Also links from inline references
       let content = '';
@@ -3320,6 +3730,31 @@ const server = http.createServer(async (req, res) => {
           const edgeType = (seeAlsoStart >= 0 && i > seeAlsoStart) ? 'see-also' : 'reference';
           edges.push({ source: rel, target: resolved, type: edgeType });
         }
+      }
+    }
+
+    // Layer 2: tag 共现边 — 两篇文章若共享至少 1 个 tag 则连边
+    // 权重由 IDF 打分：稀有 tag 权重高；全部通过"过宽泛"tag（>50% 文章覆盖）连起来的丢弃
+    const totalArticles = nodes.length || 1;
+    const tagFreq = {};
+    for (const n of nodes) for (const t of (n.tags || [])) tagFreq[t] = (tagFreq[t] || 0) + 1;
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i];
+      if (!a.tags || !a.tags.length) continue;
+      for (let j = i + 1; j < nodes.length; j++) {
+        const b = nodes[j];
+        if (!b.tags || !b.tags.length) continue;
+        const shared = a.tags.filter(t => b.tags.includes(t));
+        if (!shared.length) continue;
+        const allTooCommon = shared.every(t => (tagFreq[t] || 0) / totalArticles > 0.5);
+        if (allTooCommon) continue;
+        const key = `${a.id}|${b.id}`;
+        const keyRev = `${b.id}|${a.id}`;
+        if (edgeSet.has(key) || edgeSet.has(keyRev)) continue;
+        edgeSet.add(key);
+        const idf = shared.reduce((s, t) => s + Math.log((totalArticles + 1) / ((tagFreq[t] || 1) + 1)), 0);
+        const weight = Math.min(0.9, 0.25 + idf * 0.15);
+        edges.push({ source: a.id, target: b.id, type: 'tag', weight, keywords: shared.slice(0, 5) });
       }
     }
 
@@ -3469,7 +3904,9 @@ const server = http.createServer(async (req, res) => {
     const freq = {};
     for (const f of allFiles) {
       const rel = path.relative(WIKI, f);
-      const kw = extractKeywords(f);
+      // 优先用 LLM tags；老文章兜底
+      const tags = extractTags(f);
+      const kw = tags.length > 0 ? tags : [...extractKeywords(f)];
       for (const w of kw) {
         if (!freq[w]) freq[w] = { word: w, count: 0, articles: [] };
         freq[w].count++;
@@ -3478,6 +3915,22 @@ const server = http.createServer(async (req, res) => {
     }
     const keywords = Object.values(freq).sort((a, b) => b.count - a.count).slice(0, 30);
     return json(res, 200, { keywords });
+  }
+
+  // 批量回填旧文章的 tags — 启动（异步）
+  if (p === '/api/wiki/backfill-tags' && req.method === 'POST') {
+    if (backfillProgress.running) {
+      return json(res, 409, { error: '已有回填任务在进行中', progress: backfillProgress });
+    }
+    runBackfillTags().catch(e => {
+      backfillProgress.running = false;
+      backfillProgress.error = e.message;
+    });
+    return json(res, 200, { ok: true, message: '已启动', progress: backfillProgress });
+  }
+  // 回填进度查询
+  if (p === '/api/wiki/backfill-tags' && req.method === 'GET') {
+    return json(res, 200, backfillProgress);
   }
 
   if (p === '/api/wiki/search-suggest') {
@@ -3644,11 +4097,15 @@ const server = http.createServer(async (req, res) => {
     const running = taskQueue.filter(t => t.status === 'processing').map(t => ({
       id: t.id,
       name: t.name,
-      stage: t.message || '',
+      stage: t.phaseLabel || t.message || '',
       kind: t.kind || t.type,
       startedAt: t.startedAt,
       status: 'running',
       batchId: t.batchId,
+      phase: t.phase || 'compiling',
+      phaseIndex: typeof t.phaseIndex === 'number' ? t.phaseIndex : 3,
+      phaseTotal: t.phaseTotal || PHASE_TOTAL,
+      phaseLabel: t.phaseLabel || 'AI 编译',
     }));
     const queued = taskQueue.filter(t => t.status === 'pending').map(t => ({
       id: t.id,
@@ -3656,12 +4113,16 @@ const server = http.createServer(async (req, res) => {
       kind: t.kind || t.type,
       status: 'queued',
       batchId: t.batchId,
+      phase: 'queued',
+      phaseIndex: 0,
+      phaseTotal: PHASE_TOTAL,
+      phaseLabel: '排队中',
     }));
     const recent = taskQueue
       .filter(t => ['done', 'error', 'partial'].includes(t.status))
       .slice()
       .sort((a, b) => new Date(b.finishedAt || 0) - new Date(a.finishedAt || 0))
-      .slice(0, 10)
+      .slice(0, 20)
       .map(t => {
         const firstCreated = t.created && t.created.length > 0 ? t.created[0] : null;
         const articlePath = (firstCreated && typeof firstCreated === 'object') ? firstCreated.path : firstCreated;
@@ -3676,6 +4137,10 @@ const server = http.createServer(async (req, res) => {
           error: t.status === 'error' ? (t.message || '').slice(0, 200) : null,
           kind: t.kind || t.type,
           finishedAt: t.finishedAt,
+          retryable: !!t.retryable && !!t.payload,
+          interruptedByRestart: !!t.interruptedByRestart,
+          retryOf: t.retryOf || null,
+          retryCount: t.retryCount || 0,
         };
       });
 
@@ -3686,7 +4151,70 @@ const server = http.createServer(async (req, res) => {
       if (s && s.status === 'processing') batch = s;
     }
     const hasActivity = !!(running.length > 0 || queued.length > 0 || (batch && batch.status === 'processing'));
-    return json(res, 200, { running, queued, recent, batch, hasActivity });
+    return json(res, 200, { running, queued, recent, batch, hasActivity, phaseTotal: PHASE_TOTAL });
+  }
+
+  // POST /api/ingest/retry/:id —— 根据原任务的 payload 重新入队
+  if (p.startsWith('/api/ingest/retry/') && req.method === 'POST') {
+    const oldId = p.slice('/api/ingest/retry/'.length);
+    const orig = taskQueue.find(t => t.id === oldId);
+    if (!orig) return json(res, 404, { error: '任务不存在' });
+    if (!orig.payload) {
+      return json(res, 400, {
+        error: orig.kind === 'autotask'
+          ? '自动任务无法从队列重试，请到自动任务页重新执行'
+          : '该任务缺少重试所需的原始载荷（可能是大文件投喂，重启后不可重试）'
+      });
+    }
+    if (orig.payload._contentStripped) {
+      return json(res, 400, { error: '该任务是大文件投喂，原始内容未持久化，无法重试' });
+    }
+    const newTask = enqueueTask(orig.payload, {
+      kind: orig.kind || orig.type,
+      name: orig.name,
+      batchId: null,
+      retryOf: orig.id,
+      retryCount: (orig.retryCount || 0) + 1,
+    });
+    return json(res, 200, {
+      taskId: newTask.id,
+      retryOf: orig.id,
+      retryCount: newTask.retryCount,
+    });
+  }
+
+  // GET /api/ingest/queue/all —— 完整历史（查看 + 管理用）
+  if (p === '/api/ingest/queue/all') {
+    const limit = Math.min(parseInt(url.searchParams.get('limit') || '100', 10), 500);
+    const items = taskQueue
+      .slice()
+      .sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0))
+      .slice(0, limit)
+      .map(t => ({
+        id: t.id,
+        name: t.name,
+        kind: t.kind || t.type,
+        status: externalStatus(t.status),
+        rawStatus: t.status,
+        phase: t.phase || null,
+        phaseIndex: typeof t.phaseIndex === 'number' ? t.phaseIndex : null,
+        phaseTotal: t.phaseTotal || PHASE_TOTAL,
+        phaseLabel: t.phaseLabel || null,
+        message: t.message || '',
+        submittedAt: t.submittedAt,
+        startedAt: t.startedAt,
+        finishedAt: t.finishedAt,
+        batchId: t.batchId || null,
+        error: t.status === 'error' ? (t.message || '').slice(0, 300) : null,
+        retryable: !!t.retryable && !!t.payload && !t.payload._contentStripped,
+        retryOf: t.retryOf || null,
+        retryCount: t.retryCount || 0,
+        interruptedByRestart: !!t.interruptedByRestart,
+        article: t.created && t.created.length > 0
+          ? (typeof t.created[0] === 'object' ? t.created[0].path : t.created[0])
+          : null,
+      }));
+    return json(res, 200, { items, total: taskQueue.length });
   }
 
   if (p === '/api/tasks') {
@@ -4401,10 +4929,14 @@ ${JSON.stringify(libBrief, null, 2)}`;
           const topic = (typeof parsed.topic === 'string' && parsed.topic) ? parsed.topic : 'auto';
 
           return json(res, 200, {
-            name,
-            sources,
-            preferences: { expanded_keywords: expanded, must_exclude: [], style_hint: styleHint },
-            schedule, scheduleTime, topic
+            ok: true,
+            config: {
+              name,
+              sources,
+              preferences: { expanded_keywords: expanded, must_exclude: [], style_hint: styleHint },
+              schedule, scheduleTime, topic
+            },
+            warnings: []
           });
         } catch (e) {
           return json(res, 400, { error: e.message });
@@ -4420,8 +4952,11 @@ ${JSON.stringify(libBrief, null, 2)}`;
       req.on('end', () => {
         try {
           const data = JSON.parse(body || '{}');
-          const { taskId, runId, itemUrl, action, note } = data;
-          if (!taskId || !itemUrl || !['keep', 'drop'].includes(action)) {
+          const { taskId, runId, itemUrl, action: rawAction, note } = data;
+          // Frontend uses up/down (UX), persisted as keep/drop (intent semantics).
+          const ACTION_MAP = { up: 'keep', down: 'drop', keep: 'keep', drop: 'drop' };
+          const action = ACTION_MAP[rawAction];
+          if (!taskId || !itemUrl || !action) {
             return json(res, 400, { error: '参数无效' });
           }
           const tasks = loadAutotasks();
@@ -4447,10 +4982,19 @@ ${JSON.stringify(libBrief, null, 2)}`;
       const taskId = runMatch[1];
       const tasks = loadAutotasks();
       if (!tasks.find(t => t.id === taskId)) return json(res, 404, { error: '任务不存在' });
-      // Run-lock: reject if a run for this task is currently running
+      // Run-lock: reject if a run for this task is currently running.
+      // Treat runs older than 10 min (matches startup zombie cutoff) as stale and allow override,
+      // otherwise a crashed run would block manual re-trigger until the next process restart.
       try {
         const hist = loadHistory();
-        const active = hist.find(h => h.taskId === taskId && h.status === 'running');
+        const STALE_MS = 10 * 60 * 1000;
+        const now = Date.now();
+        const active = hist.find(h => {
+          if (h.taskId !== taskId || h.status !== 'running') return false;
+          const startedAt = new Date(h.startedAt || 0).getTime();
+          if (!startedAt) return false;
+          return (now - startedAt) < STALE_MS;
+        });
         if (active) {
           return json(res, 409, { error: '该任务已在运行中', runId: active.id });
         }
@@ -4731,6 +5275,7 @@ if (require.main === module) setInterval(() => {
 }, 5 * 60 * 1000);
 
 if (require.main === module) {
+  loadQueue();
   server.listen(PORT, () => {
     console.log(`Wiki 应用已启动：http://localhost:${PORT}`);
     console.log(`[ingest] concurrency=${INGEST_CONCURRENCY} queueCap=200`);
@@ -4756,6 +5301,13 @@ module.exports = {
     genTaskId,
     externalStatus,
     INGEST_CONCURRENCY,
+    setPhase,
+    loadQueue,
+    scheduleSaveQueue,
+    serializeTaskForPersist,
+    QUEUE_FILE,
+    PHASES,
+    PHASE_TOTAL,
   },
   server,
 };

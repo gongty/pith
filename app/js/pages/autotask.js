@@ -376,6 +376,30 @@ function renderRunSummaryCard(run) {
       s += '</div>';
     }
     if (run.error) s += '<div class="autotask-history-meta"><span style="color:var(--red)">' + h(run.error) + '</span></div>';
+
+    // Per-source fetch status (so a quietly-failing feed is visible).
+    if (run.sourceStatus && typeof run.sourceStatus === 'object') {
+      const entries = Object.entries(run.sourceStatus);
+      if (entries.length) {
+        const failed = entries.filter(([, v]) => v && v.status === 'error');
+        const okCount = entries.length - failed.length;
+        s += '<div class="autotask-history-sources">';
+        s += '源 ' + okCount + '/' + entries.length + ' OK';
+        if (failed.length) {
+          s += ' · <span style="color:var(--red)">' + failed.length + ' 个失败</span>';
+          s += '<details class="autotask-source-fail-detail"><summary>展开失败详情</summary><ul>';
+          failed.forEach(([id, v]) => {
+            s += '<li>' + h(id) + ': ' + h(truncate(v.error || '未知错误', 80)) + '</li>';
+          });
+          s += '</ul></details>';
+        }
+        s += '</div>';
+      }
+    }
+
+    if (run.briefPath) {
+      s += '<div class="autotask-history-brief"><a href="#/article/' + h(run.briefPath) + '">查看本次简报 →</a></div>';
+    }
   }
 
   // Expand toggle
@@ -397,10 +421,12 @@ function renderRunSummaryCard(run) {
 }
 
 function computeTopReasons(run) {
-  // Prefer server-supplied gatedOutTopReasons
-  if (Array.isArray(run.gatedOutTopReasons) && run.gatedOutTopReasons.length) {
-    return run.gatedOutTopReasons.slice(0, 3).map(r => ({
-      label: r.label || r.reason || '其他',
+  // Prefer server-supplied list (server writes `topGatedReasons` with `{reason, count}`).
+  // Tolerate the older `gatedOutTopReasons` / `r.label` shapes for back-compat.
+  const serverList = run.topGatedReasons || run.gatedOutTopReasons;
+  if (Array.isArray(serverList) && serverList.length) {
+    return serverList.slice(0, 3).map(r => ({
+      label: r.reason || r.label || '其他',
       count: r.count || 0
     }));
   }
@@ -464,8 +490,16 @@ function renderRunItems(run) {
       s += '<span class="autotask-feedback-actions">';
       s += '<button class="autotask-fb-btn"' + upKey + ' title="不想要这种" onclick="submitFeedback(\'' + h(taskId || '') + '\',\'' + h(runId || '') + '\',\'' + escapeAttr(it.url || it.title || '') + '\',\'down\',this)">↓</button>';
       s += '</span>';
+    } else if (status === 'kept_pending' || status === 'smart_fill_pending') {
+      // In-flight: gate passed, processing not done yet
+      s += '<span class="autotask-run-item-reason autotask-run-item-pending">处理中…</span>';
+      if (typeof it.confidence === 'number') {
+        s += '<span class="autotask-run-item-conf">confidence: ' + it.confidence.toFixed(2) + '</span>';
+      }
+    } else if (status === 'fetch_error') {
+      s += '<span class="autotask-run-item-reason" style="color:var(--red)">抓取失败' + (it.reason ? '：' + h(truncate(it.reason, 40)) : '') + '</span>';
     } else {
-      // error / unknown
+      // unknown
       if (it.reason) s += '<span class="autotask-run-item-reason">' + h(truncate(it.reason, 40)) + '</span>';
     }
     s += '</div>';
@@ -475,8 +509,26 @@ function renderRunItems(run) {
   return s;
 }
 
+// Escape a string so it is safe inside an inline-onclick JS single-quoted
+// string literal whose *host* is an HTML double-quoted attribute. Browsers
+// HTML-decode attribute values before the JS is parsed, so entity-encoding
+// a `'` as `&#39;` is NOT sufficient — it decodes back to `'` and breaks
+// out of the JS string. We therefore emit *JS-level* Unicode escapes, which
+// survive HTML decoding and remain inert inside a JS string literal.
+// Also escape `\`, CR, LF, `<`/`>` (latter to prevent any attribute parser
+// oddities if the value is ever rendered in an HTML attribute elsewhere).
 function escapeAttr(s) {
-  return String(s || '').replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+  return String(s || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, '\\u0027')
+    .replace(/"/g, '\\u0022')
+    .replace(/</g, '\\u003C')
+    .replace(/>/g, '\\u003E')
+    .replace(/&/g, '\\u0026')
+    .replace(/\r/g, '\\u000D')
+    .replace(/\n/g, '\\u000A')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 /* ── Toggle expand ── */
@@ -659,7 +711,7 @@ function renderWizardStep2() {
   s += '<label class="autotask-section-label">匹配的源 (' + (d.sources || []).length + ')</label>';
   s += '<div class="autotask-source-list">';
   (d.sources || []).forEach((src, idx) => {
-    const name = src.name || src.id || '未命名源';
+    const name = src.label || src.name || src.id || '未命名源';
     s += '<span class="autotask-source-tag">';
     s += '<span class="autotask-source-tag-name">' + h(name) + '</span>';
     s += '<button class="autotask-source-tag-x" title="移除" onclick="removeSourceFromDraft(' + idx + ')">×</button>';
@@ -800,7 +852,7 @@ export function addSourceToDraft(srcId) {
   if (exists) return;
   const src = sourceLibrary.find(s => s.id === srcId);
   if (!src) return;
-  wizardDraft.sources.push({ id: src.id, name: src.name, description: src.description, tags: src.tags || [] });
+  wizardDraft.sources.push({ id: src.id, label: src.label || src.name, name: src.label || src.name, description: src.description, tags: src.tags || [] });
 }
 
 /* ── Source Picker Modal ── */
@@ -849,7 +901,7 @@ function renderSourcePicker() {
   const q = sourcePickerSearch.trim().toLowerCase();
   const filtered = lib.filter(s => {
     if (!q) return true;
-    const hay = (s.name || '') + ' ' + (s.description || '') + ' ' + (s.tags || []).join(' ');
+    const hay = (s.label || s.name || '') + ' ' + (s.description || '') + ' ' + (s.tags || []).join(' ');
     return hay.toLowerCase().includes(q);
   });
   // Group by first tag
@@ -880,9 +932,9 @@ function renderSourcePicker() {
       items.forEach(item => {
         const checked = sourcePickerSelected.has(item.id);
         s += '<label class="autotask-source-picker-item">';
-        s += '<input type="checkbox"' + (checked ? ' checked' : '') + ' onchange="window._autotaskSrcToggle&&window._autotaskSrcToggle(\'' + h(item.id) + '\',this.checked)">';
+        s += '<input type="checkbox"' + (checked ? ' checked' : '') + ' onchange="window._autotaskSrcToggle&&window._autotaskSrcToggle(\'' + escapeAttr(item.id) + '\',this.checked)">';
         s += '<span class="autotask-source-picker-item-text">';
-        s += '<span class="autotask-source-picker-item-name">' + h(item.name || item.id) + '</span>';
+        s += '<span class="autotask-source-picker-item-name">' + h(item.label || item.name || item.id) + '</span>';
         if (item.description) s += '<span class="autotask-source-picker-item-desc"><i>' + h(item.description) + '</i></span>';
         s += '</span>';
         s += '</label>';
@@ -918,7 +970,7 @@ export function confirmSourcePicker() {
   sourcePickerSelected.forEach(id => {
     if (!existingIds.has(id)) {
       const src = (sourceLibrary || []).find(x => x.id === id);
-      if (src) wizardDraft.sources.push({ id: src.id, name: src.name, description: src.description, tags: src.tags || [] });
+      if (src) wizardDraft.sources.push({ id: src.id, label: src.label || src.name, name: src.label || src.name, description: src.description, tags: src.tags || [] });
     }
   });
   // Remove sources that are no longer selected (only if their id was in library)
@@ -1016,31 +1068,41 @@ function stopPolling() {
   if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
 }
 
+function isOnAutotaskPage() {
+  // Only re-render / keep polling while user is still on the autotask page.
+  // Avoids overwriting whatever page they navigated to while a run was live.
+  const hash = (location.hash || '').replace(/^#/, '');
+  return hash === '/autotask' || hash.startsWith('/autotask');
+}
+
 async function pollOnce() {
   pollTimer = null;
   if (!watchingRunId) return;
+  if (!isOnAutotaskPage()) { watchingRunId = null; return; }
   try {
     const histRes = await api('/api/autotask/history');
     history = Array.isArray(histRes) ? histRes : (histRes.history || []);
     const run = history.find(r => r.id === watchingRunId);
     const c = $('content');
-    if (c && currentTab === 'history') renderPage(c);
+    if (c && currentTab === 'history' && isOnAutotaskPage()) renderPage(c);
     if (run && run.status === 'running') {
-      pollTimer = setTimeout(pollOnce, 1500);
+      if (isOnAutotaskPage()) pollTimer = setTimeout(pollOnce, 1500);
+      else watchingRunId = null;
     } else {
       watchingRunId = null;
       try {
         const tres = await api('/api/autotask/list');
         tasks = tres.tasks || [];
       } catch (_) {}
-      if (c && currentTab === 'history') renderPage(c);
+      if (c && currentTab === 'history' && isOnAutotaskPage()) renderPage(c);
       if (run) {
         const label = run.status === 'success' ? '执行完成' : run.status === 'partial' ? '部分完成' : '执行失败';
         toast(label + '：入库 ' + (run.itemsIngested || 0) + ' · 跳过 ' + (run.itemsSkipped || 0));
       }
     }
   } catch (_) {
-    if (watchingRunId) pollTimer = setTimeout(pollOnce, 3000);
+    if (watchingRunId && isOnAutotaskPage()) pollTimer = setTimeout(pollOnce, 3000);
+    else watchingRunId = null;
   }
 }
 

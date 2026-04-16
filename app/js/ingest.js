@@ -392,7 +392,7 @@ export async function submitIngest() {
 // ── 全局进度追踪（面板关闭后持续运行） ──
 
 const STAGE_ICONS = { pending:'○', running:'▶', done:'✓', error:'✕', skipped:'⊘' };
-const STAGE_ORDER = ['title','topic','filename','content','summary','seealso','persist'];
+const STAGE_ORDER = ['title','topic','content','summary','filename','seealso','persist'];
 const STAGE_NUM   = ['①','②','③','④','⑤','⑥','⑦'];
 
 function stageMeta(st) {
@@ -403,6 +403,7 @@ function stageMeta(st) {
     else if (st.source === 'user') parts.push('用户');
     else if (st.source === 'llm')  parts.push('LLM');
     else if (st.source === 'code_plus_llm') parts.push('代码+LLM');
+    else if (st.source === 'piggyback_on_content') parts.push('随正文生成');
     else parts.push(st.source);
   }
   if (typeof st.durationMs === 'number') parts.push(st.durationMs + 'ms');

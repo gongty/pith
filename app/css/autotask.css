@@ -109,7 +109,10 @@
 }
 .autotask-modal-bg.open{display:flex}
 .autotask-modal{
-  width:560px;max-width:92vw;max-height:85vh;
+  /* Fixed height (within viewport bound) so step1/step2 swap without bouncing.
+     Per project red line: multi-tab/multi-step modal must not jump in height. */
+  width:560px;max-width:92vw;
+  height:640px;max-height:85vh;
   background:var(--bg);border-radius:var(--radius-lg);
   box-shadow:0 8px 40px rgba(0,0,0,0.15);
   display:flex;flex-direction:column;overflow:hidden;
@@ -562,6 +565,17 @@
 .autotask-source-picker-item-text{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
 .autotask-source-picker-item-name{font-size:13px;font-weight:500;color:var(--fg)}
 .autotask-source-picker-item-desc{font-size:12px;color:var(--fg-tertiary);line-height:1.4}
+
+/* ── History card extras (sources status / brief link / pending) ── */
+.autotask-history-sources{font-size:12px;color:var(--fg-tertiary);margin-top:4px}
+.autotask-source-fail-detail{display:inline-block;margin-left:8px}
+.autotask-source-fail-detail summary{cursor:pointer;color:var(--fg-secondary);font-size:12px}
+.autotask-source-fail-detail ul{margin:6px 0 0 0;padding-left:18px;font-size:12px;color:var(--fg-secondary)}
+.autotask-source-fail-detail li{margin:2px 0;word-break:break-all}
+.autotask-history-brief{margin-top:6px;font-size:13px}
+.autotask-history-brief a{color:var(--accent);text-decoration:none}
+.autotask-history-brief a:hover{text-decoration:underline}
+.autotask-run-item-pending{color:var(--fg-tertiary);font-style:italic}
 
 /* ── Responsive ── */
 @media(max-width:768px){

@@ -16,6 +16,10 @@ PORT=3000 WIKI_API_KEY=sk-xxx node server.js  # 自定义端口
 
 Default port: 3456. First run `npm install` to install dependencies (pdf-parse, @mozilla/readability, jsdom). No build step. Node.js stdlib + vanilla JS frontend.
 
+**No tests, no lint, no CI.** `package.json` 只有 `start` 脚本，`npm test` 返回 `exit 1`。验证改动靠浏览器手测 + 服务端日志。
+
+**运行时外部依赖（PATH 上需要）**：本地 CLI compile 模式需要 `claude`；音视频本地转录路径需要 `ffmpeg` + `whisper`。缺失时 ingest/compile 会尝试 fallback 到云端 API，失败时看 stderr。
+
 ## Architecture
 
 ### Server (`server.js`)
@@ -104,6 +108,7 @@ data/uploads/       → Uploaded files
 - **Force graph** parameters in `pages/graph.js`: repulsion `2500/(d²)`, spring length `160`, center gravity `0.005`. Tune these if node count changes significantly.
 - **Ingest is single-threaded** — one compilation at a time. Batch mode processes items sequentially and updates `batchProgress` which frontend polls via `/api/ingest/batch/status`.
 - **Autotask execution** reuses the ingest pipeline (`extractContent()` + `compileArticle()`). Each task run records to `history.json` and marks URLs/hashes in `dedup.json`.
+- **server.js 无热加载** — 改 `server.js` 必须重启进程。`data/` 下 JSON 在进程内有内存缓存（如 autotasks 调度器、聊天索引），手改磁盘文件不会被感知，必须通过 API 改或重启。
 - **CSS overflow rule**: When `overflow-y` is non-`visible`, browsers force `overflow-x` from `visible` to `auto`. Always set `overflow-x:hidden` explicitly on scroll containers to prevent unwanted horizontal scrollbars.
 
 ## Conventions
@@ -113,6 +118,7 @@ data/uploads/       → Uploaded files
 - Wiki articles written in Chinese; raw materials preserve original language
 - Design tokens use CSS custom properties — change colors/radius in `base.css :root`, they cascade everywhere
 - Dark mode: `[data-theme="dark"]` overrides in each CSS file. Token overrides in `base.css`.
+- **Submodule 双提交流程**：本仓库是父仓库 `BLANK_work` 的 git submodule。改动后需要两次提交：先在 `wiki-app/` 内 `commit && push`，再回到父仓库 `git add wiki-app && commit` 更新 submodule 指针。Remote: `https://github.com/gongty/wiki-app.git`，branch `main`。
 
 ## UI 设计原则（红线）
 

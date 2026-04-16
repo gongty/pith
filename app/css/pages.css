@@ -152,6 +152,17 @@
   margin-bottom:6px;outline:none;word-break:break-word;color:var(--fg);
 }
 .article-title:empty::before{content:"无标题";color:var(--fg-tertiary);font-weight:400}
+.article-tags{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 14px}
+.article-tag-chip{
+  display:inline-flex;align-items:center;
+  padding:2px 10px;font-size:12px;line-height:1.6;
+  color:var(--accent);background:transparent;
+  border:1px solid var(--accent);border-radius:999px;
+  text-decoration:none;transition:background var(--t),color var(--t);
+  user-select:none;
+}
+.article-tag-chip:hover{background:var(--accent);color:#fff;text-decoration:none}
+[data-theme="dark"] .article-tag-chip:hover{color:#fff}
 .article-meta-line{font-size:13px;color:var(--fg-tertiary);margin-bottom:32px;display:flex;align-items:center;gap:8px;padding-bottom:16px;border-bottom:1px solid var(--border)}
 .article-meta-line a{color:var(--accent);text-decoration:none}
 .article-meta-line a:hover{text-decoration:underline}

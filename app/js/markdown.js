@@ -1,7 +1,49 @@
 import { h } from './utils.js';
 
+/* ── YAML Frontmatter Parser ──
+ * 支持极简 YAML：仅处理 `key: value` 和 `tags: [a, b, c]` 单行数组。
+ * 幂等：若 md 不以 `---\n` 开头或前 ~10 行内未找到闭合 `---`，原样返回 body。
+ */
+export function parseFrontmatter(md) {
+  if (typeof md !== 'string' || !md.startsWith('---\n')) return { data: {}, body: md || '' };
+  const lines = md.split('\n');
+  // 找闭合 --- (仅在前 10 行内查找，避免误伤正文分割线或代码块中的 ---)
+  let end = -1;
+  const MAX_SCAN = Math.min(lines.length, 12);
+  for (let i = 1; i < MAX_SCAN; i++) {
+    if (lines[i].trim() === '---') { end = i; break; }
+  }
+  if (end === -1) return { data: {}, body: md };
+  const fmLines = lines.slice(1, end);
+  const data = {};
+  for (const raw of fmLines) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const m = line.match(/^([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
+    if (!m) continue;
+    const key = m[1];
+    let val = m[2].trim();
+    // 数组语法: [a, b, c]
+    const arrM = val.match(/^\[(.*)\]$/);
+    if (arrM) {
+      const inner = arrM[1].trim();
+      if (!inner) { data[key] = []; continue; }
+      data[key] = inner.split(',').map(s => s.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
+    } else {
+      // 去掉两端引号
+      val = val.replace(/^['"]|['"]$/g, '');
+      data[key] = val;
+    }
+  }
+  const body = lines.slice(end + 1).join('\n');
+  return { data, body };
+}
+
 /* ── Markdown Renderer ── */
 export function renderMd(md, ap) {
+  // 先剥离 frontmatter，避免 YAML 块被当成正文渲染
+  const fm = parseFrontmatter(md || '');
+  md = fm.body;
   const lines = md.split('\n'); let html = '', inCode = false, cLines = [];
   let inList = false, lt = '', inBq = false, bqL = [], inTbl = false, tRows = [];
   const aDir = ap ? ap.split('/').slice(0, -1).join('/') : '';
