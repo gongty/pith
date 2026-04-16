@@ -12,6 +12,7 @@ const APP = path.join(ROOT, 'app');
 const PORT = parseInt(process.env.PORT, 10) || 3456;
 const CONFIG_PATH = path.join(ROOT, 'config.json');
 const PROFILE_PATH = path.join(ROOT, 'profile.json');
+const MEMORY_PATH = path.join(ROOT, 'data', 'memory.json');
 
 // Ensure data directories exist
 fs.mkdirSync(WIKI, { recursive: true });
@@ -178,6 +179,66 @@ function saveProfile(profile) {
   fs.writeFileSync(PROFILE_PATH, JSON.stringify(profile, null, 2), 'utf-8');
 }
 
+// ── Memory 系统 ──
+
+function loadMemory() {
+  try {
+    if (fs.existsSync(MEMORY_PATH)) {
+      return JSON.parse(fs.readFileSync(MEMORY_PATH, 'utf-8'));
+    }
+  } catch {}
+  return { items: [] };
+}
+
+function saveMemory(memory) {
+  fs.writeFileSync(MEMORY_PATH, JSON.stringify(memory, null, 2), 'utf-8');
+}
+
+function genMemoryId() {
+  return `mem_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function buildMemoryContext() {
+  const memory = loadMemory();
+  const active = memory.items.filter(m => m.active);
+  if (active.length === 0) return null;
+  const categoryLabels = { personal: '个人信息', expertise: '专业领域', preference: '偏好设置', context: '背景上下文' };
+  const grouped = {};
+  for (const item of active) {
+    const cat = item.category || 'personal';
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(item);
+  }
+  let text = '## 用户背景';
+  for (const cat of ['personal', 'expertise', 'preference', 'context']) {
+    if (!grouped[cat]) continue;
+    for (const item of grouped[cat]) {
+      text += `\n【${categoryLabels[cat] || cat}】${item.label}：${item.content}`;
+    }
+  }
+  return text;
+}
+
+// Migration: create memory.json from profile.bio if it doesn't exist
+function migrateMemory() {
+  if (fs.existsSync(MEMORY_PATH)) return;
+  const profile = loadProfile();
+  const now = new Date().toISOString();
+  const items = [];
+  if (profile && profile.bio) {
+    items.push({
+      id: genMemoryId(),
+      category: 'personal',
+      label: '职业角色',
+      content: profile.bio,
+      active: true,
+      createdAt: now,
+      updatedAt: now
+    });
+  }
+  saveMemory({ items });
+}
+
 // ── LLM 调用层 ──
 
 function httpPost(url, headers, body) {
@@ -278,8 +339,8 @@ async function compileArticle(topicDir, filename, filePath, task, overrides) {
   // 本地 CLI 模式
   if (provider.format === 'cli') {
     return new Promise((resolve) => {
-      const profile = loadProfile();
-      const bioPart = profile && profile.bio ? ` 用户背景：${profile.bio}。请根据用户背景调整文章深度和侧重点。` : '';
+      const memCtxCli = buildMemoryContext();
+      const bioPart = memCtxCli ? ` ${memCtxCli}。请根据用户背景调整文章深度和侧重点。` : (() => { const profile = loadProfile(); return profile && profile.bio ? ` 用户背景：${profile.bio}。请根据用户背景调整文章深度和侧重点。` : ''; })();
       const prompt = `你是知识库编译助手。${COMPILE_RULES}\n\n请对刚存入的原始素材 data/raw/${topicDir}/${filename} 执行编译：\n1. 读取素材内容\n2. 读取 data/wiki/index.md 了解已有文章\n3. 编译成文章写入 data/wiki/ 对应主题目录\n4. 更新 data/wiki/index.md 和 data/wiki/log.md\nWiki 语言使用中文。${bioPart}`;
       const child = spawn('claude', ['-p', prompt, '--allowedTools', 'Read,Write,Edit,Glob,Grep'], { cwd: ROOT });
       let output = '';
@@ -313,8 +374,8 @@ async function compileArticle(topicDir, filename, filePath, task, overrides) {
       }
     }
 
-    const profile = loadProfile();
-    const bioContext = profile && profile.bio ? `\n\n## 用户背景\n\n${profile.bio}\n\n请根据用户背景调整文章深度和侧重点，使内容更贴合用户的知识水平和兴趣领域。` : '';
+    const memCtxApi = buildMemoryContext();
+    const bioContext = memCtxApi ? `\n\n${memCtxApi}\n\n请根据用户背景调整文章深度和侧重点，使内容更贴合用户的知识水平和兴趣领域。` : (() => { const profile = loadProfile(); return profile && profile.bio ? `\n\n## 用户背景\n\n${profile.bio}\n\n请根据用户背景调整文章深度和侧重点，使内容更贴合用户的知识水平和兴趣领域。` : ''; })();
 
     const systemPrompt = `你是一个知识库编译助手。将原始素材编译成结构化的知识库文章。
 
@@ -395,8 +456,8 @@ async function queryWiki(question) {
   const providerKey = config.provider || 'local';
   const provider = PROVIDERS[providerKey] || PROVIDERS.local;
 
-  const profile = loadProfile();
-  const bioPart = profile && profile.bio ? ` 用户背景：${profile.bio}。请根据用户背景调整回答的深度和专业程度。` : '';
+  const memCtx = buildMemoryContext();
+  const bioPart = memCtx ? ` ${memCtx}` : (() => { const profile = loadProfile(); return profile && profile.bio ? ` 用户背景：${profile.bio}。请根据用户背景调整回答的深度和专业程度。` : ''; })();
 
   // 本地 CLI 模式
   if (provider.format === 'cli') {
@@ -409,7 +470,7 @@ async function queryWiki(question) {
   // Use shared retrieval
   const { articleContents } = retrieveContext(question);
 
-  const bioQueryContext = profile && profile.bio ? `\n6. 用户背景：${profile.bio}。请根据用户背景调整回答的深度和专业程度` : '';
+  const bioQueryContext = memCtx ? `\n6. ${memCtx}` : (() => { const profile = loadProfile(); return profile && profile.bio ? `\n6. 用户背景：${profile.bio}。请根据用户背景调整回答的深度和专业程度` : ''; })();
 
   const systemPrompt = `你是一个知识库查询助手。基于提供的知识库文章回答用户问题。
 
@@ -726,8 +787,8 @@ async function handleChatMessage(conv, userContent, overrides) {
     try { wikiIndex = fs.readFileSync(path.join(WIKI, 'index.md'), 'utf-8'); indexCache.set('index', wikiIndex); } catch { wikiIndex = ''; }
   }
 
-  const profile = loadProfile();
-  const bioContext = profile && profile.bio ? `\n用户背景：${profile.bio}` : '';
+  const memoryContext = buildMemoryContext();
+  const bioContext = memoryContext || (() => { const profile = loadProfile(); return profile && profile.bio ? `\n用户背景：${profile.bio}` : ''; })();
 
   const articleSection = articleContents.length > 0
     ? `## 相关文章内容（共 ${articleContents.length} 篇匹配）\n${articleContents.join('\n\n---\n\n')}`
@@ -745,7 +806,8 @@ ${articleSection}
 2. 如果没有匹配的文章，直接用你自己的知识回答即可，不需要特别说明
 3. 不要编造知识库中没有的文章
 4. 用中文回答
-5. 自然对话风格，简洁有条理${bioContext}`;
+5. 自然对话风格，简洁有条理
+${bioContext}`;
 
   // Build messages array for multi-turn (sliding window)
   const historyMsgs = conv.messages.map(m => ({ role: m.role, content: m.content }));
@@ -1049,6 +1111,89 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // POST /api/chat/:id/precipitate — 沉淀对话为知识
+      if (subPath === 'precipitate' && req.method === 'POST') {
+        let body = '';
+        req.on('data', c => body += c);
+        req.on('end', async () => {
+          try {
+            const conv = loadChat(convId);
+            if (!conv) return json(res, 404, { error: '对话不存在' });
+            const parsed = body ? JSON.parse(body) : {};
+            const messageIds = parsed.messageIds || [];
+
+            // Extract messages
+            let selected;
+            if (messageIds.length > 0) {
+              selected = conv.messages.filter(m => messageIds.includes(m.id));
+              if (selected.length === 0) return json(res, 400, { error: '未找到指定消息' });
+            } else {
+              selected = conv.messages.filter(m => m.role === 'user' || m.role === 'assistant');
+            }
+
+            // Assemble Q&A content
+            let qaContent = '';
+            for (let i = 0; i < selected.length; i++) {
+              const m = selected[i];
+              if (m.role === 'user') {
+                qaContent += `### Q: ${m.content}\n\n`;
+              } else if (m.role === 'assistant') {
+                qaContent += `**A:**\n\n${m.content}\n\n---\n\n`;
+              }
+            }
+
+            const date = new Date().toISOString().slice(0, 10);
+            const slug = (conv.title || 'chat').replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-').slice(0, 40) || 'chat';
+            const filename = `${date}-${slug}.md`;
+            const topicDir = 'chat-precipitate';
+            const dir = path.join(RAW, topicDir);
+            fs.mkdirSync(dir, { recursive: true });
+            const filePath = path.join(dir, filename);
+
+            const rawContent = `# ${conv.title || '对话'} — 沉淀\n\n> Source: 对话沉淀 (${convId})\n> Collected: ${date}\n\n${qaContent}`;
+            fs.writeFileSync(filePath, rawContent, 'utf-8');
+
+            // Compile via engine
+            const task = pushTask('precipitate');
+            const config = loadConfig();
+            const modelOverrides = { provider: conv.provider || config.provider, model: conv.model || config.model };
+            try {
+              await compileArticle(topicDir, filename, filePath, task, modelOverrides);
+              if (task.status === 'done' && task.created && task.created.length > 0) {
+                const article = task.created[0];
+                return json(res, 200, { success: true, article: { path: article.path, title: article.title, action: 'created' }, rawPath: `${topicDir}/${filename}` });
+              } else {
+                return json(res, 500, { error: task.message || '编译失败' });
+              }
+            } catch (e) {
+              return json(res, 500, { error: `沉淀失败: ${e.message}` });
+            }
+          } catch (e) { return json(res, 400, { error: e.message }); }
+        });
+        return;
+      }
+
+      // PUT /api/chat/:id/message/:msgId/mark — 标记消息元数据
+      const markMatch = subPath.match(/^message\/([^/]+)\/mark$/);
+      if (markMatch && req.method === 'PUT') {
+        const msgId = markMatch[1];
+        let body = '';
+        req.on('data', c => body += c);
+        req.on('end', () => {
+          try {
+            const conv = loadChat(convId);
+            if (!conv) return json(res, 404, { error: '对话不存在' });
+            const msg = conv.messages.find(m => m.id === msgId);
+            if (!msg) return json(res, 404, { error: '消息不存在' });
+            const { precipitated } = JSON.parse(body);
+            if (precipitated) msg.precipitated = precipitated;
+            saveChat(conv);
+            return json(res, 200, { ok: true });
+          } catch (e) { return json(res, 400, { error: e.message }); }
+        });
+        return;
+      }
+
       // DELETE /api/chat/:id/message/:msgId — delete message and all after it
       const msgMatch = subPath.match(/^message\/(.+)$/);
       if (msgMatch && req.method === 'DELETE') {
@@ -1136,6 +1281,47 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/wiki/log') {
     try { return json(res, 200, { content: fs.readFileSync(path.join(WIKI, 'log.md'), 'utf-8') }); }
     catch { return json(res, 404, { error: 'log.md 不存在' }); }
+  }
+
+  if (p === '/api/wiki/graph/keywords') {
+    const excluded = new Set(['index.md', 'log.md']);
+    const allFiles = walkMd(WIKI).filter(f => !excluded.has(path.basename(f)));
+    const kwArticles = {};
+    for (const f of allFiles) {
+      const rel = path.relative(WIKI, f);
+      const kws = extractKeywords(f);
+      for (const w of kws) {
+        if (!kwArticles[w]) kwArticles[w] = [];
+        kwArticles[w].push(rel);
+      }
+    }
+    let minCount = 2;
+    let filtered = Object.entries(kwArticles).filter(([, a]) => a.length >= minCount);
+    if (filtered.length < 10) {
+      minCount = 1;
+      filtered = Object.entries(kwArticles).filter(([, a]) => a.length >= minCount);
+    }
+    const nodes = filtered.map(([word, articles]) => ({
+      id: 'kw_' + word, type: 'keyword', label: word, count: articles.length, articles
+    }));
+    const edges = [];
+    const edgeSet = new Set();
+    for (let i = 0; i < filtered.length; i++) {
+      const [w1, arts1] = filtered[i];
+      const set1 = new Set(arts1);
+      for (let j = i + 1; j < filtered.length; j++) {
+        const [w2, arts2] = filtered[j];
+        const shared = arts2.filter(a => set1.has(a));
+        if (shared.length > 0) {
+          const key = w1 < w2 ? w1 + '|' + w2 : w2 + '|' + w1;
+          if (!edgeSet.has(key)) {
+            edgeSet.add(key);
+            edges.push({ source: 'kw_' + w1, target: 'kw_' + w2, weight: Math.round(shared.length / Math.min(arts1.length, arts2.length) * 100) / 100, sharedArticles: shared });
+          }
+        }
+      }
+    }
+    return json(res, 200, { nodes, edges });
   }
 
   if (p === '/api/wiki/graph') {
@@ -1666,6 +1852,66 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // GET /api/memory — 获取所有记忆
+  if (p === '/api/memory' && req.method === 'GET') {
+    return json(res, 200, loadMemory());
+  }
+
+  // POST /api/memory — 新增记忆
+  if (p === '/api/memory' && req.method === 'POST') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const { category, label, content } = JSON.parse(body);
+        if (!label || !content) return json(res, 400, { error: '标签和内容不能为空' });
+        const now = new Date().toISOString();
+        const item = { id: genMemoryId(), category: category || 'personal', label: label.trim(), content: content.trim(), active: true, createdAt: now, updatedAt: now };
+        const memory = loadMemory();
+        memory.items.push(item);
+        saveMemory(memory);
+        return json(res, 200, item);
+      } catch (e) { return json(res, 400, { error: e.message }); }
+    });
+    return;
+  }
+
+  // PUT /api/memory/:id — 更新记忆
+  const memPutMatch = p.match(/^\/api\/memory\/(.+)$/);
+  if (memPutMatch && req.method === 'PUT') {
+    const memId = memPutMatch[1];
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const updates = JSON.parse(body);
+        const memory = loadMemory();
+        const item = memory.items.find(m => m.id === memId);
+        if (!item) return json(res, 404, { error: '记忆项不存在' });
+        if (typeof updates.label === 'string') item.label = updates.label.trim();
+        if (typeof updates.content === 'string') item.content = updates.content.trim();
+        if (typeof updates.category === 'string') item.category = updates.category;
+        if (typeof updates.active === 'boolean') item.active = updates.active;
+        item.updatedAt = new Date().toISOString();
+        saveMemory(memory);
+        return json(res, 200, item);
+      } catch (e) { return json(res, 400, { error: e.message }); }
+    });
+    return;
+  }
+
+  // DELETE /api/memory/:id — 删除记忆
+  const memDelMatch = p.match(/^\/api\/memory\/(.+)$/);
+  if (memDelMatch && req.method === 'DELETE') {
+    const memId = memDelMatch[1];
+    const memory = loadMemory();
+    const idx = memory.items.findIndex(m => m.id === memId);
+    if (idx < 0) return json(res, 404, { error: '记忆项不存在' });
+    memory.items.splice(idx, 1);
+    saveMemory(memory);
+    return json(res, 200, { ok: true });
+  }
+
   // 静态文件
   let filePath = p === '/' ? path.join(APP, 'index.html') : path.join(APP, p);
   if (!filePath.startsWith(APP)) { res.writeHead(403); return res.end(); }
@@ -1680,4 +1926,5 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+migrateMemory();
 server.listen(PORT, () => console.log(`Wiki 应用已启动：http://localhost:${PORT}`));

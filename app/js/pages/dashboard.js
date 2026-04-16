@@ -6,8 +6,9 @@ import { initFG } from './graph.js';
 export async function rDash(c) {
   c.innerHTML = '<div class="page-dashboard">' + skelLines(4) + '</div>';
   try {
-    const [stats, graph, recent] = await Promise.all([api('/api/wiki/stats'), api('/api/wiki/graph'), api('/api/wiki/recent')]);
-    state.sd = stats; state.gd = graph;
+    const [stats, kwGraph, recent] = await Promise.all([api('/api/wiki/stats'), api('/api/wiki/graph/keywords'), api('/api/wiki/recent')]);
+    state.sd = stats; state.gkd = kwGraph;
+    const graph = kwGraph;
     let s = '<div class="page-dashboard">';
 
     // Greeting + suggestion cards + composer
@@ -42,7 +43,7 @@ export async function rDash(c) {
     s += '</div>';
     c.innerHTML = s;
     initComposer('dash', dashSend);
-    if (graph.nodes.length >= 2) requestAnimationFrame(() => { const cv = document.getElementById('dgCanvas'); if (cv) initFG(cv, graph, false); });
+    if (graph.nodes.length >= 2) requestAnimationFrame(() => { const cv = document.getElementById('dgCanvas'); if (cv) initFG(cv, graph, false, 'keyword'); });
   } catch (e) { c.innerHTML = '<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败: ' + h(e.message) + '</div>'; }
 }
 

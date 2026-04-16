@@ -1,8 +1,16 @@
 import { $, api, put, post, toast } from './utils.js';
 import state from './state.js';
+import { renderMemory } from './memory.js';
 
 export function openSettings() { $('settingsModal').classList.add('open'); loadSett(); }
 export function closeSettings() { $('settingsModal').classList.remove('open'); }
+
+export function switchSettingsTab(tab) {
+  document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  $('settingsTabProvider').style.display = tab === 'provider' ? '' : 'none';
+  $('settingsTabMemory').style.display = tab === 'memory' ? '' : 'none';
+  if (tab === 'memory') renderMemory($('settingsTabMemory'));
+}
 
 async function loadSett() {
   try {

@@ -167,17 +167,24 @@
 
 <!-- Settings -->
 <div class="modal-bg" id="settingsModal" onclick="if(event.target===this)closeSettings()">
-  <div class="modal-card">
+  <div class="modal-card modal-card-tabs">
     <div class="modal-top"><h3>设置</h3><button onclick="closeSettings()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
-    <div class="modal-form">
-      <div><label class="field-label">提供商</label><select class="field-select" id="sProv" onchange="onProvChange()"></select></div>
-      <div><label class="field-label">API Key</label><input class="field-input" type="password" id="sKey" placeholder="输入 API Key..."></div>
-      <div><label class="field-label">模型</label><select class="field-select" id="sModel"></select></div>
+    <div class="settings-tabs">
+      <button class="settings-tab active" data-tab="provider" onclick="switchSettingsTab('provider')">模型配置</button>
+      <button class="settings-tab" data-tab="memory" onclick="switchSettingsTab('memory')">记忆</button>
     </div>
-    <div class="modal-foot">
-      <button class="btn-outline" onclick="testConn()">测试连接</button>
-      <button class="btn-sm-fill" onclick="saveSett()">保存</button>
+    <div class="settings-tab-content" id="settingsTabProvider">
+      <div class="modal-form">
+        <div><label class="field-label">提供商</label><select class="field-select" id="sProv" onchange="onProvChange()"></select></div>
+        <div><label class="field-label">API Key</label><input class="field-input" type="password" id="sKey" placeholder="输入 API Key..."></div>
+        <div><label class="field-label">模型</label><select class="field-select" id="sModel"></select></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-outline" onclick="testConn()">测试连接</button>
+        <button class="btn-sm-fill" onclick="saveSett()">保存</button>
+      </div>
     </div>
+    <div class="settings-tab-content" id="settingsTabMemory" style="display:none"></div>
   </div>
 </div>
 

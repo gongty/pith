@@ -11,7 +11,7 @@ import { render } from './router.js';
 import { dashAsk } from './pages/dashboard.js';
 import { chatSend, delChat } from './pages/chat.js';
 import { toggleToc, scrollToH, onArtChange, fmtCmd, closeDel, doDel, newArticle } from './pages/article.js';
-import { gZoom, applyGF } from './pages/graph.js';
+import { gZoom, applyGF, switchGraphView } from './pages/graph.js';
 
 /* ── Expose functions to inline onclick handlers ── */
 window.go = go;
@@ -44,6 +44,7 @@ window.toggleFold = toggleFold;
 window.switchSidebarTab = switchSidebarTab;
 window.gZoom = gZoom;
 window.applyGF = applyGF;
+window.switchGraphView = switchGraphView;
 window.submitIngest = () => submitIngest(render);
 window.batchToggleAll = batchToggleAll;
 window.batchFileToggle = batchFileToggle;

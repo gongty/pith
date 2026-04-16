@@ -1,4 +1,4 @@
-import { $, h, api, post, apiDel, toast, go, skelLines, typeEffect } from '../utils.js';
+import { $, h, api, post, put, apiDel, toast, go, skelLines, typeEffect } from '../utils.js';
 import state from '../state.js';
 import { buildComposer, initComposer } from '../composer.js';
 import { fmtChat } from '../markdown.js';
@@ -64,7 +64,7 @@ function renderChatPage(c) {
   s += '<div class="chat-bottom"><div class="chat-bottom-inner">' + buildComposer('cp') + '</div></div>';
   s += '</div>';
 
-  // Add topbar delete button
+  // Add topbar buttons
   const topActs = $('topbarActions');
   const delBtn = document.getElementById('topbarDel');
   if (topActs && !delBtn) {
@@ -74,6 +74,15 @@ function renderChatPage(c) {
     btn.title = '删除对话';
     btn.onclick = () => { delChat(state.convId); go('#/chat'); };
     topActs.insertBefore(btn, topActs.firstChild);
+  }
+  // Add topbar precipitate-conversation button
+  if (topActs && state.convId && state.msgs.length > 0 && !document.getElementById('topbarPrecip')) {
+    const pbtn = document.createElement('button');
+    pbtn.id = 'topbarPrecip'; pbtn.className = 'topbar-btn'; pbtn.style.color = 'var(--fg-tertiary)';
+    pbtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg>';
+    pbtn.title = '沉淀对话';
+    pbtn.onclick = () => precipitateConv();
+    topActs.insertBefore(pbtn, topActs.firstChild);
   }
 
   c.innerHTML = s;
