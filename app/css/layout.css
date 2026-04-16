@@ -33,7 +33,7 @@
 .sidebar-expand-btn:hover{background:var(--bg-hover);color:var(--fg-secondary)}
 .sidebar.collapsed ~ .main .sidebar-expand-btn{display:flex}
 
-.sidebar-nav{padding:4px 8px 10px;border-bottom:1px solid var(--border);margin-bottom:24px}
+.sidebar-nav{padding:4px 8px 10px;margin-bottom:24px}
 .sidebar-item{
   display:flex;align-items:center;gap:8px;padding:6px 10px;
   border-radius:var(--radius);font-size:13.5px;color:var(--fg-secondary);
@@ -90,10 +90,11 @@
 /* Sidebar tabs */
 .sidebar-tabs{
   display:flex;padding:6px 8px;gap:2px;margin-bottom:4px;
+  border-top:1px solid var(--border);padding-top:10px;
 }
 .sidebar-tab{
   flex:1;display:flex;align-items:center;justify-content:center;gap:5px;
-  padding:7px 0;font-size:12px;font-weight:600;letter-spacing:0.01em;
+  padding:7px 0;font-size:13px;font-weight:600;letter-spacing:0.01em;
   color:var(--fg-tertiary);border-radius:var(--radius);text-align:center;
   transition:all var(--t);
 }
