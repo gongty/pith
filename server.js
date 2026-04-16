@@ -333,7 +333,8 @@ async function callLLM(systemPrompt, messages, overrides) {
   const result = await httpPost(`${baseUrl}/chat/completions`, headers, JSON.stringify({
     model,
     messages: [{ role: 'system', content: systemPrompt }, ...msgArray],
-    temperature: 0.3
+    temperature: 0.3,
+    max_tokens: 8192
   }));
   return result.choices[0].message.content;
 }
@@ -386,10 +387,9 @@ async function compileArticle(topicDir, filename, filePath, task, overrides) {
     });
   }
 
-  // API 模式：服务端驱动编译
+  // API 模式：服务端驱动编译（精简 prompt，不传 index 全文）
   try {
     const rawContent = fs.readFileSync(filePath, 'utf-8');
-    let indexContent = ''; try { indexContent = fs.readFileSync(path.join(WIKI, 'index.md'), 'utf-8'); } catch {}
 
     const existingTopics = [];
     if (fs.existsSync(WIKI)) {
@@ -399,25 +399,25 @@ async function compileArticle(topicDir, filename, filePath, task, overrides) {
     }
 
     const memCtxApi = buildMemoryContext();
-    const bioContext = memCtxApi ? `\n\n${memCtxApi}\n\n请根据用户背景调整文章深度和侧重点，使内容更贴合用户的知识水平和兴趣领域。` : (() => { const profile = loadProfile(); return profile && profile.bio ? `\n\n## 用户背景\n\n${profile.bio}\n\n请根据用户背景调整文章深度和侧重点，使内容更贴合用户的知识水平和兴趣领域。` : ''; })();
+    const bioContext = memCtxApi ? `\n\n${memCtxApi}\n请根据用户背景调整文章深度和侧重点。` : '';
 
-    const systemPrompt = `你是一个知识库编译助手。将原始素材编译成结构化的知识库文章。
+    const systemPrompt = `你是知识库编译助手。将原始素材编译成一篇结构化中文知识库文章。
 
-${COMPILE_RULES}
+文章格式：
+# 标题
+> 来源：作者/机构，日期
+> 原文：[文件名](../../raw/${topicDir}/${filename})
+## 概述（一段话）
+## 正文（按逻辑分章节）
+## See Also（相关主题链接）
 
-## 输出格式（严格遵守）
+约定：输出语言中文；topic 目录名英文 kebab-case；文件名基于概念命名。
+已有主题：${existingTopics.join(', ') || '（暂无）'}
 
-输出一个纯 JSON 对象，不要用 markdown 代码块包裹，不要有任何额外文字：
-{"title":"文章标题（中文）","topic":"主题目录名（英文kebab-case）","filename":"文件名.md（英文kebab-case，基于概念命名）","content":"完整Markdown文章内容（中文）","summary":"一句话摘要（中文，20字以内）"}
+输出纯 JSON，不要代码块：
+{"title":"中文标题","topic":"目录名","filename":"文件名.md","content":"完整Markdown","summary":"一句话摘要20字内"}${bioContext}`;
 
-要求：
-- 文章语言中文
-- content 是完整 Markdown：# 标题、> 来源/原文、正文、## See Also
-- 来源原文路径: ../../raw/${topicDir}/${filename}
-- topic 优先复用已有分类: ${existingTopics.join(', ') || '（暂无已有分类）'}${bioContext}`;
-
-    const userMessage = `## 当前知识库索引\n\n${indexContent || '（空知识库）'}\n\n## 待编译素材\n\n文件: raw/${topicDir}/${filename}\n\n${rawContent}`;
-    const response = await callLLM(systemPrompt, userMessage, overrides);
+    const response = await callLLM(systemPrompt, rawContent, overrides);
 
     // 解析 JSON（兼容代码块包裹）
     let jsonStr = response.trim();
@@ -425,7 +425,7 @@ ${COMPILE_RULES}
     if (cbMatch) jsonStr = cbMatch[1].trim();
     const result = JSON.parse(jsonStr);
 
-    // 写入文章
+    // 写入文章（不同文件，可并发）
     const articleTopic = result.topic || topicDir || 'general';
     const articleDir = path.join(WIKI, articleTopic);
     fs.mkdirSync(articleDir, { recursive: true });
@@ -433,43 +433,46 @@ ${COMPILE_RULES}
     const articlePath = path.join(articleDir, articleFilename);
     fs.writeFileSync(articlePath, result.content, 'utf-8');
 
-    // 更新 index.md
-    const today = new Date().toISOString().slice(0, 10);
-    const indexPath = path.join(WIKI, 'index.md');
-    let idx = ''; try { idx = fs.readFileSync(indexPath, 'utf-8'); } catch { idx = '# Knowledge Base Index\n'; }
-    const newEntry = `| [${result.title}](${articleTopic}/${articleFilename}) | ${result.summary || ''} | ${today} |`;
-    const topicHeader = `### ${articleTopic}`;
-    if (idx.includes(topicHeader)) {
-      const lines = idx.split('\n');
-      let inserted = false;
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].trim() === topicHeader) {
-          for (let j = i + 1; j < lines.length; j++) {
-            if (lines[j].startsWith('|') && lines[j].includes('---')) {
-              lines.splice(j + 1, 0, newEntry);
-              inserted = true; break;
-            }
-          }
-          if (!inserted) { lines.splice(i + 1, 0, '', '| 文章 | 摘要 | 更新 |', '|------|------|------|', newEntry); inserted = true; }
-          break;
-        }
-      }
-      idx = inserted ? lines.join('\n') : idx + '\n' + newEntry;
-    } else {
-      idx += `\n\n${topicHeader}\n\n| 文章 | 摘要 | 更新 |\n|------|------|------|\n${newEntry}\n`;
-    }
-    fs.writeFileSync(indexPath, idx, 'utf-8');
-
-    // 更新 log.md
-    const logPath = path.join(WIKI, 'log.md');
-    let log = ''; try { log = fs.readFileSync(logPath, 'utf-8'); } catch { log = '# Wiki Log\n'; }
-    log += `\n## [${today}] ingest | ${result.title}\n`;
-    fs.writeFileSync(logPath, log, 'utf-8');
-
     const relPath = `${articleTopic}/${articleFilename}`;
+    const today = new Date().toISOString().slice(0, 10);
+
+    // 更新 index.md 和 log.md（串行锁，防并发写坏）
+    await (writeLock = writeLock.catch(() => {}).then(() => {
+      const indexPath = path.join(WIKI, 'index.md');
+      let idx = ''; try { idx = fs.readFileSync(indexPath, 'utf-8'); } catch { idx = '# Knowledge Base Index\n'; }
+      const newEntry = `| [${result.title}](${articleTopic}/${articleFilename}) | ${result.summary || ''} | ${today} |`;
+      const topicHeader = `### ${articleTopic}`;
+      if (idx.includes(topicHeader)) {
+        const lines = idx.split('\n');
+        let inserted = false;
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].trim() === topicHeader) {
+            for (let j = i + 1; j < lines.length; j++) {
+              if (lines[j].startsWith('|') && lines[j].includes('---')) {
+                lines.splice(j + 1, 0, newEntry);
+                inserted = true; break;
+              }
+            }
+            if (!inserted) { lines.splice(i + 1, 0, '', '| 文章 | 摘要 | 更新 |', '|------|------|------|', newEntry); inserted = true; }
+            break;
+          }
+        }
+        idx = inserted ? lines.join('\n') : idx + '\n' + newEntry;
+      } else {
+        idx += `\n\n${topicHeader}\n\n| 文章 | 摘要 | 更新 |\n|------|------|------|\n${newEntry}\n`;
+      }
+      fs.writeFileSync(indexPath, idx, 'utf-8');
+
+      const logPath = path.join(WIKI, 'log.md');
+      let log = ''; try { log = fs.readFileSync(logPath, 'utf-8'); } catch { log = '# Wiki Log\n'; }
+      log += `\n## [${today}] ingest | ${result.title}\n`;
+      fs.writeFileSync(logPath, log, 'utf-8');
+
+      indexCache.invalidate('index');
+      wikiCache.invalidate();
+    }));
+
     task.status = 'done'; task.message = '编译完成'; task.created = [{ path: relPath, title: result.title }];
-    indexCache.invalidate('index');
-    wikiCache.invalidate();
   } catch (e) {
     task.status = 'error'; task.message = `编译失败: ${e.message}`;
   }
@@ -951,6 +954,7 @@ function parseLogEntries() {
 let taskQueue = [];
 let batchProgress = null;
 // Shape: { id, total, completed, failed, currentFile, status, startedAt, files: [{name, status, error?}] }
+let writeLock = Promise.resolve(); // 串行锁：保护 index.md/log.md 并发写入
 
 function latestTask() {
   return taskQueue.length ? taskQueue[taskQueue.length - 1] : null;
@@ -1870,11 +1874,7 @@ const server = http.createServer(async (req, res) => {
           };
         }
 
-        async function processItem(idx) {
-          if (idx >= items.length) {
-            if (isBatch) batchProgress.status = 'done';
-            return;
-          }
+        async function processOneItem(idx) {
           const { type, content, topic, name, filename: itemFilename, url: itemUrl } = items[idx];
           if (isBatch) {
             batchProgress.currentFile = name || itemFilename || (content ? content.slice(0, 40) : '');
@@ -1900,7 +1900,6 @@ const server = http.createServer(async (req, res) => {
               task.status = 'error';
               task.message = `内容提取失败: ${extractErr.message}`;
             }
-            await processItem(idx + 1);
             return;
           }
 
@@ -1936,10 +1935,21 @@ const server = http.createServer(async (req, res) => {
               batchProgress.completed++;
             }
           }
-          await processItem(idx + 1);
         }
 
-        processItem(0);
+        // 并发执行：批量最多 3 路并发，单文件 1 路
+        const CONCURRENCY = isBatch ? 3 : 1;
+        let cursor = 0;
+        async function worker() {
+          while (true) {
+            const i = cursor++;
+            if (i >= items.length) break;
+            await processOneItem(i);
+          }
+        }
+        Promise.all(
+          Array.from({ length: Math.min(CONCURRENCY, items.length) }, () => worker())
+        ).then(() => { if (isBatch) batchProgress.status = 'done'; });
 
         const firstTask = latestTask();
         json(res, 200, { taskId: firstTask ? firstTask.id : 'unknown', batch: isBatch, batchId: isBatch ? batchProgress.id : null });
