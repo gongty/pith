@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Personal knowledge base app — AI-assisted wiki with chat, knowledge graph, and content ingestion. Chinese UI. Zero external dependencies on both server and frontend.
+Personal knowledge base app — AI-assisted wiki with chat, knowledge graph, content ingestion, and automated task scheduling. Chinese UI. Zero external dependencies on frontend.
 
 ## Running
 
@@ -20,13 +20,14 @@ Default port: 3456. First run `npm install` to install dependencies (pdf-parse, 
 
 ### Server (`server.js`)
 
-Raw Node.js HTTP server. Key subsystems:
+Single-file raw Node.js HTTP server (~3000 lines). Key subsystems:
 
 - **LLM Integration** — 7 providers (Bailian/阿里云, OpenRouter, Anthropic, OpenAI, DeepSeek, custom, local Claude CLI). `callLLM()` is the universal entry point. `getFullConfig()` merges `loadConfig()` (provider/model) + `loadApiKey()` (env var only).
 - **Compilation Engine** — `compileArticle()` takes raw content, calls LLM to produce structured wiki articles. Two modes: local CLI (spawns `claude` with tools) and API (server-driven JSON generation). Embedded rules in `COMPILE_RULES` constant.
 - **Chat System** — JSON file storage in `data/chats/`. Per-conversation files `conv_*.json` + `_index.json` index. Supports context retrieval from wiki for RAG.
 - **Wiki Data** — `buildGraph()` creates 3-layer knowledge graph (explicit links → keyword co-occurrence → topic affinity). `searchWiki()` for full-text search. `retrieveContext()` for chat RAG.
-- **Ingest Pipeline** — Single-task queue. Accepts text/URL/PDF/image/audio/video/ZIP. Multi-format extraction: pdf-parse for PDF, Readability+jsdom for URL, LLM Vision for images, OpenAI Whisper or local ffmpeg+whisper for audio/video. Batch mode with progress tracking via `batchProgress` object polled by frontend. Files sent as base64 in JSON body (max 100MB).
+- **Ingest Pipeline** — Single-task queue. Accepts text/URL/PDF/image/audio/video/ZIP. Multi-format extraction: pdf-parse for PDF, Readability+jsdom for URL, LLM Vision for images, OpenAI Whisper or local ffmpeg+whisper for audio/video. Batch mode with progress tracking via `batchProgress` object polled by frontend.
+- **Automated Tasks** — `data/autotasks/` stores task configs, execution history, and dedup index. `executeAutotask()` engine: fetch source (RSS/webpage/API) → keyword filter → 3-layer dedup (URL normalization + content SHA-256 + existing check) → `extractContent()` + `compileArticle()` reuse. Scheduler runs every 5 min via `setInterval`, supports daily (with HH:MM), hourly, and manual schedules.
 - **Static Files** — Serves `app/` directory. Path: `GET / → app/index.html`, `GET /css/base.css → app/css/base.css`, etc.
 
 ### Frontend (`app/`)
@@ -35,13 +36,13 @@ Vanilla JS with ES modules (`<script type="module">`). No framework, no bundler.
 
 **Module dependency graph** (entry: `js/app.js`):
 ```
-app.js → router.js → pages/{dashboard,chat,article,graph,browse}.js
+app.js → router.js → pages/{dashboard,chat,article,graph,browse,autotask,health}.js
        → sidebar.js, composer.js, search.js, settings.js, ingest.js
        → state.js (shared mutable state), utils.js (DOM/$, API, toast)
        → theme.js, markdown.js
 ```
 
-**Routing:** Hash-based. `#/` dashboard, `#/chat/:id` chat, `#/article/:path` article, `#/graph` graph, `#/browse` browse. Router in `js/router.js`, `render()` is the main dispatch.
+**Routing:** Hash-based. `#/` dashboard, `#/chat/:id` chat, `#/article/:path` article, `#/graph` graph, `#/browse` browse, `#/autotask` automated tasks. Router in `js/router.js`, `render()` is the main dispatch.
 
 **Global state:** `js/state.js` exports a single mutable object. All modules import and mutate it directly.
 
@@ -53,6 +54,15 @@ app.js → router.js → pages/{dashboard,chat,article,graph,browse}.js
 - `css/components.css` — Composer, search overlay, modals, toast, format toolbar
 - `css/pages.css` — Per-page styles: dashboard, chat, article (flex layout with left TOC), graph, browse
 - `css/ingest.css` — Ingest panel (slide-in right)
+- `css/autotask.css` — Automated tasks page, cards, toggle, modals
+
+### Adding a New Page
+
+1. Create `app/js/pages/<name>.js` — export `rXxx(container)` render function
+2. Create `app/css/<name>.css` (optional) — add `<link>` in `index.html`
+3. `router.js` — add import, route match in `route()`, breadcrumb in `updBC()`, dispatch in `render()`
+4. `app.js` — import onclick-callable functions, register on `window.*`, add to Escape handler if modal
+5. `index.html` — add sidebar nav `<div class="sidebar-item">`, modal HTML shells if needed
 
 ### Data (`data/`)
 
@@ -64,6 +74,9 @@ data/wiki/index.md  → Master index (topic tables)
 data/wiki/log.md    → Activity log
 data/raw/           → Immutable source materials (fetched/pasted content)
 data/chats/         → JSON conversation files + _index.json
+data/autotasks/     → tasks.json (configs), history.json (runs), dedup.json (URL+hash index)
+data/reports/       → Lint/health check reports
+data/uploads/       → Uploaded files
 ```
 
 ## Secrets — 安全红线
@@ -75,7 +88,6 @@ data/chats/         → JSON conversation files + _index.json
 - `getFullConfig()` → 合并以上两者
 - `GET /api/settings` → 只返回 `hasKey: true/false`，绝不返回密钥内容
 - `PUT /api/settings` → 只保存 provider/model，不接受密钥参数
-- `start.sh` → 含密钥的启动脚本，已 gitignore
 
 **绝对不能做的事：**
 - 把密钥写入任何文件（config.json、.env、.api-key 都不行）
@@ -91,6 +103,8 @@ data/chats/         → JSON conversation files + _index.json
 - **Article page uses flex layout** with TOC as `order:-1` child (renders left). TOC HTML must be inside `.page-article` div, not outside it.
 - **Force graph** parameters in `pages/graph.js`: repulsion `2500/(d²)`, spring length `160`, center gravity `0.005`. Tune these if node count changes significantly.
 - **Ingest is single-threaded** — one compilation at a time. Batch mode processes items sequentially and updates `batchProgress` which frontend polls via `/api/ingest/batch/status`.
+- **Autotask execution** reuses the ingest pipeline (`extractContent()` + `compileArticle()`). Each task run records to `history.json` and marks URLs/hashes in `dedup.json`.
+- **CSS overflow rule**: When `overflow-y` is non-`visible`, browsers force `overflow-x` from `visible` to `auto`. Always set `overflow-x:hidden` explicitly on scroll containers to prevent unwanted horizontal scrollbars.
 
 ## Conventions
 
