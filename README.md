@@ -1,5 +1,7 @@
 # Wiki App — AI 驱动的个人知识库
 
+受 [Andrej Karpathy](https://x.com/karpathy) 启发：让 LLM 写和维护 wiki，人来读和提问。wiki 是一个持续复利的知识资产。
+
 把资料丢进来，AI 自动整理成 wiki，越积越多越好用。
 
 ## 截图
