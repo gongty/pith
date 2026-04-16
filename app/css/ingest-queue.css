@@ -1,0 +1,130 @@
+/* ── 投喂队列 topbar 入口 ── */
+
+/* 按钮：沿用 .topbar-btn 样式，仅加 relative 以便放徽标 */
+.ingest-queue-btn{position:relative}
+.ingest-queue-btn[hidden]{display:none!important}
+.ingest-queue-btn.iq-active{color:var(--accent)}
+.ingest-queue-badge[hidden]{display:none!important}
+
+@keyframes iqPulse{
+  0%,100%{transform:scale(1);opacity:1}
+  50%{transform:scale(1.5);opacity:0.4}
+}
+
+/* 红色数字徽标（进行中 + 排队）*/
+.ingest-queue-badge{
+  position:absolute;top:-4px;right:-4px;
+  min-width:16px;height:16px;padding:0 4px;border-radius:8px;
+  background:var(--red,#dc2626);color:#fff;
+  font-size:10px;font-weight:600;line-height:16px;text-align:center;
+  box-shadow:0 0 0 2px var(--bg);
+}
+
+/* 面板：从按钮下方弹出 */
+.ingest-queue-panel{
+  position:fixed;top:52px;right:12px;width:420px;max-height:560px;
+  background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg,12px);
+  box-shadow:0 10px 40px rgba(0,0,0,0.12);
+  z-index:900;display:flex;flex-direction:column;
+  overflow:hidden;
+  animation:iqSlideDown 160ms ease;
+}
+.ingest-queue-panel[hidden]{display:none!important}
+@keyframes iqSlideDown{
+  from{opacity:0;transform:translateY(-6px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.iq-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;border-bottom:1px solid var(--border);
+  font-size:13px;font-weight:600;color:var(--fg);
+}
+.iq-close{
+  width:24px;height:24px;border-radius:var(--radius);
+  color:var(--fg-tertiary);cursor:pointer;background:transparent;border:none;
+  display:inline-flex;align-items:center;justify-content:center;
+}
+.iq-close:hover{background:var(--bg-hover);color:var(--fg)}
+.iq-body{
+  flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;
+  padding:8px 12px 12px;
+}
+
+/* Summary bar（批次进度） */
+.iq-summary{
+  padding:10px 12px;margin-bottom:8px;
+  background:var(--bg-hover);border-radius:var(--radius);
+}
+.iq-summary-line{
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:12px;color:var(--fg-secondary);margin-bottom:6px;
+}
+.iq-summary-eta{color:var(--fg-tertiary);font-size:11px}
+.iq-progress{
+  height:4px;background:var(--border);border-radius:2px;overflow:hidden;
+}
+.iq-progress-fill{
+  height:100%;background:var(--accent);
+  transition:width 400ms ease;
+}
+.iq-summary-fail{
+  margin-top:6px;font-size:11px;color:var(--red,#dc2626);
+}
+
+/* 分段标题 */
+.iq-section-title{
+  font-size:11px;font-weight:600;color:var(--fg-tertiary);
+  text-transform:uppercase;letter-spacing:0.04em;
+  padding:10px 8px 6px;
+}
+
+/* 单项 */
+.iq-item{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:8px 10px;border-radius:var(--radius);
+  font-size:13px;transition:background var(--t);
+}
+.iq-item + .iq-item{margin-top:2px}
+.iq-item-main{flex:1;min-width:0}
+.iq-item-name{
+  color:var(--fg);font-size:13px;line-height:1.3;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.iq-item-sub{
+  font-size:11px;color:var(--fg-tertiary);margin-top:2px;line-height:1.3;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.iq-item-time{font-size:11px;color:var(--fg-tertiary);margin-top:2px}
+.iq-item-error{color:var(--red,#dc2626)}
+.iq-clickable{cursor:pointer}
+.iq-clickable:hover{background:var(--bg-hover)}
+
+/* 状态小圆点 */
+.iq-dot{
+  width:8px;height:8px;border-radius:50%;flex-shrink:0;
+  margin-top:6px;
+}
+.iq-dot-running{
+  background:var(--accent);
+  box-shadow:0 0 0 0 rgba(91,91,214,0.5);
+  animation:iqPulse 1.4s ease-in-out infinite;
+}
+.iq-dot-queued{background:var(--fg-tertiary);opacity:0.5}
+.iq-dot-done{background:#22c55e}
+.iq-dot-error{background:var(--red,#dc2626)}
+
+.iq-empty{
+  padding:32px 16px;text-align:center;color:var(--fg-tertiary);font-size:12px;
+}
+
+/* 暗色模式 */
+[data-theme="dark"] .ingest-queue-panel{
+  box-shadow:0 10px 40px rgba(0,0,0,0.5);
+}
+
+/* 响应式 */
+@media(max-width:600px){
+  .ingest-queue-panel{
+    right:8px;left:8px;width:auto;top:48px;max-height:calc(100vh - 64px);
+  }
+}

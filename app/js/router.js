@@ -8,8 +8,13 @@ import { rChat } from './pages/chat.js';
 import { rGraph } from './pages/graph.js';
 import { rBrowse } from './pages/browse.js';
 import { rArticle } from './pages/article.js';
+import { rRaw } from './pages/raw.js';
 import { rHealth } from './pages/health.js';
 import { rAutotask } from './pages/autotask.js';
+
+function safeDecode(s) {
+  try { return decodeURIComponent(s); } catch { return s; }
+}
 
 export function route() {
   const hash = location.hash || '#/';
@@ -20,7 +25,8 @@ export function route() {
   if (hash === '#/browse') return { v: 'browse' };
   if (hash === '#/health') return { v: 'health' };
   if (hash === '#/autotask') return { v: 'autotask' };
-  if (hash.startsWith('#/article/')) return { v: 'article', p: hash.slice(10) };
+  if (hash.startsWith('#/article/')) return { v: 'article', p: safeDecode(hash.slice(10)) };
+  if (hash.startsWith('#/raw/')) return { v: 'raw', p: safeDecode(hash.slice(6)) };
   return { v: 'dashboard' };
 }
 
@@ -41,13 +47,18 @@ function updBC(r) {
   else if (r.v === 'health') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>健康报告';
   else if (r.v === 'browse') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>全部文章';
   else if (r.v === 'autotask') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>自动任务';
+  else if (r.v === 'raw' && r.p) {
+    const pts = r.p.split('/'); const f = pts[pts.length - 1];
+    const ft = f.length > 30 ? f.slice(0, 30) + '…' : f;
+    bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span><a href="#/browse">全部文章</a><span class="sep">/</span>原文 · ' + h(ft);
+  }
   else if (r.v === 'article' && r.p) {
     const pts = r.p.split('/'), topic = pts.length > 1 ? pts[0] : '', f = pts[pts.length - 1].replace('.md', '');
     const topicColors = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
     const tci = topic ? Math.abs([...topic].reduce((a, c) => a + c.charCodeAt(0), 0)) % topicColors.length : 0;
     let s = '<a href="#/">知识库</a>';
     if (topic) s += '<span class="sep">/</span><span class="topic-dot" style="background:' + topicColors[tci] + '"></span><a href="#/browse">' + h(topic) + '</a>';
-    const ft = f.length > 20 ? f.slice(0, 20) + '…' : f;
+    const ft = f.length > 40 ? f.slice(0, 40) + '…' : f;
     s += '<span class="sep">/</span>' + h(ft); bc.innerHTML = s;
   }
 }
@@ -67,6 +78,7 @@ export async function render() {
   else if (r.v === 'health') await rHealth(c);
   else if (r.v === 'autotask') await rAutotask(c);
   else if (r.v === 'article') await rArticle(c, r.p);
+  else if (r.v === 'raw') await rRaw(c, r.p);
   updSidebarPages();
 }
 

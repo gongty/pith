@@ -113,3 +113,10 @@ data/uploads/       → Uploaded files
 - Wiki articles written in Chinese; raw materials preserve original language
 - Design tokens use CSS custom properties — change colors/radius in `base.css :root`, they cascade everywhere
 - Dark mode: `[data-theme="dark"]` overrides in each CSS file. Token overrides in `base.css`.
+
+## UI 设计原则（红线）
+
+这些是用户明确强调的关键原则，新写或修改 UI 时必须遵守。违反就是不合格。
+
+- **多 Tab 弹窗必须同高度**：一个弹窗内有 N 个 Tab 切换时，弹窗高度不允许随 Tab 内容变化而跳动。固定弹窗高度，内容超出时在面板内上下滚动；底部按钮栏（保存/取消）吸底常驻。实现方式参考 `.modal-card-tabs` / `.settings-tab-content`：`height + max-height` 固定外框，内部 flex 列，主体 `overflow-y:auto`，foot `flex-shrink:0`。
+- **长文内容宽度与位置要跟随视口自适应**：文章等阅读型页面不能在宽屏下右侧留大片空白。正文要有阅读友好的宽度上限（约 860–920px），但富余空间应左右均分让正文居中，而不是一律贴左。实现方式参考 `.page-article-inner`：`flex:1 + max-width + margin-left:auto + margin-right:auto`，超宽屏（≥1600px）可放宽 max-width。

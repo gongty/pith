@@ -77,7 +77,7 @@ export function onProvChange() {
   models.forEach(m => {
     const o = document.createElement('option');
     o.value = m.id;
-    o.textContent = (m.label || m.id) + ' · ' + m.use;
+    o.textContent = m.label || m.id;
     ms.appendChild(o);
   });
   if (state.sCache && state.sCache.model) ms.value = state.sCache.model;
@@ -92,17 +92,20 @@ function renderModelList() {
     tbl.innerHTML = '<div class="model-list-empty">暂无模型，点击“添加模型”新增。</div>';
     return;
   }
-  tbl.innerHTML = models.map((m, i) => `
+  // 表头 + 行（仅 3 列：ID / 显示名 / 删除）
+  const header = `
+    <div class="model-row model-row-head">
+      <div class="mr-col-head">模型 ID</div>
+      <div class="mr-col-head">显示名</div>
+      <div class="mr-col-head"></div>
+    </div>`;
+  tbl.innerHTML = header + models.map((m, i) => `
     <div class="model-row" data-idx="${i}">
-      <input class="mr-id" data-f="id" value="${h(m.id)}" placeholder="model id" ${m.isBuiltin ? 'readonly' : ''}>
+      <input class="mr-id" data-f="id" value="${h(m.id)}" placeholder="model id">
       <input class="mr-label" data-f="label" value="${h(m.label)}" placeholder="显示名">
-      <select class="mr-use" data-f="use">
-        <option value="strong" ${m.use==='strong'?'selected':''}>strong</option>
-        <option value="main"   ${m.use==='main'?'selected':''}>main</option>
-        <option value="fast"   ${m.use==='fast'?'selected':''}>fast</option>
-      </select>
-      <label class="mr-thinking" title="思考能力"><input type="checkbox" data-f="thinkingCapable" ${m.thinkingCapable?'checked':''}> 思考</label>
-      <button class="mr-delete" type="button" data-action="del" ${m.isBuiltin?'hidden':''} title="删除">🗑</button>
+      <button class="mr-delete" type="button" data-action="del" title="删除" aria-label="删除">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+      </button>
     </div>
   `).join('');
   // wire input/select/checkbox changes
@@ -123,12 +126,12 @@ function updateModelField(idx, field, value) {
   const models = getWorkingModels(currentProvKey());
   if (!models[idx]) return;
   models[idx][field] = value;
-  // If id/label/use changed, the main-model dropdown labels may need refresh
-  if (field === 'id' || field === 'label' || field === 'use') {
+  // If id/label changed, the main-model dropdown labels may need refresh
+  if (field === 'id' || field === 'label') {
     const ms = $('sModel'); if (ms) {
       const prev = ms.value;
       ms.innerHTML = '';
-      models.forEach(m => { const o = document.createElement('option'); o.value = m.id; o.textContent = (m.label || m.id) + ' · ' + m.use; ms.appendChild(o); });
+      models.forEach(m => { const o = document.createElement('option'); o.value = m.id; o.textContent = m.label || m.id; ms.appendChild(o); });
       ms.value = prev || (models[0] && models[0].id) || '';
     }
   }
@@ -138,7 +141,6 @@ function deleteModel(idx) {
   const p = currentProvKey();
   const models = getWorkingModels(p);
   if (!models[idx]) return;
-  if (models[idx].isBuiltin) { toast('内建模型不可删除'); return; }
   models.splice(idx, 1);
   renderModelList();
   // refresh main-model select
@@ -146,7 +148,7 @@ function deleteModel(idx) {
   const ms = $('sModel'); if (ms) {
     const prev = ms.value;
     ms.innerHTML = '';
-    models.forEach(m => { const o = document.createElement('option'); o.value = m.id; o.textContent = (m.label || m.id) + ' · ' + m.use; ms.appendChild(o); });
+    models.forEach(m => { const o = document.createElement('option'); o.value = m.id; o.textContent = m.label || m.id; ms.appendChild(o); });
     if (models.find(m => m.id === prev)) ms.value = prev;
   }
 }
@@ -187,31 +189,47 @@ function wireProviderSection() {
 
 /* ── save ── */
 
-export async function saveSett() {
+// 核心保存逻辑；silent=true 时不 toast、不关弹窗（用于"测试连接"前静默保存）
+async function doSave({ silent = false } = {}) {
   const prov = $('sProv').value;
   const body = { provider: prov, model: $('sModel').value, wikiLang: $('sLang').value };
   const k = $('sKey').value; if (k) body.apiKey = k;
-  // include edited model lists (if user touched any provider's list)
   if (state.sModels && Object.keys(state.sModels).length) {
     body.providers = {};
     for (const [pk, models] of Object.entries(state.sModels)) {
       body.providers[pk] = { models };
     }
   }
-  try {
-    await put('/api/settings', body); state.sCache = null;
-    // Save nickname via profile API (preserve existing bio)
-    const nickname = $('sNickname').value.trim();
-    let existingBio = '';
-    try { const p = await api('/api/profile'); existingBio = p.bio || ''; } catch {}
-    await put('/api/profile', { nickname, bio: existingBio });
-    updateSidebarTitle(nickname);
-    toast('已保存'); closeSettings();
-  } catch (e) { toast('失败: ' + e.message); }
+  await put('/api/settings', body); state.sCache = null;
+  const nickname = $('sNickname').value.trim();
+  let existingBio = '';
+  try { const p = await api('/api/profile'); existingBio = p.bio || ''; } catch {}
+  await put('/api/profile', { nickname, bio: existingBio });
+  updateSidebarTitle(nickname);
+  if (!silent) { toast('已保存'); closeSettings(); }
+}
+
+export async function saveSett() {
+  try { await doSave({ silent: false }); }
+  catch (e) { toast('保存失败：' + e.message); }
 }
 
 export async function testConn() {
-  try { await saveSett(); const r = await post('/api/settings/test', {}); toast(r.ok ? '连接成功' : '失败: ' + r.message); } catch (e) { toast('测试失败'); }
+  const btn = $('testConnBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '测试中…'; }
+  try {
+    await doSave({ silent: true });
+    const r = await post('/api/settings/test', {});
+    if (r.ok) {
+      toast('连接成功' + (r.message ? '：' + r.message : ''));
+    } else {
+      toast('连接失败：' + (r.message || '未知错误'));
+    }
+  } catch (e) {
+    toast('测试失败：' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '测试连接'; }
+  }
 }
 
 /* ── Sidebar title with username ── */
@@ -313,7 +331,7 @@ async function loadPipeline() {
 function modelOptions(selectedId) {
   const p = currentProvKey();
   const models = getWorkingModels(p);
-  return models.map(m => `<option value="${h(m.id)}" ${m.id===selectedId?'selected':''}>${h(m.label || m.id)} · ${h(m.use)}</option>`).join('');
+  return models.map(m => `<option value="${h(m.id)}" ${m.id===selectedId?'selected':''}>${h(m.label || m.id)}</option>`).join('');
 }
 
 function renderPipeline() {
@@ -323,7 +341,9 @@ function renderPipeline() {
 
   // Update preset buttons
   document.querySelectorAll('#pipelinePresetRow .preset-btn').forEach(b => b.classList.toggle('active', b.dataset.preset === pl.preset));
-  const badge = $('presetCustomBadge'); if (badge) badge.hidden = pl.preset !== 'custom';
+  // 自定义按钮：只要有自定义快照就显示；active 只在当前就是自定义态时亮
+  const customBtn = document.querySelector('#pipelinePresetRow .preset-btn-custom');
+  if (customBtn) customBtn.hidden = !(state.customPipeline && state.customPipeline.stages);
 
   host.innerHTML = `
     <div class="stage-card">
@@ -342,12 +362,8 @@ function renderPipeline() {
         <select class="field-select stage-model" data-stage="topic" ${s.topic.source==='llm'?'':'disabled'}>${modelOptions(s.topic.model || '')}</select>
       </div>
     </div>
-    <div class="stage-card stage-readonly">
-      <div class="stage-card-head">③ 文件名 (代码 slugify)</div>
-      <div class="stage-card-body"><span class="stage-readonly-note">由代码自动生成，不可配置。</span></div>
-    </div>
     <div class="stage-card">
-      <div class="stage-card-head">④ 正文编译</div>
+      <div class="stage-card-head">③ 正文编译</div>
       <div class="stage-card-body">
         <div class="stage-field"><label>模型</label><select class="field-select" id="plContentModel">${modelOptions(s.content.model || '')}</select></div>
         <div class="stage-field"><label><input type="checkbox" id="plContentThinking" ${s.content.thinking?'checked':''}> 开启推理 (仅 thinking 模型)</label></div>
@@ -357,7 +373,7 @@ function renderPipeline() {
       </div>
     </div>
     <div class="stage-card">
-      <div class="stage-card-head">⑤ 摘要生成</div>
+      <div class="stage-card-head">④ 摘要生成</div>
       <div class="stage-card-body">
         <label class="radio-line"><input type="radio" name="pl-summary" value="llm"    ${s.summary.source==='llm'?'checked':''}> LLM 独立</label>
         <label class="radio-line"><input type="radio" name="pl-summary" value="inline" ${s.summary.source==='inline'?'checked':''}> 合并在正文</label>
@@ -367,7 +383,7 @@ function renderPipeline() {
       </div>
     </div>
     <div class="stage-card">
-      <div class="stage-card-head">⑥ See Also</div>
+      <div class="stage-card-head">⑤ See Also</div>
       <div class="stage-card-body">
         <label class="radio-line"><input type="radio" name="pl-seealso" value="code_plus_llm" ${s.seealso.source==='code_plus_llm'?'checked':''}> 代码 + LLM 精选</label>
         <label class="radio-line"><input type="radio" name="pl-seealso" value="code"          ${s.seealso.source==='code'?'checked':''}> 纯代码</label>
@@ -383,8 +399,13 @@ function renderPipeline() {
 function markCustom() {
   if (!state.pipeline) return;
   state.pipeline.preset = 'custom';
-  document.querySelectorAll('#pipelinePresetRow .preset-btn').forEach(b => b.classList.remove('active'));
-  const badge = $('presetCustomBadge'); if (badge) badge.hidden = false;
+  // 快照保留，方便用户切到预设后再点"自定义"回到本次改动
+  state.customPipeline = JSON.parse(JSON.stringify(state.pipeline));
+  document.querySelectorAll('#pipelinePresetRow .preset-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.preset === 'custom');
+  });
+  const customBtn = document.querySelector('#pipelinePresetRow .preset-btn-custom');
+  if (customBtn) customBtn.hidden = false; // 有快照才走到这里
 }
 
 function wireStageInputs() {
@@ -439,6 +460,15 @@ function wireStageInputs() {
 }
 
 function applyPreset(key) {
+  if (key === 'custom') {
+    // 恢复用户上次的自定义快照；没有就不动
+    if (state.customPipeline && state.customPipeline.stages) {
+      state.pipeline = JSON.parse(JSON.stringify(state.customPipeline));
+      state.pipeline.preset = 'custom';
+      renderPipeline();
+    }
+    return;
+  }
   const stages = resolvePreset(key);
   if (!stages) return;
   state.pipeline = { preset: key, stages };

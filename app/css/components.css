@@ -295,7 +295,7 @@
 }
 
 /* ── Settings tabs ── */
-.modal-card-tabs{width:520px;max-width:92vw;max-height:80vh;display:flex;flex-direction:column}
+.modal-card-tabs{width:720px;max-width:92vw;height:640px;max-height:85vh;display:flex;flex-direction:column}
 .settings-tabs{
   display:flex;gap:0;padding:0 20px;border-bottom:1px solid var(--border);
   background:var(--bg);flex-shrink:0;
@@ -307,7 +307,10 @@
 }
 .settings-tab:hover{color:var(--fg)}
 .settings-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
-.settings-tab-content{overflow-y:auto;flex:1;min-height:0}
+.settings-tab-content{flex:1;min-height:0;display:flex;flex-direction:column}
+.settings-tab-content > .modal-form{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden}
+.settings-tab-content > .modal-foot{flex-shrink:0}
+.settings-tab-content > .mem-panel{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden}
 
 /* ── Memory panel ── */
 .mem-panel{
@@ -334,7 +337,8 @@
 
 /* ── Memory responsive ── */
 @media(max-width:768px){
-  .modal-card-tabs{width:100%;max-width:100%;max-height:100vh;border-radius:0}
+  .modal-card-tabs{width:100%;max-width:100%;height:100vh;max-height:100vh;border-radius:0}
+  .model-row{grid-template-columns:1.3fr 1.3fr 24px;gap:6px}
 }
 
 /* ── Settings: provider section (model list CRUD) ── */
@@ -350,10 +354,20 @@
 .model-list-table{display:flex;flex-direction:column;gap:4px;max-height:260px;overflow-y:auto;overflow-x:hidden;border:1px solid var(--border);border-radius:var(--radius);padding:4px}
 .model-list-empty{padding:14px 10px;color:var(--fg-tertiary);font-size:12px;text-align:center}
 .model-row{
-  display:grid;grid-template-columns:1.3fr 1.3fr 80px auto 24px;gap:6px;align-items:center;
-  padding:4px 6px;border-radius:var(--radius);transition:background var(--t);
+  display:grid;grid-template-columns:1.4fr 1.4fr 28px;gap:8px;align-items:center;
+  padding:5px 6px;border-radius:var(--radius);transition:background var(--t);
 }
 .model-row:hover{background:var(--bg-hover)}
+.model-row.model-row-head{
+  padding:6px 6px 4px;background:transparent;border-bottom:1px solid var(--border);
+  margin-bottom:2px;pointer-events:none;position:sticky;top:0;z-index:1;
+  background:var(--bg);
+}
+.model-row.model-row-head:hover{background:var(--bg)}
+.mr-col-head{
+  font-size:11px;font-weight:600;color:var(--fg-tertiary);
+  text-transform:uppercase;letter-spacing:0.04em;padding:0 4px;
+}
 .model-row .mr-id,.model-row .mr-label{
   padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius);
   background:var(--bg);color:var(--fg);min-width:0;
@@ -368,9 +382,11 @@
 .model-row .mr-delete{
   width:22px;height:22px;border-radius:var(--radius);border:none;background:transparent;
   color:var(--fg-tertiary);cursor:pointer;font-size:13px;transition:background var(--t),color var(--t);
+  display:inline-flex;align-items:center;justify-content:center;padding:0;
 }
 .model-row .mr-delete:hover{background:var(--bg-hover);color:var(--red)}
 .model-row .mr-delete[hidden]{display:none}
+.model-row .mr-thinking-ph{display:inline-block}
 
 /* ── Settings: pipeline tab ── */
 .pipeline-presets{display:flex;flex-direction:column;gap:6px}

@@ -379,11 +379,9 @@ export async function submitIngest() {
       throw new Error(err.error || '\u63D0\u4EA4\u5931\u8D25');
     }
 
-    // 成功 → 立即关闭面板，启动后台进度追踪
-    const totalItems = hasUrls ? _ingestUrls.length + checkedBatch.length : checkedBatch.length;
-    const trackBatch = isBatch || totalItems > 1;
+    // 成功 → 立即关闭投喂面板；进度反馈改由 topbar 队列入口承担，不再自动弹 toast
     closeIngest();
-    startProgressTracking(trackBatch, trackBatch ? totalItems : 0);
+    if (typeof window.refreshIngestQueue === 'function') window.refreshIngestQueue();
   } catch (e) {
     toast('\u63D0\u4EA4\u5931\u8D25: ' + e.message);
     btn.disabled = false;
@@ -413,12 +411,15 @@ function stageMeta(st) {
 
 function renderStages(stages) {
   const host = $('itStages'); if (!host) return;
-  // Sort by canonical order, fall back to array order if unknown keys
-  const sorted = stages.slice().sort((a, b) => {
+  host.innerHTML = renderStagesHtml(stages);
+}
+
+function renderStagesHtml(stages) {
+  const sorted = (stages || []).slice().sort((a, b) => {
     const ia = STAGE_ORDER.indexOf(a.key); const ib = STAGE_ORDER.indexOf(b.key);
     return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
   });
-  host.innerHTML = sorted.map(st => {
+  return sorted.map(st => {
     const ki = STAGE_ORDER.indexOf(st.key);
     const prefix = ki >= 0 ? STAGE_NUM[ki] + ' ' : '';
     const icon = STAGE_ICONS[st.status] || '○';
@@ -427,6 +428,19 @@ function renderStages(stages) {
       <span class="stage-label">${prefix}${h(st.label || st.key || '')}</span>
       <span class="stage-meta">${h(stageMeta(st))}</span>
       <span class="stage-detail">${h(st.detail || '')}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderMultiTasks(items) {
+  const host = $('itStages'); if (!host) return;
+  host.innerHTML = items.map((t, i) => {
+    const running = (t.stages || []).find(st => st.status === 'running');
+    const title = t.article?.title || (running ? running.label : (t.message || t.id));
+    const cls = t.status === 'done' ? 'task-done' : (t.status === 'error' ? 'task-error' : 'task-running');
+    return `<div class="task-group ${cls}">
+      <div class="task-group-head"><span class="task-group-num">#${i+1}</span><span class="task-group-title">${h(title)}</span><span class="task-group-status">${h(t.status)}</span></div>
+      <div class="task-group-stages">${renderStagesHtml(t.stages)}</div>
     </div>`;
   }).join('');
 }
@@ -448,13 +462,14 @@ function startProgressTracking(isBatch, totalFiles) {
   $('itFill').style.width = '0%';
   // reset stages block (hidden by default)
   const stagesEl = $('itStages'); if (stagesEl) { stagesEl.innerHTML = ''; stagesEl.hidden = true; }
-  const expandBtn = $('itExpand'); if (expandBtn) { expandBtn.textContent = '▾'; expandBtn.setAttribute('aria-expanded', 'false'); expandBtn.style.display = isBatch ? 'none' : ''; }
+  const expandBtn = $('itExpand'); if (expandBtn) { expandBtn.textContent = '▾'; expandBtn.setAttribute('aria-expanded', 'false'); expandBtn.style.display = ''; }
   wireToastExpand();
 
   if (state.ipt) clearInterval(state.ipt);
 
   let fakeProgress = 5;
-  const endpoint = isBatch ? '/api/ingest/batch/status' : '/api/ingest/status';
+  // 单文件模式改用 /api/ingest/active 支持并发多任务；批量仍走 batch/status
+  const endpoint = isBatch ? '/api/ingest/batch/status' : '/api/ingest/active';
 
   state.ipt = setInterval(async () => {
     try {
@@ -474,30 +489,66 @@ function startProgressTracking(isBatch, totalFiles) {
           showProgressDone(true, s.completed + ' \u7BC7\u5DF2\u5165\u5E93' + (s.failed > 0 ? '\uFF0C' + s.failed + ' \u5931\u8D25' : ''));
         }
       } else {
-        // 单文件：优先使用 stages；没有则回退到 fakeProgress
-        if (Array.isArray(s.stages) && s.stages.length) {
-          renderStages(s.stages);
-          $('itFill').style.width = computeStagePct(s.stages) + '%';
-          // auto-expand on any error
-          if (s.stages.some(st => st.status === 'error')) {
-            const stgs = $('itStages'); const btn = $('itExpand');
-            if (stgs && stgs.hidden) { stgs.hidden = false; if (btn) { btn.textContent = '▴'; btn.setAttribute('aria-expanded', 'true'); } }
-          }
-          const running = s.stages.find(st => st.status === 'running');
-          if (running) $('itDetail').textContent = (running.label || running.key || '') + '...';
-        } else {
-          fakeProgress = Math.min(fakeProgress + 5 + Math.random() * 8, 85);
-          $('itFill').style.width = fakeProgress + '%';
+        // 多任务模式：/api/ingest/active 返回 {items:[]}
+        const items = Array.isArray(s.items) ? s.items : [];
+        const running = items.filter(t => t.status === 'compiling');
+        const finished = items.filter(t => t.status === 'done' || t.status === 'error');
+
+        if (items.length === 0) {
+          // 既无活跃任务也无最近完成 → 结束轮询
+          clearInterval(state.ipt); state.ipt = null;
+          return;
         }
 
-        if (s.status === 'done') {
+        // 单任务：显示主任务摘要；多任务：显示计数
+        if (items.length === 1) {
+          const t = items[0];
+          const stgs = t.stages || [];
+          if (stgs.length) {
+            renderStages(stgs);
+            $('itFill').style.width = computeStagePct(stgs) + '%';
+            if (stgs.some(st => st.status === 'error')) {
+              const host = $('itStages'); const btn = $('itExpand');
+              if (host && host.hidden) { host.hidden = false; if (btn) { btn.textContent = '▴'; btn.setAttribute('aria-expanded', 'true'); } }
+            }
+            const run = stgs.find(st => st.status === 'running');
+            $('itDetail').textContent = run ? ((run.label || run.key) + '...') : '';
+          }
+          if (t.status === 'done') {
+            $('itTitle').textContent = (t.article?.title || '新文章') + ' 已入库';
+            $('itFill').style.width = '100%';
+          } else if (t.status === 'error') {
+            $('itTitle').textContent = t.message || '编译失败';
+          } else {
+            $('itTitle').textContent = '编译中...';
+          }
+        } else {
+          // 多任务并发
+          renderMultiTasks(items);
+          const allStages = items.flatMap(t => t.stages || []);
+          $('itFill').style.width = computeStagePct(allStages) + '%';
+          $('itTitle').textContent = `${running.length} 个编译中 · ${finished.length} 完成`;
+          $('itDetail').textContent = running.length > 0 ? (running[0].stages?.find(st=>st.status==='running')?.label || '') : '';
+          // 多任务时默认展开
+          const host = $('itStages'); const btn = $('itExpand');
+          if (host && host.hidden) { host.hidden = false; if (btn) { btn.textContent = '▴'; btn.setAttribute('aria-expanded', 'true'); } }
+        }
+
+        // 全部结束：停止轮询 + 触发完成 UI
+        if (running.length === 0 && finished.length > 0) {
           clearInterval(state.ipt); state.ipt = null;
-          const artPath = s.article?.path || '';
-          const artTitle = s.article?.title || '\u65B0\u6587\u7AE0';
-          showProgressDone(true, artTitle + ' \u5DF2\u5165\u5E93', artPath);
-        } else if (s.status === 'error' || s.status === 'failed') {
-          clearInterval(state.ipt); state.ipt = null;
-          showProgressDone(false, s.message || '\u7F16\u8BD1\u5931\u8D25');
+          const lastDone = finished.filter(t => t.status === 'done').slice(-1)[0];
+          const anyError = finished.some(t => t.status === 'error');
+          if (items.length === 1 && lastDone) {
+            showProgressDone(true, (lastDone.article?.title || '新文章') + ' 已入库', lastDone.article?.path || '');
+          } else if (items.length > 1) {
+            const doneCnt = finished.filter(t => t.status === 'done').length;
+            const errCnt = finished.length - doneCnt;
+            showProgressDone(!anyError, `${doneCnt} 篇已入库${errCnt>0?`，${errCnt} 失败`:''}`);
+          } else if (anyError) {
+            const errTask = finished.find(t => t.status === 'error');
+            showProgressDone(false, errTask?.message || '编译失败');
+          }
         }
       }
     } catch {}
@@ -549,21 +600,7 @@ function hideProgress() {
 // ── 页面加载时恢复进行中的编译进度 ──
 
 export async function checkActiveIngest() {
-  try {
-    // 先检查批量任务
-    const batch = await api('/api/ingest/batch/status');
-    if (batch && batch.status === 'processing') {
-      startProgressTracking(true, batch.total);
-      // 立即同步当前进度到 UI
-      const pct = batch.total > 0 ? Math.round(batch.completed / batch.total * 100) : 0;
-      $('itFill').style.width = pct + '%';
-      $('itTitle').textContent = '\u7F16\u8BD1\u4E2D... ' + batch.completed + '/' + batch.total;
-      return;
-    }
-    // 再检查单文件任务
-    const task = await api('/api/ingest/status');
-    if (task && task.status === 'compiling') {
-      startProgressTracking(false, 0);
-    }
-  } catch {}
+  // 页面加载时不再自动弹出 ingest-toast；topbar 队列入口会显示进度
+  // 仅触发一次队列刷新，让队列按钮/徽标尽快出现
+  if (typeof window.refreshIngestQueue === 'function') window.refreshIngestQueue();
 }

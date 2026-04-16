@@ -30,22 +30,76 @@ export function switchSidebarTab(tab) {
   localStorage.setItem('kb-sidebar-tab', tab);
 }
 
+function fmtPageDate(ms) {
+  if (!ms) return '';
+  const d = new Date(ms);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return mm + '-' + dd;
+}
+
+function dateBucketKey(ms) {
+  if (!ms) return 'unknown';
+  const d = new Date(ms);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function dateBucketLabel(key) {
+  if (key === 'unknown') return '未知时间';
+  const [y, m, day] = key.split('-').map(Number);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const target = new Date(y, m - 1, day);
+  const diffDays = Math.round((today - target) / 86400000);
+  if (diffDays === 0) return '今天';
+  if (diffDays === 1) return '昨天';
+  if (diffDays > 1 && diffDays < 7) return diffDays + ' 天前';
+  if (y === today.getFullYear()) return m + '月' + day + '日';
+  return y + '年' + m + '月' + day + '日';
+}
+
 export async function updSidebarPages() {
   const sp = $('sidebarPages'); if (!sp) return;
   try {
     const tree = state.td || await api('/api/wiki/tree'); state.td = tree;
+    const all = [];
+    (tree || []).forEach(t => (t.children || []).forEach(c => all.push(c)));
+    all.sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
+    // group by date bucket, preserve sort order
+    const buckets = [];
+    const bucketMap = new Map();
+    all.forEach(c => {
+      const key = dateBucketKey(c.mtime);
+      let b = bucketMap.get(key);
+      if (!b) { b = { key, items: [] }; bucketMap.set(key, b); buckets.push(b); }
+      b.items.push(c);
+    });
     let s = '';
-    (tree || []).forEach(t => {
-      const folded = state.foldedTopics.has(t.name) ? 'folded' : '';
-      s += '<div class="sidebar-topic ' + folded + '" onclick="toggleFold(this,\'' + h(t.name) + '\')" title="' + h(t.name) + '">' + h(t.name) + ' <span class="topic-count">' + t.children.length + '</span></div>';
-      t.children.forEach(c => {
+    buckets.forEach(b => {
+      const folded = state.foldedDates.has(b.key) ? ' folded' : '';
+      s += '<div class="sidebar-date-head' + folded + '" onclick="toggleDateFold(this,\'' + h(b.key) + '\')">'
+        + '<span class="sidebar-date-label">' + h(dateBucketLabel(b.key)) + '</span>'
+        + '<span class="sidebar-date-count">' + b.items.length + ' 篇</span>'
+        + '<span class="sidebar-date-arr"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>'
+        + '</div>';
+      b.items.forEach(c => {
         const active = state.artPath === c.path ? ' active' : '';
-        const display = folded ? ' style="display:none"' : '';
-        s += '<div class="sidebar-page' + active + '" data-topic="' + h(t.name) + '"' + display + ' onclick="go(\'#/article/' + h(c.path) + '\')" title="' + h(c.title || c.file) + '"><span class="page-title">' + h(c.title || c.file) + '</span></div>';
+        const hidden = state.foldedDates.has(b.key) ? ' style="display:none"' : '';
+        s += '<div class="sidebar-page' + active + '" data-date="' + h(b.key) + '"' + hidden + ' onclick="go(\'#/article/' + h(c.path) + '\')" title="' + h(c.title || c.file) + '">'
+          + '<span class="page-title">' + h(c.title || c.file) + '</span>'
+          + '</div>';
       });
     });
     sp.innerHTML = s;
   } catch {}
+}
+
+export function toggleDateFold(el, key) {
+  const folded = el.classList.toggle('folded');
+  if (folded) state.foldedDates.add(key); else state.foldedDates.delete(key);
+  const sp = $('sidebarPages'); if (!sp) return;
+  sp.querySelectorAll('.sidebar-page[data-date="' + key.replace(/"/g, '\\"') + '"]').forEach(p => {
+    p.style.display = folded ? 'none' : '';
+  });
 }
 
 let previewTimer = null;

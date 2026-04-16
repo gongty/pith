@@ -8,7 +8,43 @@ export async function rArticle(c, p) {
   try {
     const res = await api('/api/wiki/article?path=' + encodeURIComponent(p));
     state.artMd = res.content || '';
-    const lines = state.artMd.split('\n');
+    // 安全兜底：内容过大或存在超长单行（通常是二进制/PDF 残留），切换为只读安全视图
+    const md = state.artMd;
+    const MAX_CHARS = 300000;
+    let maxLine = 0;
+    for (let i = 0, j = 0; i <= md.length; i++) {
+      if (i === md.length || md.charCodeAt(i) === 10) {
+        if (i - j > maxLine) maxLine = i - j;
+        j = i + 1;
+        if (maxLine > 20000) break;
+      }
+    }
+    if (md.length > MAX_CHARS || maxLine > 20000) {
+      const firstLine = md.split('\n', 1)[0] || '';
+      const title = firstLine.startsWith('#') ? firstLine.replace(/^#+\s*/, '') : (p.split('/').pop() || '').replace(/\.md$/, '');
+      let safe = '<div class="page-article"><div class="page-article-inner">';
+      safe += '<div class="article-title" style="pointer-events:none">' + h(title) + '</div>';
+      safe += '<div style="padding:12px 16px;margin:12px 0;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-hover);color:var(--fg-secondary);font-size:13px;line-height:1.6">'
+        + '此文章内容异常（约 ' + Math.round(md.length / 1024) + ' KB，可能包含未提取成功的二进制素材），已切换为只读安全视图，前 5000 字预览如下。建议删除并重新投喂来源。'
+        + '</div>';
+      safe += '<pre style="white-space:pre-wrap;word-break:break-word;font-size:12.5px;line-height:1.55;color:var(--fg-secondary);max-height:70vh;overflow:auto;padding:12px;border:1px solid var(--border);border-radius:var(--radius)">'
+        + h(md.slice(0, 5000))
+        + (md.length > 5000 ? '\n\n…（已截断）' : '')
+        + '</pre>';
+      safe += '</div></div>';
+      c.innerHTML = safe;
+      // 顶栏删除按钮照常提供
+      const topActs = $('topbarActions');
+      if (topActs && !document.getElementById('topbarDel')) {
+        const delBtn = document.createElement('button');
+        delBtn.id = 'topbarDel'; delBtn.className = 'topbar-btn'; delBtn.style.color = 'var(--fg-tertiary)';
+        delBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>';
+        delBtn.title = '删除文章'; delBtn.onclick = showDel;
+        topActs.insertBefore(delBtn, topActs.firstChild);
+      }
+      return;
+    }
+    const lines = md.split('\n');
     let title = '', bodyStart = 0;
     if (lines[0] && lines[0].startsWith('#')) { title = lines[0].replace(/^#+\s*/, ''); bodyStart = 1; while (bodyStart < lines.length && !lines[bodyStart].trim()) bodyStart++; }
     const bodyLines = lines.slice(bodyStart);
@@ -30,8 +66,8 @@ export async function rArticle(c, p) {
     const rendered = renderMd(bodyMd, p);
 
     let s = '<div class="page-article"><div class="page-article-inner">';
-    s += '<div class="article-title" contenteditable="true" id="artTitle" oninput="onArtChange()">' + h(title) + '</div>';
-    s += '<div class="article-body" contenteditable="true" id="artBody" oninput="onArtChange()">' + rendered + '</div>';
+    s += '<div class="article-title" contenteditable="true" spellcheck="false" autocorrect="off" autocapitalize="off" id="artTitle" oninput="onArtChange()">' + h(title) + '</div>';
+    s += '<div class="article-body" contenteditable="true" spellcheck="false" autocorrect="off" autocapitalize="off" id="artBody" oninput="onArtChange()">' + rendered + '</div>';
     s += await buildRelated(p);
     s += '</div>';
     s += buildArticleTOC(state.artMd);
@@ -51,6 +87,7 @@ export async function rArticle(c, p) {
     initTocSpy();
     setupSlashMenu();
     setupImageToolbar();
+    setupLinkNav();
   } catch (e) { c.innerHTML = '<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败: ' + h(e.message) + '</div>'; }
 }
 
@@ -466,6 +503,20 @@ function setupBlockPlusBtn(body) {
   document.addEventListener('selectionchange', updatePlus);
   body.addEventListener('input', () => setTimeout(updatePlus, 10));
   body.addEventListener('blur', () => setTimeout(() => { if (!document.activeElement || !document.activeElement.closest('.block-plus-btn')) _plusBtn.classList.remove('show'); }, 100));
+}
+
+/* ── Link navigation inside contenteditable ── */
+function setupLinkNav() {
+  const body = $('artBody'); if (!body) return;
+  body.addEventListener('click', e => {
+    const a = e.target.closest('a'); if (!a) return;
+    const href = a.getAttribute('href') || '';
+    if (!href) return;
+    // Internal hash route → navigate
+    if (href.startsWith('#/')) { e.preventDefault(); location.hash = href.slice(1); return; }
+    // External → open in new tab
+    if (/^https?:\/\//.test(href)) { e.preventDefault(); window.open(href, '_blank', 'noopener'); return; }
+  });
 }
 
 /* ── Image toolbar (resize + alignment) ── */

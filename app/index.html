@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="/css/components.css">
 <link rel="stylesheet" href="/css/pages.css">
 <link rel="stylesheet" href="/css/ingest.css">
+<link rel="stylesheet" href="/css/ingest-queue.css">
 <link rel="stylesheet" href="/css/autotask.css">
 </head>
 <body>
@@ -89,11 +90,21 @@
     <div class="topbar-breadcrumb" id="breadcrumb"></div>
     <div class="topbar-actions" id="topbarActions">
       <button class="topbar-btn" onclick="openSearch()" title="⌘K"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>搜索</button>
+      <button class="topbar-btn ingest-queue-btn" id="ingestQueueBtn" onclick="toggleIngestQueue()" title="投喂队列"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>队列<span class="ingest-queue-badge" id="ingestQueueBadge" hidden></span></button>
       <button class="topbar-btn topbar-btn-accent" onclick="openIngest()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>投喂</button>
     </div>
   </div>
   <div class="content" id="content"></div>
 </div>
+</div>
+
+<!-- Ingest queue panel -->
+<div class="ingest-queue-panel" id="ingestQueuePanel" hidden>
+  <div class="iq-head">
+    <span>投喂队列</span>
+    <button class="iq-close" onclick="toggleIngestQueue()" title="关闭"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+  </div>
+  <div class="iq-body" id="ingestQueueBody"></div>
 </div>
 
 <!-- Format toolbar -->
@@ -194,11 +205,10 @@
             </div>
           </div>
           <div id="modelListTable" class="model-list-table"></div>
-          <div class="settings-section-hint">内建模型不可删除；用途 (use) 决定预设如何映射：strong=最强、main=日常、fast=轻量。</div>
         </div>
       </div>
       <div class="modal-foot">
-        <button class="btn-outline" onclick="testConn()">测试连接</button>
+        <button class="btn-outline" id="testConnBtn" onclick="testConn()">测试连接</button>
         <button class="btn-sm-fill" onclick="saveSett()">保存</button>
       </div>
     </div>
@@ -210,7 +220,7 @@
             <button type="button" class="preset-btn" data-preset="fast">极速</button>
             <button type="button" class="preset-btn active" data-preset="balanced">平衡 <span class="preset-tag">推荐</span></button>
             <button type="button" class="preset-btn" data-preset="quality">最稳</button>
-            <span class="preset-custom-badge" id="presetCustomBadge" hidden>自定义</span>
+            <button type="button" class="preset-btn preset-btn-custom" data-preset="custom" hidden>自定义</button>
           </div>
         </div>
         <div class="pipeline-stages" id="pipelineStages"></div>

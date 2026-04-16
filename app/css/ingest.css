@@ -137,6 +137,17 @@
 .stage-row[data-status="skipped"] .stage-icon{color:var(--fg-tertiary);opacity:0.6}
 .stage-row[data-status="pending"] .stage-label{color:var(--fg-tertiary)}
 @keyframes stage-pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+/* 多任务并发分组 */
+.task-group{border:1px solid var(--border);border-radius:var(--radius);padding:6px 8px;margin-bottom:6px;background:var(--bg-hover)}
+.task-group.task-done{border-color:var(--green)}
+.task-group.task-error{border-color:var(--red)}
+.task-group-head{display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:4px}
+.task-group-num{color:var(--fg-tertiary);font-weight:500}
+.task-group-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg);font-weight:500}
+.task-group-status{color:var(--fg-tertiary);font-size:10.5px;text-transform:uppercase;letter-spacing:0.3px}
+.task-group.task-done .task-group-status{color:var(--green)}
+.task-group.task-error .task-group-status{color:var(--red)}
+.task-group-stages{display:flex;flex-direction:column;gap:0}
 [data-theme="dark"] .ingest-toast{box-shadow:0 4px 20px rgba(0,0,0,0.3)}
 @media(max-width:768px){
   .ingest-toast{bottom:72px;right:12px;left:12px;width:auto}

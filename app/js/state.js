@@ -19,6 +19,7 @@ const state = {
   undoTimer: null,
   undoData: null,
   foldedTopics: new Set(),
+  foldedDates: new Set(),
   batchFiles: [], // [{name,content,checked}]
   gs: null,       // graph state
 };

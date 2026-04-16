@@ -1,6 +1,7 @@
 config.json
 profile.json
 .api-key
-data/
+data/*
+!data/system-sources.json
 node_modules/
 start.sh

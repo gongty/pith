@@ -34,7 +34,12 @@ export async function loadModels(ddId, tagId) {
     const provKey = s.provider || 'local';
     const prov = s.providers && s.providers[provKey];
     if (prov) {
-      prov.models.forEach(m => { const active = (s.model === m) ? ' active' : ''; html += '<div class="chat-model-opt' + active + '" data-v="' + provKey + '|' + m + '" onclick="pickModel(this,\'' + ddId + '\',\'' + tagId + '\')">' + h(m) + '</div>'; });
+      prov.models.forEach(m => {
+        const id = (m && typeof m === 'object') ? m.id : m;
+        const label = (m && typeof m === 'object') ? (m.label || m.id) : m;
+        const active = (s.model === id) ? ' active' : '';
+        html += '<div class="chat-model-opt' + active + '" data-v="' + provKey + '|' + id + '" data-id="' + h(id) + '" onclick="pickModel(this,\'' + ddId + '\',\'' + tagId + '\')">' + h(label) + '</div>';
+      });
     }
     dd.innerHTML = html;
     const nameEl = document.getElementById(tagId.replace('Tag', 'Name'));

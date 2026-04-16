@@ -2,17 +2,18 @@
 import { $, go } from './utils.js';
 import state from './state.js';
 import { initTheme, toggleTheme } from './theme.js';
-import { toggleSidebar, initSidebar, initSidebarPreview, toggleFold, switchSidebarTab } from './sidebar.js';
+import { toggleSidebar, initSidebar, initSidebarPreview, toggleFold, toggleDateFold, switchSidebarTab } from './sidebar.js';
 import { toggleDD, pickModel } from './composer.js';
 import { openSearch, closeSearch, searchFor, handleSearchKeydown, initSearchInput } from './search.js';
 import { openSettings, closeSettings, onProvChange, saveSett, testConn, switchSettingsTab, initSidebarTitle } from './settings.js';
 import { openIngest, closeIngest, submitIngest, batchToggleAll, batchFileToggle, initIngestDragDrop, checkActiveIngest, removeIngestUrl } from './ingest.js';
+import { initIngestQueue, toggleIngestQueue } from './ingest-queue.js';
 import { render } from './router.js';
 import { dashAsk } from './pages/dashboard.js';
 import { chatSend, delChat, archiveChat, precipitateMsg, precipitateConv, closePrecipModal } from './pages/chat.js';
 import { toggleToc, scrollToH, onArtChange, fmtCmd, closeDel, doDel, newArticle, pickSlash, closeSlashMenu, imgAlign, imgSize, deselectImg } from './pages/article.js';
 import { gZoom, applyGF } from './pages/graph.js';
-import { openAutotaskModal, closeAutotaskModal, closeAutotaskDetail, runAutotask, toggleAutotaskEnabled, deleteAutotask, testAutotaskSource, showRunDetail, switchAutotaskTab, switchHistoryRange, pickTemplate, submitWizardNL, submitWizardIterate, backToWizardStep1, toggleWizardAdvanced, confirmWizardCreate, editFieldInline, setDraftField } from './pages/autotask.js';
+import { openAutotaskModal, closeAutotaskModal, closeAutotaskDetail, runAutotask, toggleAutotaskEnabled, deleteAutotask, switchAutotaskTab, switchHistoryRange, backToWizardStep1, toggleWizardAdvanced, submitConfigureIntent, confirmCreateTask, openSourcePicker, closeSourcePicker, confirmSourcePicker, submitFeedback, addSourceToDraft, removeSourceFromDraft, removeMustExclude, toggleRunExpand } from './pages/autotask.js';
 
 /* ── Expose functions to inline onclick handlers ── */
 window.go = go;
@@ -45,6 +46,7 @@ window.newArticle = newArticle;
 window.pickSlash = pickSlash;
 window.closeSlashMenu = closeSlashMenu;
 window.toggleFold = toggleFold;
+window.toggleDateFold = toggleDateFold;
 window.switchSidebarTab = switchSidebarTab;
 window.gZoom = gZoom;
 window.applyGF = applyGF;
@@ -56,6 +58,7 @@ window.submitIngest = submitIngest;
 window.batchToggleAll = batchToggleAll;
 window.removeIngestUrl = removeIngestUrl;
 window.batchFileToggle = batchFileToggle;
+window.toggleIngestQueue = toggleIngestQueue;
 window.imgAlign = imgAlign;
 window.imgSize = imgSize;
 window.deselectImg = deselectImg;
@@ -65,18 +68,20 @@ window.closeAutotaskDetail = closeAutotaskDetail;
 window.runAutotask = runAutotask;
 window.toggleAutotaskEnabled = toggleAutotaskEnabled;
 window.deleteAutotask = deleteAutotask;
-window.testAutotaskSource = testAutotaskSource;
-window.showRunDetail = showRunDetail;
 window.switchAutotaskTab = switchAutotaskTab;
 window.switchHistoryRange = switchHistoryRange;
-window.pickTemplate = pickTemplate;
-window.submitWizardNL = submitWizardNL;
-window.submitWizardIterate = submitWizardIterate;
 window.backToWizardStep1 = backToWizardStep1;
 window.toggleWizardAdvanced = toggleWizardAdvanced;
-window.confirmWizardCreate = confirmWizardCreate;
-window.editFieldInline = editFieldInline;
-window.setDraftField = setDraftField;
+window.submitConfigureIntent = submitConfigureIntent;
+window.confirmCreateTask = confirmCreateTask;
+window.openSourcePicker = openSourcePicker;
+window.closeSourcePicker = closeSourcePicker;
+window.confirmSourcePicker = confirmSourcePicker;
+window.submitFeedback = submitFeedback;
+window.addSourceToDraft = addSourceToDraft;
+window.removeSourceFromDraft = removeSourceFromDraft;
+window.removeMustExclude = removeMustExclude;
+window.toggleRunExpand = toggleRunExpand;
 
 /* ── Sidebar resize ── */
 (function () {
@@ -105,7 +110,7 @@ document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openSearch(); }
   if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); go('#/'); }
   if ((e.metaKey || e.ctrlKey) && e.key === 'i') { e.preventDefault(); openIngest(); }
-  if (e.key === 'Escape') { closeSearch(); closeIngest(); closeSettings(); closeDel(); closePrecipModal(); deselectImg(); closeAutotaskModal(); closeAutotaskDetail(); }
+  if (e.key === 'Escape') { closeSearch(); closeIngest(); closeSettings(); closeDel(); closePrecipModal(); deselectImg(); closeSourcePicker(); closeAutotaskModal(); closeAutotaskDetail(); }
   handleSearchKeydown(e);
 });
 
@@ -117,5 +122,6 @@ initSearchInput();
 initIngestDragDrop();
 initSidebarPreview();
 checkActiveIngest();
+initIngestQueue();
 window.addEventListener('hashchange', render);
 render();

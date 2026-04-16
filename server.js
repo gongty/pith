@@ -7,10 +7,36 @@ const os = require('os');
 const crypto = require('crypto');
 
 // ── 多格式导入依赖 ──
-let pdfParse, Readability, JSDOM;
-try { pdfParse = require('pdf-parse'); } catch {}
+// pdf-parse v2 导出 { PDFParse } 类；v1 导出一个函数。这里兼容两者。
+let PdfParseFn = null;   // v1 函数
+let PdfParseCls = null;  // v2 类
+let pdfParse = null;     // 仅做"是否可用"的标志位
+try {
+  const mod = require('pdf-parse');
+  if (typeof mod === 'function') { PdfParseFn = mod; pdfParse = mod; }
+  else if (mod && mod.PDFParse) { PdfParseCls = mod.PDFParse; pdfParse = mod; }
+} catch {}
+let Readability, JSDOM;
 try { ({ Readability } = require('@mozilla/readability')); } catch {}
 try { ({ JSDOM } = require('jsdom')); } catch {}
+
+// 统一的 PDF 文本提取：兼容 v1 / v2
+async function parsePdfBuffer(buf) {
+  if (PdfParseCls) {
+    const parser = new PdfParseCls({ data: buf });
+    try {
+      const [textRes, infoRes] = await Promise.all([parser.getText(), parser.getInfo().catch(() => null)]);
+      return { text: textRes.text || '', info: (infoRes && infoRes.info) || {} };
+    } finally {
+      try { await parser.destroy(); } catch {}
+    }
+  }
+  if (PdfParseFn) {
+    const data = await PdfParseFn(buf);
+    return { text: data.text || '', info: data.info || {} };
+  }
+  throw new Error('pdf-parse 未安装，请运行 npm install pdf-parse');
+}
 
 const ROOT = __dirname;  // wiki-app/ is the project root
 const WIKI = path.join(ROOT, 'data', 'wiki');
@@ -30,6 +56,39 @@ const CHATS = path.join(ROOT, 'data', 'chats');
 fs.mkdirSync(CHATS, { recursive: true });
 const AUTOTASKS_DIR = path.join(ROOT, 'data', 'autotasks');
 fs.mkdirSync(AUTOTASKS_DIR, { recursive: true });
+
+// ── 崩溃诊断 & 访问日志 ──
+// 目的：进程挂掉时能还原现场（最近请求 + 堆栈 + 触发来源 + 信号）
+const LOGS_DIR = path.join(ROOT, 'data', 'logs');
+fs.mkdirSync(LOGS_DIR, { recursive: true });
+const CRASH_LOG = path.join(LOGS_DIR, 'crash.log');
+const ACCESS_LOG = path.join(LOGS_DIR, 'access.log');
+const __recentRequests = []; // ring buffer，崩溃时全量 dump
+function recordRequest(r) {
+  __recentRequests.push(r);
+  if (__recentRequests.length > 30) __recentRequests.shift();
+}
+function __diagAppend(file, msg) { try { fs.appendFileSync(file, msg + '\n'); } catch {} }
+function crashLog(label, err) {
+  const ts = new Date().toISOString();
+  const stack = err && err.stack ? err.stack : (err && err.message ? err.message : String(err));
+  const reqDump = __recentRequests.length
+    ? __recentRequests.map(r => `  - ${r.startedAt} ${r.method} ${r.url} status=${r.status || '?'} dur=${r.duration != null ? r.duration + 'ms' : 'in-flight'}`).join('\n')
+    : '  (none)';
+  const body = `[${ts}] ${label}\nrecent requests:\n${reqDump}\nstack:\n${stack}\n---\n`;
+  __diagAppend(CRASH_LOG, body);
+  try { process.stderr.write(body); } catch {}
+}
+process.on('uncaughtException', err => { crashLog('UNCAUGHT_EXCEPTION', err); });
+process.on('unhandledRejection', err => { crashLog('UNHANDLED_REJECTION', err); });
+['SIGTERM','SIGINT','SIGHUP','SIGQUIT'].forEach(sig => {
+  process.on(sig, () => {
+    __diagAppend(CRASH_LOG, `[${new Date().toISOString()}] SIGNAL ${sig} received, exiting\n---\n`);
+    process.exit(sig === 'SIGINT' ? 130 : 143);
+  });
+});
+process.on('exit', code => { __diagAppend(CRASH_LOG, `[${new Date().toISOString()}] process exit code=${code}\n---\n`); });
+__diagAppend(CRASH_LOG, `[${new Date().toISOString()}] STARTUP pid=${process.pid} node=${process.version}\n---\n`);
 
 // ── 内置编译规则（原 SKILL.md） ──
 
@@ -119,18 +178,14 @@ const BUILTIN_PROVIDERS = {
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     format: 'openai',
     defaultModel: 'qwen3.6-plus',
+    // 精简为 5 个主力模型（strong ×2 + main ×2 + fast ×1）
+    // 视觉 qwen-vl-max-latest 在 compileArticle 里硬编码兜底，无需列在这里
     models: [
-      { id: 'qwen3-max',          label: 'Qwen3 Max',          use: 'strong',  thinkingCapable: true,  defaultThinking: false },
-      { id: 'qwen3.6-plus',       label: 'Qwen 3.6 Plus',      use: 'main',    thinkingCapable: true,  defaultThinking: false },
-      { id: 'qwen-plus-latest',   label: 'Qwen Plus (latest)', use: 'main',    thinkingCapable: true,  defaultThinking: false },
-      { id: 'qwen3.5-plus',       label: 'Qwen 3.5 Plus',      use: 'main',    thinkingCapable: true,  defaultThinking: false },
-      { id: 'qwen3.5-flash',      label: 'Qwen 3.5 Flash',     use: 'fast',    thinkingCapable: true,  defaultThinking: false },
-      { id: 'qwen-turbo-latest',  label: 'Qwen Turbo',         use: 'fast',    thinkingCapable: true,  defaultThinking: false },
-      { id: 'qwen-flash',         label: 'Qwen Flash',         use: 'fast',    thinkingCapable: true,  defaultThinking: false },
-      { id: 'qwen3-coder-plus',   label: 'Qwen3 Coder',        use: 'code' },
-      { id: 'qwen-long',          label: 'Qwen Long (10M)',    use: 'longctx' },
-      { id: 'qwen-vl-max-latest', label: 'Qwen VL Max',        use: 'vision' },
-      { id: 'qwen3-vl-plus',      label: 'Qwen3 VL Plus',      use: 'vision' }
+      { id: 'qwen3-max',        label: 'Qwen3 Max',        use: 'strong', thinkingCapable: true, defaultThinking: false },
+      { id: 'glm-5.1',          label: 'GLM-5.1',          use: 'strong', thinkingCapable: true, defaultThinking: true  },
+      { id: 'qwen3.6-plus',     label: 'Qwen 3.6 Plus',    use: 'main',   thinkingCapable: true, defaultThinking: false },
+      { id: 'kimi-k2.5',        label: 'Kimi K2.5',        use: 'main',   thinkingCapable: true, defaultThinking: false },
+      { id: 'qwen-plus-latest', label: 'Qwen Plus (快/省)', use: 'fast',   thinkingCapable: true, defaultThinking: false }
     ]
   },
   openrouter: {
@@ -657,8 +712,15 @@ function slugifyTitle(title) {
   s = s.replace(/^-|-$/g, '');
   s = s.toLowerCase();
   if (!s) s = `article-${Date.now()}`;
-  // 限长
-  if (s.length > 80) s = s.slice(0, 80).replace(/-$/, '');
+  // 限长：优先在最近的词边界（'-'）切断，避免把词切到一半
+  if (s.length > 80) {
+    const head = s.slice(0, 80);
+    const lastDash = head.lastIndexOf('-');
+    // 只有切点不算太靠前（至少保留一半长度）时，才在词边界切
+    if (lastDash >= 40) s = head.slice(0, lastDash);
+    else s = head;
+    s = s.replace(/-$/, '');
+  }
   return s + '.md';
 }
 
@@ -771,47 +833,18 @@ async function runCompilePipeline(topicDir, filename, filePath, task, overrides)
   const langName = LANG_MAP[wikiLang] || wikiLang;
   const langInstruction = wikiLang === 'auto' ? '跟随原文语言（原文是什么语言就用什么语言输出）' : langName;
 
-  // ─ Stage 1: title ─
-  let articleTitle = '';
+  // ─ 原文 H1（仅作为失败兜底；不作为最终标题，真正的标题由 content 阶段生成） ─
+  const rawH1Match = rawBody.match(/^#\s+(.+)$/m);
+  const rawH1 = rawH1Match ? rawH1Match[1].trim() : '';
+  const fallbackTitle = rawH1 || path.basename(filename, path.extname(filename)) || 'untitled';
+
+  // ─ Stage 1: title（占位，真正提取在 content 之后） ─
   {
-    const cfgT = stagesCfg.title || { source: 'code' };
-    const s = startStage(task, 'title', '提取标题', { source: cfgT.source });
-    try {
-      if (cfgT.source === 'code' || !cfgT.source) {
-        const m = rawBody.match(/^#\s+(.+)$/m);
-        if (m) { articleTitle = m[1].trim(); doneStage(s, { detail: articleTitle }); }
-        else {
-          // Fallback: LLM pick
-          const titleModel = cfgT.model || pickModelByUse(providerKey, 'fast', config);
-          const resp = await callLLM(
-            '你是一个标题提取助手。根据内容给一个简洁的中文标题（≤30 字），只输出标题本身，不要加引号或解释。',
-            rawBody.slice(0, 4000),
-            { ...(overrides || {}), model: titleModel },
-            { maxTokens: 200, temperature: 0.2 }
-          );
-          articleTitle = (resp || '').trim().split('\n')[0].replace(/^#+\s*/, '').slice(0, 80);
-          s.source = 'llm_fallback';
-          doneStage(s, { detail: articleTitle });
-        }
-      } else if (cfgT.source === 'llm') {
-        const titleModel = cfgT.model || pickModelByUse(providerKey, 'fast', config);
-        const resp = await callLLM(
-          '你是一个标题提取助手。根据内容给一个简洁的中文标题（≤30 字），只输出标题本身。',
-          rawBody.slice(0, 4000),
-          { ...(overrides || {}), model: titleModel },
-          { maxTokens: 200, temperature: 0.2 }
-        );
-        articleTitle = (resp || '').trim().split('\n')[0].replace(/^#+\s*/, '').slice(0, 80);
-        doneStage(s, { detail: articleTitle });
-      }
-    } catch (e) {
-      errorStage(s, e);
-      articleTitle = path.basename(filename, path.extname(filename)) || 'untitled';
-    }
-    if (!articleTitle) articleTitle = path.basename(filename, path.extname(filename)) || 'untitled';
+    const s = startStage(task, 'title', '提取标题', { source: 'piggyback_on_content' });
+    doneStage(s, { detail: '由 content 阶段 LLM 生成，content 完成后提取' });
   }
 
-  // ─ Stage 2: topic ─
+  // ─ Stage 2: topic（不依赖 articleTitle，只用 rawBody） ─
   let articleTopic = topicDir || 'general';
   {
     const cfgT = stagesCfg.topic || { source: 'user' };
@@ -821,7 +854,7 @@ async function runCompilePipeline(topicDir, filename, filePath, task, overrides)
         const topicModel = cfgT.model || pickModelByUse(providerKey, 'fast', config);
         const resp = await callLLM(
           '你是一个主题分类助手。从候选主题中选择最合适的一个（返回 kebab-case 英文目录名，不加引号和解释）。若都不合适，返回一个新的 kebab-case 英文名。',
-          `## 已有主题\n${existingTopics.join(', ') || '（暂无）'}\n\n## 内容标题\n${articleTitle}\n\n## 内容摘要\n${rawBody.slice(0, 1500)}`,
+          `## 已有主题\n${existingTopics.join(', ') || '（暂无）'}\n\n## 内容摘要\n${rawBody.slice(0, 2000)}`,
           { ...(overrides || {}), model: topicModel },
           { maxTokens: 60, temperature: 0.2 }
         );
@@ -834,21 +867,7 @@ async function runCompilePipeline(topicDir, filename, filePath, task, overrides)
     }
   }
 
-  // ─ Stage 3: filename ─
-  let articleFilename = filename ? filename.replace(/\.(txt|md|json)$/i, '.md') : '';
-  {
-    const cfgF = stagesCfg.filename || { source: 'code' };
-    const s = startStage(task, 'filename', '生成文件名', { source: cfgF.source });
-    try {
-      articleFilename = slugifyTitle(articleTitle);
-      doneStage(s, { detail: articleFilename });
-    } catch (e) {
-      errorStage(s, e);
-      articleFilename = `article-${Date.now()}.md`;
-    }
-  }
-
-  // ─ Stage 4 + 5 并行：content + summary ─
+  // ─ Stage 3 + 4 并行：content + summary ─
   const cfgC = stagesCfg.content || { model: pickModelByUse(providerKey, 'main', config), thinking: false, stream: true, maxTokens: 16384 };
   const cfgS = stagesCfg.summary || { source: 'llm', model: pickModelByUse(providerKey, 'fast', config), maxLength: 30 };
 
@@ -857,7 +876,7 @@ async function runCompilePipeline(topicDir, filename, filePath, task, overrides)
   const contentSystemPrompt = `你是知识库编译助手。将原始素材编译为结构清晰、信息保真的纯 Markdown 知识库文章。
 
 ## 文章模板
-# ${articleTitle}
+# <你为这篇文章撰写的精炼标题>
 > 来源：作者/机构，日期
 > 原文：[${filename}](../../raw/${topicDir}/${filename})
 
@@ -875,10 +894,18 @@ async function runCompilePipeline(topicDir, filename, filePath, task, overrides)
 5. 决策要有 Why：如果原文提到"做了 X"，必须保留"为什么做 X"的理由
 6. 不要发明内容：只编译原文中有的信息，不添加原文没有的分析
 
+## 标题要求（非常重要）
+- 第一行必须是 "# <标题>" 格式的知识库文章标题
+- 标题由你根据全文内容原创撰写，不是照抄原文 H1 或网页标题
+- 标题语言：${langInstruction}
+- 长度 ≤ 30 个字符，概括文章核心价值/主题
+- 禁止包含：站点品牌名（如 "知乎 - "、"- CSDN博客"、"| Medium"）、URL 残片、作者前缀、"译"/"转载"等元信息
+- 禁止以引号、书名号、括号包裹整个标题
+- 好的标题：简洁、信息量大、读者一眼能看出在讲什么
+
 ## 输出要求（重要）
 - 输出**纯 Markdown 文章**，不要用 JSON 包裹、不要用代码块 fence 包裹整篇文章
 - **不要写 See Also 章节**（系统会自动追加）
-- 第一行就是 "# ${articleTitle}"
 - 输出语言：${langInstruction}
 - 已有主题：${existingTopics.join(', ') || '（暂无）'}${bioContext}`;
 
@@ -949,13 +976,59 @@ async function runCompilePipeline(topicDir, filename, filePath, task, overrides)
   const [contentResp, summaryResp] = await Promise.all([contentP, summaryP]);
 
   let articleContent = contentResp;
+  let articleTitle = '';
   let contentErrored = !articleContent;
 
-  // 如果 content 彻底失败，用 rawBody 作为 fallback
+  // 如果 content 彻底失败，用 rawBody 作为 fallback（截断 + 去二进制）
   if (!articleContent) {
-    articleContent = `# ${articleTitle}\n\n> 注意：正文编译失败，以下为原始素材。\n\n${rawBody}`;
+    const MAX_FALLBACK = 10000;
+    // 去掉控制字符（PDF/二进制残留），保留常见空白
+    let safeRaw = String(rawBody || '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+    // 如果出现 PDF magic 或大段非文本，视为不可用
+    const looksBinary = /%PDF-|stream\s*\n.{500,}endstream/.test(safeRaw) || (safeRaw.length > 0 && (safeRaw.match(/[\u4e00-\u9fff\w\s]/g) || []).length / safeRaw.length < 0.5);
+    if (looksBinary) {
+      safeRaw = '[原始素材为二进制/无法识别的内容，已省略。请检查素材来源或改用其他格式重试]';
+    } else if (safeRaw.length > MAX_FALLBACK) {
+      safeRaw = safeRaw.slice(0, MAX_FALLBACK) + `\n\n[已截断：原始素材共 ${safeRaw.length} 字，仅保留前 ${MAX_FALLBACK} 字]`;
+    }
+    articleTitle = fallbackTitle;
+    articleContent = `# ${articleTitle}\n\n> 注意：正文编译失败，以下为原始素材（已清理截断）。\n\n${safeRaw}`;
   } else {
     articleContent = stripOuterCodeFences(articleContent);
+    // 从 content 第一行 "# ..." 提取 LLM 生成的标题
+    const titleMatch = articleContent.match(/^\s*#\s+(.+?)\s*$/m);
+    if (titleMatch) {
+      articleTitle = titleMatch[1]
+        .trim()
+        // 去掉常见站点品牌残留
+        .replace(/^[《「『"'"']|[》」』"'"']$/g, '')
+        .replace(/\s*[\-—|–]\s*(知乎|CSDN[^|]*|简书|掘金|博客园|Medium|Substack|微信公众号).*$/i, '')
+        .replace(/\s*\|\s*.*$/, '')
+        .trim();
+      if (articleTitle.length > 80) articleTitle = articleTitle.slice(0, 80);
+    }
+    if (!articleTitle) articleTitle = fallbackTitle;
+    // 规范化正文第一行为 "# <articleTitle>"
+    articleContent = articleContent.replace(/^\s*#\s+.+\s*$/m, `# ${articleTitle}`);
+  }
+
+  // ─ Stage 5: filename（移到 content 之后，使用 LLM 生成的标题） ─
+  let articleFilename;
+  {
+    const s = startStage(task, 'filename', '生成文件名', { source: 'code' });
+    try {
+      articleFilename = slugifyTitle(articleTitle);
+      doneStage(s, { detail: articleFilename });
+    } catch (e) {
+      errorStage(s, e);
+      articleFilename = `article-${Date.now()}.md`;
+    }
+  }
+
+  // ─ 回填 title 阶段 detail（让前端 UI 能显示最终标题） ─
+  {
+    const titleStage = (task.stages || []).find(st => st.key === 'title');
+    if (titleStage) titleStage.detail = articleTitle;
   }
 
   // summary fallback: 从正文第一段抽取
@@ -1579,19 +1652,209 @@ function parseLogEntries() {
 
 // ── Ingest 状态 ──
 let taskQueue = [];
-let batchProgress = null;
-// Shape: { id, total, completed, failed, currentFile, status, startedAt, files: [{name, status, error?}] }
 let writeLock = Promise.resolve(); // 串行锁：保护 index.md/log.md 并发写入
+
+// 全局并发池：默认 10，环境变量覆盖
+const INGEST_CONCURRENCY = Number(process.env.WIKI_INGEST_CONCURRENCY) || 10;
+let activeCount = 0;
+
+// 测试 hook：允许用 __test.setProcessTask 覆盖真实 processTask
+let _processTaskImpl = null;
+
+function genTaskId() {
+  return Date.now().toString(36) + '-' + crypto.randomBytes(2).toString('hex');
+}
 
 function latestTask() {
   return taskQueue.length ? taskQueue[taskQueue.length - 1] : null;
 }
 
+// 只用于 autotask / precipitate：直接创建 processing 状态的 task，不走并发池（调用方自己 await compileArticle）
 function pushTask(type) {
-  const task = { id: Date.now().toString(36), status: 'compiling', message: '编译中...', type: type || 'ingest', created: null, startedAt: new Date().toISOString() };
+  const task = {
+    id: genTaskId(),
+    status: 'processing',
+    message: '编译中...',
+    type: type || 'ingest',
+    kind: type || 'ingest',
+    name: type || 'ingest',
+    created: null,
+    submittedAt: new Date().toISOString(),
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    batchId: null,
+    stages: [],
+  };
   taskQueue.push(task);
-  if (taskQueue.length > 20) taskQueue = taskQueue.slice(-20);
+  _trimQueue();
   return task;
+}
+
+// 新的 enqueue：入队为 pending，由 tryDispatch 调度
+function enqueueTask(payload, opts) {
+  opts = opts || {};
+  const kind = opts.kind || 'ingest';
+  const task = {
+    id: genTaskId(),
+    kind,
+    type: kind,
+    status: 'pending',
+    name: opts.name || kind,
+    submittedAt: new Date().toISOString(),
+    startedAt: null,
+    finishedAt: null,
+    batchId: opts.batchId || null,
+    batchIndex: typeof opts.batchIndex === 'number' ? opts.batchIndex : null,
+    message: '排队中...',
+    stages: [],
+    created: null,
+    payload,
+  };
+  taskQueue.push(task);
+  _trimQueue();
+  tryDispatch();
+  return task;
+}
+
+// cap 200，pending/processing 永不剔除；超过时只剔除最老的 done/error/partial
+function _trimQueue() {
+  if (taskQueue.length <= 200) return;
+  const keep = taskQueue.filter(t => t.status === 'pending' || t.status === 'processing');
+  const done = taskQueue
+    .filter(t => t.status !== 'pending' && t.status !== 'processing')
+    .slice(-(Math.max(200 - keep.length, 0)));
+  taskQueue = keep.concat(done);
+}
+
+function tryDispatch() {
+  while (activeCount < INGEST_CONCURRENCY) {
+    const next = taskQueue.find(t => t.status === 'pending');
+    if (!next) break;
+    activeCount++;
+    next.status = 'processing';
+    next.startedAt = new Date().toISOString();
+    next.message = '编译中...';
+    Promise.resolve()
+      .then(() => processTask(next))
+      .catch(e => {
+        console.error('[ingest] processTask 异常', e);
+        next.status = 'error';
+        next.message = String(e && e.message || e);
+        next.finishedAt = new Date().toISOString();
+      })
+      .finally(() => {
+        if (!next.finishedAt) next.finishedAt = new Date().toISOString();
+        activeCount--;
+        tryDispatch();
+      });
+  }
+}
+
+// processTask：模块级 dispatcher，默认走 _defaultProcessTask，测试可覆盖
+async function processTask(task) {
+  if (_processTaskImpl) return _processTaskImpl(task);
+  return _defaultProcessTask(task);
+}
+
+// _defaultProcessTask：从 task.payload 提取内容 → 写 raw → compileArticle
+async function _defaultProcessTask(task) {
+  task.status = 'processing';
+  if (!task.startedAt) task.startedAt = new Date().toISOString();
+  task.message = '编译中...';
+
+  const payload = task.payload || {};
+  const { type, content, topic, filename, url: itemUrl, modelOverrides } = payload;
+  const topicDir = topic && topic !== 'auto' ? topic : 'general';
+  const dir = path.join(RAW, topicDir);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch (e) {
+    task.status = 'error';
+    task.message = 'mkdir 失败: ' + e.message;
+    task.finishedAt = new Date().toISOString();
+    return;
+  }
+
+  const date = new Date().toISOString().slice(0, 10);
+  const isBinaryType = ['pdf', 'image', 'audio', 'video'].includes(type);
+
+  let extractedText;
+  try {
+    extractedText = await extractContent(type, content, filename, itemUrl, dir);
+  } catch (extractErr) {
+    task.status = 'error';
+    task.message = '内容提取失败: ' + extractErr.message;
+    task.finishedAt = new Date().toISOString();
+    return;
+  }
+
+  let slug = 'source';
+  if (type === 'url') {
+    slug = (itemUrl || content || '').replace(/https?:\/\//, '').replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-').slice(0, 40);
+  } else if (isBinaryType && filename) {
+    slug = filename.replace(/\.[^.]+$/, '').replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-').slice(0, 40) || type;
+  } else {
+    slug = (extractedText.slice(0, 40).replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-') || 'text');
+  }
+  const rawFilename = `${date}-${slug}.md`;
+  const filePath = path.join(dir, rawFilename);
+
+  const sourceLabel = isBinaryType
+    ? `${type} file: ${filename || 'unknown'}`
+    : (type === 'url' ? (itemUrl || content) : 'user input');
+  const rawContent = `# Source\n\n> Source: ${sourceLabel}\n> Collected: ${date}\n> Type: ${type}\n\n${extractedText}`;
+  try {
+    fs.writeFileSync(filePath, rawContent, 'utf-8');
+  } catch (e) {
+    task.status = 'error';
+    task.message = '写入 raw 失败: ' + e.message;
+    task.finishedAt = new Date().toISOString();
+    return;
+  }
+
+  try {
+    await compileArticle(topicDir, rawFilename, filePath, task, modelOverrides);
+  } catch (e) {
+    task.status = 'error';
+    task.message = '编译失败: ' + (e && e.message || e);
+  }
+  task.finishedAt = new Date().toISOString();
+}
+
+// 对外暴露的 status 映射：pending/processing 对外显示为 compiling，兼容前端判定
+function externalStatus(s) {
+  if (s === 'pending' || s === 'processing') return 'compiling';
+  return s;
+}
+
+function getBatchSummary(batchId) {
+  const tasks = taskQueue.filter(t => t.batchId === batchId);
+  if (!tasks.length) return null;
+  const total = tasks.length;
+  const completed = tasks.filter(t => ['done', 'error', 'partial'].includes(t.status)).length;
+  const failed = tasks.filter(t => t.status === 'error').length;
+  const status = completed < total ? 'processing' : 'done';
+  const startedAt = tasks.map(t => t.submittedAt).sort()[0];
+  const current = tasks.find(t => t.status === 'processing');
+  const currentFile = current ? current.name : tasks[tasks.length - 1].name;
+  const files = tasks.map(t => ({
+    name: t.name,
+    status: t.status === 'partial' ? 'done' : (t.status === 'pending' ? 'pending' : t.status),
+    error: t.status === 'error' ? t.message : undefined,
+  }));
+  const elapsed = Date.now() - new Date(startedAt).getTime();
+  const avgPerFile = completed > 0 ? elapsed / completed : 0;
+  const estimatedRemaining = completed > 0
+    ? Math.round(avgPerFile * (total - completed) / 1000)
+    : null;
+  return { id: batchId, total, completed, failed, status, startedAt, currentFile, files, estimatedRemaining };
+}
+
+function findLatestBatchId() {
+  for (let i = taskQueue.length - 1; i >= 0; i--) {
+    if (taskQueue[i].batchId) return taskQueue[i].batchId;
+  }
+  return null;
 }
 
 // ── HTML 文本提取 ──
@@ -1608,16 +1871,15 @@ function stripHtml(html) {
 // ── 多格式提取函数 ──
 
 async function extractPDF(b64) {
-  if (!pdfParse) throw new Error('pdf-parse 未安装，请运行 npm install pdf-parse');
   const buf = Buffer.from(b64, 'base64');
-  const data = await pdfParse(buf);
-  if (!data.text || data.text.trim().length < 10) {
+  const { text } = await parsePdfBuffer(buf);
+  if (!text || text.trim().length < 10) {
     throw new Error('PDF 文本提取结果为空，该文件可能是扫描件（需要 OCR）');
   }
-  return data.text;
+  return text;
 }
 
-function fetchHTML(url) {
+function fetchBuffer(url) {
   const isWechat = /mp\.weixin\.qq\.com/.test(url);
   const args = ['-sL', '-m', '30'];
   if (isWechat) {
@@ -1626,17 +1888,31 @@ function fetchHTML(url) {
     args.push('-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
     args.push('-H', 'Accept-Language: zh-CN,zh;q=0.9,en;q=0.8');
     args.push('-H', 'Cache-Control: no-cache');
+  } else {
+    // 通用浏览器头，避免部分站点直接 403；Accept 包含 PDF
+    args.push('-H', 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+    args.push('-H', 'Accept: text/html,application/xhtml+xml,application/pdf,application/xml;q=0.9,*/*;q=0.8');
   }
   args.push(url);
   return new Promise((resolve, reject) => {
     const { spawn } = require('child_process');
     const proc = spawn('curl', args, { timeout: 35000 });
     const chunks = []; let size = 0;
-    proc.stdout.on('data', d => { size += d.length; if (size < 5 * 1024 * 1024) chunks.push(d); });
+    // 20MB 上限，足以容纳一般 PDF / 网页
+    proc.stdout.on('data', d => { size += d.length; if (size < 20 * 1024 * 1024) chunks.push(d); });
     proc.stderr.on('data', () => {});
     proc.on('error', reject);
-    proc.on('close', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+    proc.on('close', () => resolve(Buffer.concat(chunks)));
   });
+}
+
+async function fetchHTML(url) {
+  const buf = await fetchBuffer(url);
+  return buf.toString('utf-8');
+}
+
+function isPdfBuffer(buf) {
+  return buf && buf.length >= 5 && buf.slice(0, 5).toString('latin1') === '%PDF-';
 }
 
 function downloadImage(imgUrl) {
@@ -1765,7 +2041,29 @@ async function extractURLReadability(url, rawDir) {
     return await extractWechat(url, rawDir);
   }
   try {
-    const html = await fetchHTML(url);
+    const buf = await fetchBuffer(url);
+    // 1) PDF：按魔数或扩展名识别，走 pdf-parse
+    const urlIsPdf = /\.pdf(\?|$)/i.test(url);
+    if (isPdfBuffer(buf) || urlIsPdf) {
+      if (!isPdfBuffer(buf)) {
+        // URL 看起来是 PDF 但抓回来不是，可能被网关拦截了
+        throw new Error('URL 看似 PDF，但响应不是 PDF 内容（可能被重定向或拦截）');
+      }
+      let parsed;
+      try { parsed = await parsePdfBuffer(buf); } catch (e) { throw new Error('PDF 解析失败: ' + e.message); }
+      const text = (parsed.text || '').replace(/\r/g, '').trim();
+      if (text.length < 10) {
+        return `[PDF 文本提取为空，可能是扫描件（需要 OCR）]\n\nURL: ${url}`;
+      }
+      // 从 URL 文件名猜标题
+      const fname = (() => {
+        try { return decodeURIComponent((new URL(url)).pathname.split('/').pop() || '').replace(/\.pdf$/i, ''); } catch { return ''; }
+      })();
+      const title = (parsed.info && (parsed.info.Title || parsed.info.title)) || fname || 'PDF Document';
+      return `# ${title}\n\n${text}`;
+    }
+    // 2) HTML：原有流程
+    const html = buf.toString('utf-8');
     if (Readability && JSDOM) {
       try {
         const dom = new JSDOM(html, { url });
@@ -1943,15 +2241,77 @@ async function extractContent(type, content, filename, urlVal, rawDir) {
 
 // ── 自动化任务 ──
 
+const { fetchSource: fetchSourceAdapter, AGGREGATOR_SCRIPT: AGG_SCRIPT_PATH } = require('./lib/sources.js');
+const SYSTEM_SOURCES_PATH = path.join(ROOT, 'data', 'system-sources.json');
+
+function loadSystemSources() {
+  try {
+    return JSON.parse(fs.readFileSync(SYSTEM_SOURCES_PATH, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+function slugify(str) {
+  return String(str || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60) || 'task';
+}
+
 function normalizeTask(t) {
-  return {
-    ...t,
-    model: t.model || null,
-    provider: t.provider || null,
-    nlSummary: t.nlSummary || null,
-    templateId: t.templateId || null,
-    version: t.version || 1
+  // Migrate legacy v1/v2 single-URL tasks into v3 schema, in-memory only.
+  // Keep all original fields so legacy code paths still see what they expect.
+  const base = { ...t };
+  base.model = t.model || null;
+  base.provider = t.provider || null;
+  base.nlSummary = t.nlSummary || null;
+  base.templateId = t.templateId || null;
+  base.maxPerRun = (typeof t.maxPerRun === 'number' && t.maxPerRun > 0) ? t.maxPerRun
+                 : (t.sourceConfig && t.sourceConfig.maxItems) || 5;
+
+  // intent: derived from name if missing
+  base.intent = (typeof t.intent === 'string' && t.intent) ? t.intent
+              : (t.nlSummary || t.name || '');
+
+  // sources array
+  if (!Array.isArray(t.sources) || t.sources.length === 0) {
+    if (t.sourceType && t.sourceConfig) {
+      base.sources = [{
+        id: 'legacy',
+        type: t.sourceType,
+        url: t.sourceConfig.url || '',
+        label: t.name || 'legacy source',
+        ...t.sourceConfig
+      }];
+    } else {
+      base.sources = [];
+    }
+  } else {
+    base.sources = t.sources.map((s, i) => ({
+      id: s.id || `src_${i}`,
+      type: s.type || 'rss',
+      ...s
+    }));
+  }
+
+  // preferences
+  const prefIn = t.preferences && typeof t.preferences === 'object' ? t.preferences : {};
+  const legacyKw = (t.filters && Array.isArray(t.filters.keywords)) ? t.filters.keywords : [];
+  const legacyExc = (t.filters && Array.isArray(t.filters.excludeKeywords)) ? t.filters.excludeKeywords : [];
+  base.preferences = {
+    expanded_keywords: Array.isArray(prefIn.expanded_keywords) ? prefIn.expanded_keywords : legacyKw,
+    must_exclude: Array.isArray(prefIn.must_exclude) ? prefIn.must_exclude : legacyExc,
+    style_hint: typeof prefIn.style_hint === 'string' ? prefIn.style_hint : ''
   };
+
+  // feedback
+  base.feedback = Array.isArray(t.feedback) ? t.feedback : [];
+
+  // Stamp current schema version (v3). Preserve any future-higher version untouched.
+  base.version = (typeof t.version === 'number' && t.version > 3) ? t.version : 3;
+  return base;
 }
 function loadAutotasks() { try { const tasks = JSON.parse(fs.readFileSync(path.join(AUTOTASKS_DIR, 'tasks.json'), 'utf-8')); return tasks.map(normalizeTask); } catch { return []; } }
 function saveAutotasks(tasks) { fs.writeFileSync(path.join(AUTOTASKS_DIR, 'tasks.json'), JSON.stringify(tasks, null, 2), 'utf-8'); }
@@ -2063,10 +2423,161 @@ async function fetchWebpageLinks(url, selector) {
   return links;
 }
 
+// ── Dedup helpers (30-day rolling) ──
+
+function pruneDedup(dedup) {
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const prune = (bucket) => {
+    if (!bucket || typeof bucket !== 'object') return {};
+    const out = {};
+    for (const k of Object.keys(bucket)) {
+      const v = bucket[k];
+      // Legacy entries are runId strings without timestamp — keep them (conservative).
+      if (typeof v === 'object' && v && typeof v.ts === 'number') {
+        if (v.ts >= cutoff) out[k] = v;
+      } else {
+        out[k] = v;
+      }
+    }
+    return out;
+  };
+  return { urls: prune(dedup.urls), hashes: prune(dedup.hashes) };
+}
+
+function markIngestedTimed(url, content, runId) {
+  const dedup = pruneDedup(loadDedup());
+  const ts = Date.now();
+  if (url) dedup.urls[normalizeUrl(url)] = { runId, ts };
+  if (content) dedup.hashes[contentHash(content)] = { runId, ts };
+  saveDedup(dedup);
+}
+
+// ── Concurrency limiter ──
+
+async function mapLimit(items, limit, worker) {
+  const results = new Array(items.length);
+  let idx = 0;
+  const runners = new Array(Math.min(limit, items.length)).fill(0).map(async () => {
+    while (true) {
+      const i = idx++;
+      if (i >= items.length) return;
+      try { results[i] = await worker(items[i], i); }
+      catch (e) { results[i] = { __error: e.message }; }
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
+// ── LLM relevance gate (qwen-turbo for cheap) ──
+
+async function llmRelevanceGate(task, item) {
+  const intent = task.intent || task.name || '';
+  const styleHint = (task.preferences && task.preferences.style_hint) || '';
+  const feedback = Array.isArray(task.feedback) ? task.feedback.slice(-5) : [];
+  const feedbackStr = feedback.length
+    ? feedback.map(f => `- ${f.action === 'keep' ? '保留' : '淘汰'}: ${f.url}${f.note ? ` // ${f.note}` : ''}`).join('\n')
+    : '(无历史反馈)';
+
+  const systemPrompt = `你是内容相关性判断助手。给定用户关注意图和一条候选条目，判断是否相关。只输出 JSON：
+{"relevant": true/false, "reason": "一句话理由", "confidence": 0.0-1.0}
+不要任何其他文字，不要 markdown 围栏。`;
+
+  const userPrompt = `# 用户意图
+${intent}
+
+# 风格偏好
+${styleHint || '(无)'}
+
+# 历史反馈（最近 5 条）
+${feedbackStr}
+
+# 候选条目
+标题: ${item.title || '(无)'}
+摘要: ${(item.summary || '').slice(0, 500)}
+来源: ${item.sourceId || 'unknown'}`;
+
+  // Use qwen-turbo for cheap gating
+  const overrides = { provider: 'bailian', model: 'qwen-turbo' };
+  try {
+    const raw = await Promise.race([
+      callLLM(systemPrompt, userPrompt, overrides, { temperature: 0, maxTokens: 256 }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('gate timeout')), 20000))
+    ]);
+    let cleaned = String(raw || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    const parsed = JSON.parse(cleaned);
+    return {
+      relevant: !!parsed.relevant,
+      reason: typeof parsed.reason === 'string' ? parsed.reason : '',
+      confidence: typeof parsed.confidence === 'number' ? Math.max(0, Math.min(1, parsed.confidence)) : 0.5
+    };
+  } catch (e) {
+    // Fail-open: treat as relevant with low confidence so we don't lose items silently
+    return { relevant: true, reason: `gate_error: ${e.message}`, confidence: 0.3 };
+  }
+}
+
+// ── Brief writer ──
+
+async function generateBrief(task, keptItems, gatedOut, runDate) {
+  const intent = task.intent || task.name || '';
+  const itemsBySource = {};
+  for (const it of keptItems) {
+    const sid = it.sourceId || 'other';
+    (itemsBySource[sid] = itemsBySource[sid] || []).push(it);
+  }
+
+  const systemPrompt = `你是一个简报编辑。根据用户意图和今日入库的条目，输出一份 markdown 简报。严格按以下结构：
+# <任务名> · <日期>
+
+## TL;DR
+- 3-5 条最关键要点
+
+## 按来源分组
+### <source-id>
+- [标题](url) — 一句话概括
+
+严禁 emoji。用中文。不要围栏。`;
+
+  const itemBlocks = keptItems.map(it => `- source=${it.sourceId || 'unknown'} | title=${it.title} | url=${it.url} | summary=${(it.summary || '').slice(0, 300)}`).join('\n');
+  const userPrompt = `# 任务
+${task.name}
+
+# 用户意图
+${intent}
+
+# 日期
+${runDate}
+
+# 今日入库条目
+${itemBlocks || '(空)'}`;
+
+  try {
+    const raw = await Promise.race([
+      callLLM(systemPrompt, userPrompt, null, { temperature: 0.3, maxTokens: 2048 }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('brief timeout')), 60000))
+    ]);
+    return String(raw || '').trim().replace(/^```(?:markdown)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  } catch (e) {
+    // Fallback brief without LLM
+    let md = `# ${task.name} · ${runDate}\n\n## TL;DR\n`;
+    md += (keptItems.length ? keptItems.slice(0, 5).map(it => `- ${it.title}`).join('\n') : '- (无)') + '\n\n';
+    for (const sid of Object.keys(itemsBySource)) {
+      md += `## ${sid}\n`;
+      for (const it of itemsBySource[sid]) {
+        md += `- [${it.title}](${it.url})\n`;
+      }
+      md += '\n';
+    }
+    return md;
+  }
+}
+
 async function executeAutotask(taskId, isManual = false, presetRunId = null) {
   const tasks = loadAutotasks();
-  const task = tasks.find(t => t.id === taskId);
-  if (!task) throw new Error('任务不存在');
+  const rawTask = tasks.find(t => t.id === taskId);
+  if (!rawTask) throw new Error('任务不存在');
+  const task = normalizeTask(rawTask);
 
   const modelOverrides = (task.provider && task.model) ? { provider: task.provider, model: task.model } : null;
 
@@ -2074,12 +2585,15 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
   const run = {
     id: runId, taskId: task.id, taskName: task.name,
     startedAt: new Date().toISOString(), finishedAt: null,
-    status: 'running', itemsFound: 0, itemsIngested: 0, itemsSkipped: 0,
+    status: 'running',
+    itemsFound: 0, itemsConsidered: 0, itemsKept: 0, itemsIngested: 0, itemsSkipped: 0,
     items: [], error: null, manual: isManual,
-    progress: { phase: 'fetching', current: 0, total: 0, currentTitle: null }
+    sourceStatus: {},          // { sourceId: 'ok'|'error', error?: string, count?: number }
+    topGatedReasons: [],
+    briefPath: null,
+    progress: { phase: 'fetching', current: 0, total: (task.sources || []).length, currentTitle: null }
   };
 
-  // Persist incrementally so frontend can poll live progress
   const persistRun = () => {
     try {
       const h = loadHistory();
@@ -2091,78 +2605,162 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
   persistRun();
 
   try {
-    // 1. Fetch source items
-    let sourceItems = [];
-    if (task.sourceType === 'rss') {
-      sourceItems = await fetchRSS(task.sourceConfig.url);
-    } else if (task.sourceType === 'webpage') {
-      sourceItems = await fetchWebpageLinks(task.sourceConfig.url, task.sourceConfig.selector);
-    } else if (task.sourceType === 'api') {
-      const raw = await new Promise((resolve, reject) => {
-        const mod = task.sourceConfig.url.startsWith('https') ? https : http;
-        const req = mod.get(task.sourceConfig.url, { headers: { 'User-Agent': 'WikiBot/1.0' } }, r => {
-          let data = ''; r.on('data', c => data += c); r.on('end', () => resolve(data));
-        });
-        req.on('error', reject);
-        req.setTimeout(30000, () => { req.destroy(); reject(new Error('API fetch timeout')); });
-      });
+    // 1. Fetch all sources in parallel
+    const sources = Array.isArray(task.sources) ? task.sources : [];
+    if (sources.length === 0) throw new Error('任务未配置任何 source');
+
+    const fetchResults = await Promise.all(sources.map(async (src, idx) => {
       try {
-        const parsed = JSON.parse(raw);
-        const arr = parsed.items || parsed.articles || parsed.data || parsed.results || (Array.isArray(parsed) ? parsed : []);
-        sourceItems = arr.map(it => ({
-          title: it.title || it.name || '',
-          url: it.url || it.link || '',
-          description: it.description || it.summary || ''
-        })).filter(it => it.title || it.url);
-      } catch { sourceItems = []; }
-    }
+        const { items } = await fetchSourceAdapter(src);
+        run.sourceStatus[src.id] = { status: 'ok', count: items.length };
+        return items.map(it => ({ ...it, sourceId: src.id }));
+      } catch (e) {
+        run.sourceStatus[src.id] = { status: 'error', error: e.message };
+        console.warn(`[AutoTask] source ${src.id} failed: ${e.message}`);
+        return [];
+      } finally {
+        run.progress.current = idx + 1;
+        persistRun();
+      }
+    }));
 
-    // 2. Apply maxItems limit
-    const maxItems = task.sourceConfig.maxItems || 5;
-    sourceItems = sourceItems.slice(0, maxItems);
-    run.itemsFound = sourceItems.length;
-    run.progress = { phase: 'filtering', current: 0, total: sourceItems.length, currentTitle: null };
+    let items = fetchResults.flat();
+    run.itemsFound = items.length;
+
+    // 2. Dedup (cross-source by URL + content hash, plus rolling 30-day file)
+    run.progress = { phase: 'dedup', current: 0, total: items.length, currentTitle: null };
     persistRun();
 
-    // 3. Apply keyword filters
-    if (task.filters && task.filters.keywords && task.filters.keywords.length) {
-      sourceItems = sourceItems.filter(it => {
-        const text = (it.title + ' ' + it.description).toLowerCase();
-        return task.filters.keywords.some(kw => text.includes(kw.toLowerCase()));
-      });
+    const dedup = pruneDedup(loadDedup());
+    saveDedup(dedup);
+    const seenUrls = new Set();
+    const dedupedItems = [];
+    for (const it of items) {
+      const nUrl = it.url ? normalizeUrl(it.url) : '';
+      if (nUrl && seenUrls.has(nUrl)) continue;
+      if (nUrl && dedup.urls[nUrl]) continue;
+      if (nUrl) seenUrls.add(nUrl);
+      dedupedItems.push(it);
     }
-    if (task.filters && task.filters.excludeKeywords && task.filters.excludeKeywords.length) {
-      sourceItems = sourceItems.filter(it => {
-        const text = (it.title + ' ' + it.description).toLowerCase();
-        return !task.filters.excludeKeywords.some(kw => text.includes(kw.toLowerCase()));
-      });
-    }
+    items = dedupedItems;
+    run.itemsConsidered = items.length;
 
-    run.progress = { phase: 'processing', current: 0, total: sourceItems.length, currentTitle: null };
+    // 3. Keyword pre-filter
+    run.progress = { phase: 'prefilter', current: 0, total: items.length, currentTitle: null };
     persistRun();
 
-    // 4. Process each item
+    const expanded = (task.preferences && task.preferences.expanded_keywords) || [];
+    const mustExclude = (task.preferences && task.preferences.must_exclude) || [];
+    const passesPrefilter = (it) => {
+      const text = ((it.title || '') + ' ' + (it.summary || '')).toLowerCase();
+      if (mustExclude.some(kw => kw && text.includes(String(kw).toLowerCase()))) return false;
+      if (!expanded.length) return true;
+      return expanded.some(kw => kw && text.includes(String(kw).toLowerCase()));
+    };
+    const preGateItems = items.filter(passesPrefilter);
+    const preGateDropped = items.filter(it => !passesPrefilter(it));
+
+    // 4. LLM relevance gate (concurrency 5)
+    run.progress = { phase: 'gating', current: 0, total: preGateItems.length, currentTitle: null };
+    persistRun();
+
+    let processed = 0;
+    const gateResults = await mapLimit(preGateItems, 5, async (it) => {
+      const r = await llmRelevanceGate(task, it);
+      processed += 1;
+      run.progress.current = processed;
+      run.progress.currentTitle = it.title || it.url || '';
+      persistRun();
+      return { item: it, gate: r };
+    });
+
+    const relevant = gateResults.filter(r => r && r.gate && r.gate.relevant);
+    const gatedOut = gateResults.filter(r => r && r.gate && !r.gate.relevant);
+
+    // Sort by confidence desc
+    relevant.sort((a, b) => (b.gate.confidence || 0) - (a.gate.confidence || 0));
+
+    const maxPerRun = task.maxPerRun || 5;
+    let kept = relevant.slice(0, maxPerRun).map(r => ({ ...r.item, __gate: r.gate, __smartFill: false }));
+    const overflow = relevant.slice(maxPerRun).map(r => ({ item: r.item, gate: r.gate, reason: 'over_cap' }));
+
+    // 5. Smart Fill from past 7 days' history if sparse
+    if (kept.length < Math.floor(maxPerRun / 2)) {
+      try {
+        const hist = loadHistory();
+        const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const candidates = [];
+        for (const h of hist) {
+          if (h.taskId !== task.id) continue;
+          const started = new Date(h.startedAt || 0).getTime();
+          if (!started || started < weekAgo) continue;
+          for (const hi of (h.items || [])) {
+            if (hi.status === 'gated_out' && hi.url && !seenUrls.has(normalizeUrl(hi.url))) {
+              candidates.push({
+                title: hi.title,
+                url: hi.url,
+                summary: hi.reason || '',
+                sourceId: hi.sourceId || 'smart_fill',
+                publishedAt: h.startedAt,
+                __gate: { confidence: 0.4, reason: 'smart_fill from past 7d' },
+                __smartFill: true
+              });
+            }
+          }
+        }
+        const need = Math.floor(maxPerRun / 2) - kept.length;
+        kept = kept.concat(candidates.slice(0, need));
+      } catch (e) {
+        console.warn(`[AutoTask] smart_fill failed: ${e.message}`);
+      }
+    }
+    run.itemsKept = kept.length;
+
+    // Record all decisions into run.items now (pre-processing)
+    const itemRecords = [];
+    for (const it of kept) {
+      itemRecords.push({
+        title: it.title, url: it.url, sourceId: it.sourceId,
+        status: it.__smartFill ? 'smart_fill_pending' : 'kept_pending',
+        confidence: it.__gate.confidence, reason: it.__gate.reason,
+        articlePath: null
+      });
+    }
+    for (const g of gatedOut) {
+      itemRecords.push({
+        title: g.item.title, url: g.item.url, sourceId: g.item.sourceId,
+        status: 'gated_out', confidence: g.gate.confidence, reason: g.gate.reason
+      });
+    }
+    for (const o of overflow) {
+      itemRecords.push({
+        title: o.item.title, url: o.item.url, sourceId: o.item.sourceId,
+        status: 'gated_out', confidence: o.gate.confidence, reason: 'over maxPerRun cap'
+      });
+    }
+    for (const d of preGateDropped) {
+      itemRecords.push({
+        title: d.title, url: d.url, sourceId: d.sourceId,
+        status: 'gated_out', reason: 'prefilter keyword mismatch'
+      });
+    }
+    run.items = itemRecords;
+    persistRun();
+
+    // 6. Process kept items (extract + compile)
+    run.progress = { phase: 'processing', current: 0, total: kept.length, currentTitle: null };
+    persistRun();
+
     let processedIdx = 0;
-    for (const item of sourceItems) {
+    for (const item of kept) {
       run.progress.current = processedIdx;
       run.progress.currentTitle = item.title || item.url || '';
       persistRun();
       processedIdx += 1;
-      const itemResult = { title: item.title, url: item.url, status: 'pending', articlePath: null, reason: null };
 
-      // Dedup check
-      if (item.url) {
-        const dupCheck = isDuplicate(item.url, null);
-        if (dupCheck.dup) {
-          itemResult.status = 'skipped';
-          itemResult.reason = dupCheck.reason;
-          run.itemsSkipped++;
-          run.items.push(itemResult);
-          continue;
-        }
-      }
+      const recIdx = itemRecords.findIndex(r => r.url === item.url && (r.status === 'kept_pending' || r.status === 'smart_fill_pending'));
+      const rec = recIdx >= 0 ? itemRecords[recIdx] : null;
 
-      // Extract content
       try {
         const topicDir = task.topic && task.topic !== 'auto' ? task.topic : 'general';
         const rawDir = path.join(RAW, topicDir);
@@ -2172,47 +2770,79 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
 
         // Content-level dedup
         if (extractedText) {
-          const dupCheck2 = isDuplicate(null, extractedText);
-          if (dupCheck2.dup) {
-            itemResult.status = 'skipped';
-            itemResult.reason = dupCheck2.reason;
+          const hash = contentHash(extractedText);
+          if (dedup.hashes[hash]) {
+            if (rec) { rec.status = 'skipped'; rec.reason = '内容重复'; }
             run.itemsSkipped++;
-            run.items.push(itemResult);
             continue;
           }
         }
 
-        // Save raw file
         const date = new Date().toISOString().slice(0, 10);
-        const slug = item.url.replace(/https?:\/\//, '').replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-').slice(0, 40);
+        const slug = (item.url || item.title).replace(/https?:\/\//, '').replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-').slice(0, 40);
         const rawFilename = `${date}-${slug}.md`;
         const filePath = path.join(rawDir, rawFilename);
-        const rawContent = `# Source\n\n> Source: ${item.url}\n> Title: ${item.title}\n> Collected: ${date}\n> Type: autotask\n> Task: ${task.name}\n\n${extractedText}`;
+        const rawContent = `# Source\n\n> Source: ${item.url}\n> Title: ${item.title}\n> Collected: ${date}\n> Type: autotask\n> Task: ${task.name}\n> SourceId: ${item.sourceId || 'unknown'}${item.__smartFill ? '\n> SmartFill: yes' : ''}\n\n${extractedText}`;
         fs.writeFileSync(filePath, rawContent, 'utf-8');
 
-        // Compile article
         const compileTask = pushTask('autotask');
         await compileArticle(topicDir, rawFilename, filePath, compileTask, modelOverrides);
 
-        // Mark as ingested in dedup
-        markIngested(item.url, extractedText, runId);
+        markIngestedTimed(item.url, extractedText, runId);
 
-        itemResult.status = 'ingested';
-        if (compileTask.created && compileTask.created.length > 0) {
-          itemResult.articlePath = compileTask.created[0].path;
+        if (rec) {
+          rec.status = item.__smartFill ? 'smart_fill' : 'ingested';
+          if (compileTask.created && compileTask.created.length > 0) {
+            rec.articlePath = compileTask.created[0].path;
+          }
         }
         run.itemsIngested++;
         indexCache.invalidate('index');
         wikiCache.invalidate();
       } catch (e) {
-        itemResult.status = 'error';
-        itemResult.reason = e.message;
+        if (rec) { rec.status = 'fetch_error'; rec.reason = e.message; }
       }
-      run.items.push(itemResult);
       persistRun();
     }
 
-    run.status = run.items.some(i => i.status === 'error') ? 'partial' : 'success';
+    // 7. Compute top-3 gated_out reasons (cluster by first 40 chars of reason)
+    const reasonCounts = {};
+    for (const r of itemRecords) {
+      if (r.status === 'gated_out' && r.reason) {
+        const key = String(r.reason).slice(0, 60);
+        reasonCounts[key] = (reasonCounts[key] || 0) + 1;
+      }
+    }
+    run.topGatedReasons = Object.entries(reasonCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([reason, count]) => ({ reason, count }));
+
+    // 8. Write brief
+    try {
+      const runDate = new Date().toISOString().slice(0, 10);
+      const keptForBrief = itemRecords.filter(r => r.status === 'ingested' || r.status === 'smart_fill');
+      if (keptForBrief.length) {
+        const brief = await generateBrief(task, keptForBrief, itemRecords.filter(r => r.status === 'gated_out'), runDate);
+        const briefDir = path.join(WIKI, 'brief');
+        fs.mkdirSync(briefDir, { recursive: true });
+        const briefFile = `${runDate}-${slugify(task.name)}.md`;
+        const briefPath = path.join(briefDir, briefFile);
+        fs.writeFileSync(briefPath, brief, 'utf-8');
+        run.briefPath = path.relative(WIKI, briefPath);
+      }
+    } catch (e) {
+      console.warn(`[AutoTask] brief generation failed: ${e.message}`);
+    }
+
+    // 9. Status
+    const anyFetchFail = Object.values(run.sourceStatus).some(s => s.status === 'error');
+    const allFetchFail = sources.length > 0 && Object.values(run.sourceStatus).every(s => s.status === 'error');
+    if (allFetchFail) run.status = 'error';
+    else if (run.itemsIngested === 0 && (run.itemsKept > 0 || anyFetchFail)) run.status = 'partial';
+    else if (run.itemsIngested > 0 && anyFetchFail) run.status = 'partial';
+    else if (run.itemsIngested > 0) run.status = 'success';
+    else run.status = 'partial';
   } catch (e) {
     run.status = 'error';
     run.error = e.message;
@@ -2221,7 +2851,6 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
   run.finishedAt = new Date().toISOString();
   run.progress = null;
 
-  // Update task lastRun info
   const updatedTasks = loadAutotasks();
   const tIdx = updatedTasks.findIndex(t => t.id === taskId);
   if (tIdx >= 0) {
@@ -2230,9 +2859,7 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
     saveAutotasks(updatedTasks);
   }
 
-  // Final persist (status/finishedAt updated)
   persistRun();
-
   return run;
 }
 
@@ -2242,6 +2869,29 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const p = url.pathname;
   const params = url.searchParams;
+
+  // 请求打点：写入 ring buffer + 结束时落 access.log
+  const __reqStart = Date.now();
+  const __reqRec = {
+    startedAt: new Date(__reqStart).toISOString(),
+    method: req.method,
+    url: req.url,
+    status: null,
+    duration: null,
+  };
+  recordRequest(__reqRec);
+  res.on('finish', () => {
+    __reqRec.status = res.statusCode;
+    __reqRec.duration = Date.now() - __reqStart;
+    __diagAppend(ACCESS_LOG, `${__reqRec.startedAt} ${req.method} ${p} ${res.statusCode} ${__reqRec.duration}ms`);
+  });
+  res.on('close', () => {
+    if (__reqRec.status == null) {
+      __reqRec.status = 'aborted';
+      __reqRec.duration = Date.now() - __reqStart;
+      __diagAppend(ACCESS_LOG, `${__reqRec.startedAt} ${req.method} ${p} ABORTED ${__reqRec.duration}ms`);
+    }
+  });
 
   // ── Global POST/PUT body size guard (10 MB default; /api/ingest has its own 100 MB limit) ──
   if (req.method === 'POST' || req.method === 'PUT') {
@@ -2901,7 +3551,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (p === '/api/ingest' && req.method === 'POST') {
-    // 允许并发编译：不再阻塞新任务。每个请求拥有独立的 task 对象 + stages 状态。
+    // 全局并发池：所有 task 走 enqueueTask → tryDispatch
     const chunks = [];
     let totalSize = 0;
     const MAX_BODY = 100 * 1024 * 1024;
@@ -2916,100 +3566,29 @@ const server = http.createServer(async (req, res) => {
           filename: parsed.filename, url: parsed.url
         }];
         const modelOverrides = (parsed.provider && parsed.model) ? { provider: parsed.provider, model: parsed.model } : null;
-        const isBatch = items.length > 1;
+        const batchId = items.length > 1 ? genTaskId() : null;
 
-        if (isBatch) {
-          batchProgress = {
-            id: Date.now().toString(36),
-            total: items.length,
-            completed: 0,
-            failed: 0,
-            currentFile: items[0].name || items[0].filename || (items[0].content ? items[0].content.slice(0, 40) : ''),
-            status: 'processing',
-            startedAt: new Date().toISOString(),
-            files: items.map(it => ({ name: it.name || it.filename || (it.content ? it.content.slice(0, 40) : ''), status: 'pending' }))
-          };
-        }
+        const tasks = items.map((item, i) => {
+          const name = item.name || item.filename || (item.content ? item.content.slice(0, 40) : '') || (item.url || 'ingest');
+          return enqueueTask(
+            {
+              type: item.type,
+              content: item.content,
+              topic: item.topic,
+              filename: item.filename,
+              url: item.url,
+              modelOverrides,
+            },
+            { kind: item.type, name, batchId, batchIndex: i }
+          );
+        });
 
-        async function processOneItem(idx) {
-          const { type, content, topic, name, filename: itemFilename, url: itemUrl } = items[idx];
-          if (isBatch) {
-            batchProgress.currentFile = name || itemFilename || (content ? content.slice(0, 40) : '');
-            batchProgress.files[idx].status = 'processing';
-          }
-          const topicDir = topic && topic !== 'auto' ? topic : 'general';
-          const dir = path.join(RAW, topicDir);
-          fs.mkdirSync(dir, { recursive: true });
-          const date = new Date().toISOString().slice(0, 10);
-
-          const isBinaryType = ['pdf', 'image', 'audio', 'video'].includes(type);
-          let extractedText;
-          try {
-            extractedText = await extractContent(type, content, itemFilename || name, itemUrl, dir);
-          } catch (extractErr) {
-            if (isBatch) {
-              batchProgress.files[idx].status = 'error';
-              batchProgress.files[idx].error = extractErr.message;
-              batchProgress.failed++;
-              batchProgress.completed++;
-            } else {
-              const task = pushTask(type);
-              task.status = 'error';
-              task.message = `内容提取失败: ${extractErr.message}`;
-            }
-            return;
-          }
-
-          let slug = 'source';
-          if (type === 'url') {
-            slug = (itemUrl || content).replace(/https?:\/\//, '').replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-').slice(0, 40);
-          } else if (isBinaryType && (itemFilename || name)) {
-            slug = (itemFilename || name).replace(/\.[^.]+$/, '').replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-').slice(0, 40) || type;
-          } else {
-            slug = (extractedText.slice(0, 40).replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-') || 'text');
-          }
-          const rawFilename = `${date}-${slug}.md`;
-          const filePath = path.join(dir, rawFilename);
-
-          const sourceLabel = isBinaryType
-            ? `${type} file: ${itemFilename || name || 'unknown'}`
-            : (type === 'url' ? (itemUrl || content) : 'user input');
-          const rawContent = `# Source\n\n> Source: ${sourceLabel}\n> Collected: ${date}\n> Type: ${type}\n\n${extractedText}`;
-          fs.writeFileSync(filePath, rawContent, 'utf-8');
-
-          const task = pushTask(type);
-          try {
-            await compileArticle(topicDir, rawFilename, filePath, task, modelOverrides);
-            if (isBatch) {
-              batchProgress.files[idx].status = 'done';
-              batchProgress.completed++;
-            }
-          } catch (e) {
-            if (isBatch) {
-              batchProgress.files[idx].status = 'error';
-              batchProgress.files[idx].error = e.message;
-              batchProgress.failed++;
-              batchProgress.completed++;
-            }
-          }
-        }
-
-        // 并发执行：批量最多 3 路并发，单文件 1 路
-        const CONCURRENCY = isBatch ? 3 : 1;
-        let cursor = 0;
-        async function worker() {
-          while (true) {
-            const i = cursor++;
-            if (i >= items.length) break;
-            await processOneItem(i);
-          }
-        }
-        Promise.all(
-          Array.from({ length: Math.min(CONCURRENCY, items.length) }, () => worker())
-        ).then(() => { if (isBatch) batchProgress.status = 'done'; });
-
-        const firstTask = latestTask();
-        json(res, 200, { taskId: firstTask ? firstTask.id : 'unknown', batch: isBatch, batchId: isBatch ? batchProgress.id : null });
+        json(res, 200, {
+          taskId: tasks[0] ? tasks[0].id : 'unknown',
+          taskIds: tasks.map(t => t.id),
+          batch: !!batchId,
+          batchId,
+        });
       } catch (e) { json(res, 400, { error: e.message }); }
     });
     return;
@@ -3020,7 +3599,7 @@ const server = http.createServer(async (req, res) => {
     const reqId = url.searchParams.get('id');
     const task = reqId ? taskQueue.find(t => t.id === reqId) : latestTask();
     if (!task) return json(res, 200, { status: 'idle' });
-    const resp = { id: task.id, status: task.status, message: task.message };
+    const resp = { id: task.id, status: externalStatus(task.status), message: task.message };
     if (task.stages) resp.stages = task.stages;
     if (task.created) {
       resp.created = task.created;
@@ -3029,16 +3608,20 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, resp);
   }
 
-  // 所有当前 compiling + 最近 10s 内完成的任务（便于前端展示/收尾）
+  // 所有当前 pending/processing + 最近 30s 内完成的任务（便于前端展示/收尾）
   if (p === '/api/ingest/active') {
     const now = Date.now();
     const items = taskQueue.filter(t => {
-      if (t.status === 'compiling') return true;
-      const started = t.startedAt ? new Date(t.startedAt).getTime() : 0;
-      return (t.status === 'done' || t.status === 'error') && (now - started < 30000);
+      if (t.status === 'pending' || t.status === 'processing') return true;
+      if (['done', 'error', 'partial'].includes(t.status)) {
+        const ts = t.finishedAt ? new Date(t.finishedAt).getTime()
+          : (t.startedAt ? new Date(t.startedAt).getTime() : 0);
+        return (now - ts) < 30000;
+      }
+      return false;
     }).map(t => ({
       id: t.id,
-      status: t.status,
+      status: externalStatus(t.status),
       message: t.message,
       stages: t.stages || [],
       article: t.created && t.created.length > 0 ? t.created[0] : null,
@@ -3049,11 +3632,61 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (p === '/api/ingest/batch/status') {
-    if (!batchProgress) return json(res, 200, { status: 'idle' });
-    const elapsed = Date.now() - new Date(batchProgress.startedAt).getTime();
-    const avgPerFile = batchProgress.completed > 0 ? elapsed / batchProgress.completed : 0;
-    const remaining = batchProgress.completed > 0 ? Math.round(avgPerFile * (batchProgress.total - batchProgress.completed) / 1000) : null;
-    return json(res, 200, { ...batchProgress, estimatedRemaining: remaining });
+    const reqId = url.searchParams.get('id') || findLatestBatchId();
+    if (!reqId) return json(res, 200, { status: 'idle' });
+    const summary = getBatchSummary(reqId);
+    if (!summary) return json(res, 200, { status: 'idle' });
+    return json(res, 200, summary);
+  }
+
+  // 投喂队列总览：running / queued / recent / batch 汇总，供 topbar 入口使用
+  if (p === '/api/ingest/overview') {
+    const running = taskQueue.filter(t => t.status === 'processing').map(t => ({
+      id: t.id,
+      name: t.name,
+      stage: t.message || '',
+      kind: t.kind || t.type,
+      startedAt: t.startedAt,
+      status: 'running',
+      batchId: t.batchId,
+    }));
+    const queued = taskQueue.filter(t => t.status === 'pending').map(t => ({
+      id: t.id,
+      name: t.name,
+      kind: t.kind || t.type,
+      status: 'queued',
+      batchId: t.batchId,
+    }));
+    const recent = taskQueue
+      .filter(t => ['done', 'error', 'partial'].includes(t.status))
+      .slice()
+      .sort((a, b) => new Date(b.finishedAt || 0) - new Date(a.finishedAt || 0))
+      .slice(0, 10)
+      .map(t => {
+        const firstCreated = t.created && t.created.length > 0 ? t.created[0] : null;
+        const articlePath = (firstCreated && typeof firstCreated === 'object') ? firstCreated.path : firstCreated;
+        const displayName = (typeof articlePath === 'string' && articlePath)
+          ? path.basename(articlePath, '.md')
+          : (t.name || t.kind || t.type || 'ingest');
+        return {
+          id: t.id,
+          status: t.status === 'partial' ? 'done' : t.status,
+          name: displayName,
+          article: articlePath,
+          error: t.status === 'error' ? (t.message || '').slice(0, 200) : null,
+          kind: t.kind || t.type,
+          finishedAt: t.finishedAt,
+        };
+      });
+
+    const latestBatchId = findLatestBatchId();
+    let batch = null;
+    if (latestBatchId) {
+      const s = getBatchSummary(latestBatchId);
+      if (s && s.status === 'processing') batch = s;
+    }
+    const hasActivity = running.length > 0 || queued.length > 0 || (batch && batch.status === 'processing');
+    return json(res, 200, { running, queued, recent, batch, hasActivity });
   }
 
   if (p === '/api/tasks') {
@@ -3455,6 +4088,19 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { tasks: loadAutotasks() });
     }
 
+    // GET /api/autotask/sources — return system source library
+    if (subPath === '/sources' && req.method === 'GET') {
+      try {
+        const sources = loadSystemSources();
+        if (sources === null || sources === undefined) {
+          return json(res, 503, { error: 'system-sources.json 未就绪，请稍后重试' });
+        }
+        return json(res, 200, sources);
+      } catch (e) {
+        return json(res, 500, { error: 'Failed to load sources: ' + e.message });
+      }
+    }
+
     // GET /api/autotask/history — get execution history
     if (subPath === '/history' && req.method === 'GET') {
       let hist = loadHistory();
@@ -3676,14 +4322,140 @@ ${topicListStr}`;
       return;
     }
 
+    // POST /api/autotask/configure — AI-pick sources from system library
+    if (subPath === '/configure' && req.method === 'POST') {
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', async () => {
+        try {
+          const data = JSON.parse(body || '{}');
+          const intent = String(data.intent || '').trim();
+          if (!intent) return json(res, 400, { error: '缺少 intent' });
+
+          const library = loadSystemSources();
+          if (!library || !Array.isArray(library) || library.length === 0) {
+            return json(res, 503, { error: 'system-sources.json 未就绪，请稍后重试' });
+          }
+
+          const libBrief = library.map(s => ({
+            id: s.id, label: s.label || s.id, type: s.type,
+            tags: s.tags || [], description: s.description || '', lang: s.lang || ''
+          }));
+
+          const systemPrompt = `你是任务配置生成器。基于用户意图与系统数据源库，输出一个 JSON 草案。
+严格只输出 JSON：
+{
+  "name": "短任务名（10-20 字）",
+  "selectedSourceIds": ["id1", "id2", ...],   // 5-12 个，必须来自 library
+  "expanded_keywords": ["kw1", ...],           // 6-15 个相关词
+  "style_hint": "一句话风格偏好",
+  "schedule": "daily" | "hourly" | "manual",
+  "scheduleTime": "HH:MM",
+  "topic": "auto"
+}
+不要 markdown 围栏，不要解释。`;
+
+          const userPrompt = `# 用户意图
+${intent}
+
+# 可用数据源库（${libBrief.length} 个）
+${JSON.stringify(libBrief, null, 2)}`;
+
+          let raw;
+          try {
+            raw = await Promise.race([
+              callLLM(systemPrompt, userPrompt, null, { temperature: 0.2, maxTokens: 1024 }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('configure timeout')), 30000))
+            ]);
+          } catch (e) {
+            return json(res, 502, { error: 'LLM 调用失败', detail: e.message });
+          }
+
+          let cleaned = String(raw || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+          let parsed;
+          try { parsed = JSON.parse(cleaned); }
+          catch { return json(res, 502, { error: 'AI 解析失败', raw: String(raw || '').slice(0, 500) }); }
+
+          const libIds = new Set(library.map(s => s.id));
+          let selected = Array.isArray(parsed.selectedSourceIds) ? parsed.selectedSourceIds : [];
+          selected = selected.filter(id => libIds.has(id)).slice(0, 12);
+          const sources = selected.map(id => {
+            const s = library.find(x => x.id === id);
+            return {
+              id: s.id,
+              type: s.type,
+              url: s.url || '',
+              label: s.label || s.id,
+              ...(s.subsource ? { subsource: s.subsource } : {})
+            };
+          });
+
+          let expanded = Array.isArray(parsed.expanded_keywords)
+            ? parsed.expanded_keywords.filter(x => typeof x === 'string').slice(0, 20)
+            : [];
+          const styleHint = typeof parsed.style_hint === 'string' ? parsed.style_hint.slice(0, 200) : '';
+          let schedule = ['daily', 'hourly', 'manual'].includes(parsed.schedule) ? parsed.schedule : 'daily';
+          let scheduleTime = (typeof parsed.scheduleTime === 'string' && /^\d{2}:\d{2}$/.test(parsed.scheduleTime))
+            ? parsed.scheduleTime : '08:00';
+          const name = (typeof parsed.name === 'string' && parsed.name.trim()) ? parsed.name.trim().slice(0, 60) : intent.slice(0, 30);
+          const topic = (typeof parsed.topic === 'string' && parsed.topic) ? parsed.topic : 'auto';
+
+          return json(res, 200, {
+            name,
+            sources,
+            preferences: { expanded_keywords: expanded, must_exclude: [], style_hint: styleHint },
+            schedule, scheduleTime, topic
+          });
+        } catch (e) {
+          return json(res, 400, { error: e.message });
+        }
+      });
+      return;
+    }
+
+    // POST /api/autotask/feedback — append per-item feedback
+    if (subPath === '/feedback' && req.method === 'POST') {
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', () => {
+        try {
+          const data = JSON.parse(body || '{}');
+          const { taskId, runId, itemUrl, action, note } = data;
+          if (!taskId || !itemUrl || !['keep', 'drop'].includes(action)) {
+            return json(res, 400, { error: '参数无效' });
+          }
+          const tasks = loadAutotasks();
+          const idx = tasks.findIndex(t => t.id === taskId);
+          if (idx < 0) return json(res, 404, { error: '任务不存在' });
+          const t = tasks[idx];
+          if (!Array.isArray(t.feedback)) t.feedback = [];
+          t.feedback.push({
+            url: itemUrl, action, note: typeof note === 'string' ? note : '',
+            runId: runId || null, ts: new Date().toISOString()
+          });
+          if (t.feedback.length > 50) t.feedback = t.feedback.slice(-50);
+          saveAutotasks(tasks);
+          return json(res, 200, { ok: true, feedbackCount: t.feedback.length });
+        } catch (e) { return json(res, 400, { error: e.message }); }
+      });
+      return;
+    }
+
     // POST /api/autotask/:id/run — manual trigger
     const runMatch = subPath.match(/^\/([^/]+)\/run$/);
     if (runMatch && req.method === 'POST') {
       const taskId = runMatch[1];
       const tasks = loadAutotasks();
       if (!tasks.find(t => t.id === taskId)) return json(res, 404, { error: '任务不存在' });
+      // Run-lock: reject if a run for this task is currently running
+      try {
+        const hist = loadHistory();
+        const active = hist.find(h => h.taskId === taskId && h.status === 'running');
+        if (active) {
+          return json(res, 409, { error: '该任务已在运行中', runId: active.id });
+        }
+      } catch {}
       const runId = genId('run');
-      // Fire-and-forget; runId is preset so frontend can poll history immediately
       executeAutotask(taskId, true, runId).catch(e => console.error('[AutoTask] 手动执行失败:', e.message));
       return json(res, 200, { ok: true, runId, message: '任务已触发' });
     }
@@ -3707,11 +4479,24 @@ ${topicListStr}`;
       req.on('end', () => {
         try {
           const data = JSON.parse(body);
+          const isV3 = Array.isArray(data.sources) || data.intent || data.preferences;
           const task = {
             id: genId('at'),
             name: data.name || '未命名任务',
-            sourceType: data.sourceType || 'rss',
-            sourceConfig: data.sourceConfig || { url: '', maxItems: 5 },
+            // Legacy fields (kept for back-compat reads)
+            sourceType: data.sourceType || (isV3 ? null : 'rss'),
+            sourceConfig: data.sourceConfig || (isV3 ? null : { url: '', maxItems: 5 }),
+            // New v3 fields
+            intent: typeof data.intent === 'string' ? data.intent : (data.nlSummary || data.name || ''),
+            sources: Array.isArray(data.sources) ? data.sources : [],
+            preferences: (data.preferences && typeof data.preferences === 'object') ? {
+              expanded_keywords: Array.isArray(data.preferences.expanded_keywords) ? data.preferences.expanded_keywords : [],
+              must_exclude: Array.isArray(data.preferences.must_exclude) ? data.preferences.must_exclude : [],
+              style_hint: typeof data.preferences.style_hint === 'string' ? data.preferences.style_hint : ''
+            } : { expanded_keywords: [], must_exclude: [], style_hint: '' },
+            feedback: [],
+            maxPerRun: (typeof data.maxPerRun === 'number' && data.maxPerRun > 0) ? data.maxPerRun : 5,
+            // Existing
             schedule: data.schedule || 'daily',
             scheduleTime: data.scheduleTime || '08:00',
             topic: data.topic || 'auto',
@@ -3724,7 +4509,7 @@ ${topicListStr}`;
             provider: typeof data.provider === 'string' && data.provider ? data.provider : null,
             nlSummary: typeof data.nlSummary === 'string' ? data.nlSummary : null,
             templateId: typeof data.templateId === 'string' ? data.templateId : null,
-            version: 2,
+            version: isV3 ? 3 : 2,
             createdAt: new Date().toISOString(),
             lastRunAt: null,
             lastRunStatus: null
@@ -3763,7 +4548,22 @@ ${topicListStr}`;
           if (data.provider !== undefined) t.provider = data.provider || null;
           if (data.nlSummary !== undefined) t.nlSummary = data.nlSummary || null;
           if (data.templateId !== undefined) t.templateId = data.templateId || null;
-          t.version = 2;
+          // v3 fields
+          if (data.intent !== undefined) t.intent = data.intent;
+          if (data.sources !== undefined) t.sources = Array.isArray(data.sources) ? data.sources : t.sources;
+          if (data.preferences !== undefined && data.preferences) {
+            t.preferences = {
+              expanded_keywords: Array.isArray(data.preferences.expanded_keywords) ? data.preferences.expanded_keywords : (t.preferences && t.preferences.expanded_keywords) || [],
+              must_exclude: Array.isArray(data.preferences.must_exclude) ? data.preferences.must_exclude : (t.preferences && t.preferences.must_exclude) || [],
+              style_hint: typeof data.preferences.style_hint === 'string' ? data.preferences.style_hint : (t.preferences && t.preferences.style_hint) || ''
+            };
+          }
+          if (data.maxPerRun !== undefined && typeof data.maxPerRun === 'number' && data.maxPerRun > 0) t.maxPerRun = data.maxPerRun;
+          if (Array.isArray(data.sources) || data.intent !== undefined || data.preferences !== undefined) {
+            t.version = 3;
+          } else if (!t.version || t.version < 2) {
+            t.version = 2;
+          }
           saveAutotasks(tasks);
           return json(res, 200, t);
         } catch (e) { return json(res, 400, { error: e.message }); }
@@ -3813,6 +4613,31 @@ ${topicListStr}`;
 
 migrateMemory();
 
+// ── Autotask 崩溃恢复：把卡在 running 状态超过 10 分钟的 run 标记为 interrupted ──
+try {
+  const hist = loadHistory();
+  const cutoff = Date.now() - 10 * 60 * 1000;
+  let changed = 0;
+  for (const r of hist) {
+    if (r.status === 'running') {
+      const startedAt = new Date(r.startedAt || 0).getTime();
+      if (!startedAt || startedAt < cutoff) {
+        r.status = 'interrupted';
+        r.finishedAt = r.finishedAt || new Date().toISOString();
+        r.progress = null;
+        r.error = r.error || '服务器重启时该任务正在运行，被标记为中断';
+        changed += 1;
+      }
+    }
+  }
+  if (changed > 0) {
+    saveHistory(hist);
+    console.log(`[AutoTask] 启动恢复：标记 ${changed} 个 stale 运行为 interrupted`);
+  }
+} catch (e) {
+  console.warn('[AutoTask] 启动恢复失败:', e.message);
+}
+
 // ── 定时健康检查 ──
 const REPORTS_DIR_INIT = path.join(ROOT, 'data', 'reports');
 if (!fs.existsSync(REPORTS_DIR_INIT)) fs.mkdirSync(REPORTS_DIR_INIT, { recursive: true });
@@ -3825,8 +4650,8 @@ try {
   }
 } catch {}
 
-// 启动时运行一次 lint
-setTimeout(() => {
+// 启动时运行一次 lint（仅在直接运行时，被 require 时不启动）
+if (require.main === module) setTimeout(() => {
   try {
     // 内联 runLint 逻辑用于启动检查
     const handler = server.listeners('request')[0];
@@ -3869,8 +4694,8 @@ setInterval(() => {
   } catch {}
 }, 24 * 60 * 60 * 1000);
 
-// ── 自动化任务调度器 ──
-setInterval(() => {
+// ── 自动化任务调度器 ──（仅在直接运行时）
+if (require.main === module) setInterval(() => {
   try {
     const tasks = loadAutotasks();
     const now = new Date();
@@ -3890,10 +4715,47 @@ setInterval(() => {
 
       if (shouldRun) {
         console.log(`[AutoTask] 执行任务: ${task.name}`);
-        executeAutotask(task.id, false).catch(e => console.error(`[AutoTask] 任务失败: ${task.name}`, e.message));
+        __diagAppend(CRASH_LOG, `[${new Date().toISOString()}] AUTOTASK_START id=${task.id} name=${task.name} schedule=${task.schedule}`);
+        executeAutotask(task.id, false)
+          .then(() => __diagAppend(CRASH_LOG, `[${new Date().toISOString()}] AUTOTASK_DONE id=${task.id} name=${task.name}`))
+          .catch(e => {
+            console.error(`[AutoTask] 任务失败: ${task.name}`, e.message);
+            crashLog(`AUTOTASK_REJECT id=${task.id} name=${task.name}`, e);
+          });
       }
     });
-  } catch (e) { console.error('[AutoTask] 调度器错误:', e.message); }
+  } catch (e) {
+    console.error('[AutoTask] 调度器错误:', e.message);
+    crashLog('AUTOTASK_SCHEDULER_ERROR', e);
+  }
 }, 5 * 60 * 1000);
 
-server.listen(PORT, () => console.log(`Wiki 应用已启动：http://localhost:${PORT}`));
+if (require.main === module) {
+  server.listen(PORT, () => {
+    console.log(`Wiki 应用已启动：http://localhost:${PORT}`);
+    console.log(`[ingest] concurrency=${INGEST_CONCURRENCY} queueCap=200`);
+    __diagAppend(CRASH_LOG, `[${new Date().toISOString()}] LISTEN port=${PORT}\n---\n`);
+  });
+  server.on('error', e => crashLog('SERVER_ERROR', e));
+  server.on('clientError', e => __diagAppend(ACCESS_LOG, `${new Date().toISOString()} CLIENT_ERROR ${e.code || ''} ${e.message || ''}`));
+}
+
+// 测试 hook：测试脚本 require 后通过 __test.* 访问内部状态与函数
+module.exports = {
+  __test: {
+    setProcessTask: (fn) => { _processTaskImpl = fn; },
+    resetProcessTask: () => { _processTaskImpl = null; },
+    getActiveCount: () => activeCount,
+    getTaskQueue: () => taskQueue,
+    clearTaskQueue: () => { taskQueue = []; },
+    enqueueTask,
+    tryDispatch,
+    getBatchSummary,
+    findLatestBatchId,
+    pushTask,
+    genTaskId,
+    externalStatus,
+    INGEST_CONCURRENCY,
+  },
+  server,
+};

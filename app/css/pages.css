@@ -123,9 +123,28 @@
 .chat-list-item-del:hover{background:var(--bg-hover);color:var(--red)}
 .chat-list-empty{color:var(--fg-tertiary);font-size:14px;padding:40px 0;text-align:center}
 
-/* ── Page: Article ── */
-.page-article{display:flex;gap:24px;animation:fadeIn 150ms ease;min-height:100%}
-.page-article-inner{flex:1;min-width:0;max-width:860px;padding:20px 48px 120px 24px}
+/* ── Page: Article ──
+   Grid 布局：[TOC 列] [正文列] [对称影子列]
+   - 正文在主区几何中心居中（不受 TOC 偏心）
+   - TOC 仍 sticky，但它和右侧影子列等宽，保证正文真居中
+   - 超宽屏放宽 max-width 减小空白 */
+.page-article{
+  display:grid;
+  grid-template-columns:216px minmax(0,1fr) 216px;
+  column-gap:24px;
+  animation:fadeIn 150ms ease;min-height:100%;
+}
+.page-article-inner{
+  grid-column:2;
+  width:100%;max-width:860px;margin:0 auto;
+  padding:20px 48px 120px;min-width:0;
+}
+@media(min-width:1500px){.page-article-inner{max-width:920px}}
+@media(min-width:1800px){.page-article-inner{max-width:980px}}
+@media(max-width:1100px){
+  .page-article{grid-template-columns:1fr}
+  .page-article-inner{grid-column:1;padding:20px 24px 120px}
+}
 
 .article-title{
   font-family:var(--font-display);
@@ -213,10 +232,11 @@
 .article-related-item:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent-border)}
 .article-related-item svg{width:16px;height:16px;opacity:0.4;flex-shrink:0}
 
-/* Left-side TOC (sticky in flex layout) */
+/* Left-side TOC (sticky in grid layout) */
 .article-toc{
-  order:-1;position:sticky;top:56px;align-self:flex-start;
-  width:200px;flex-shrink:0;margin:20px 0 0 16px;
+  grid-column:1;grid-row:1;
+  position:sticky;top:56px;align-self:start;justify-self:start;
+  width:200px;margin:20px 0 0 16px;
   max-height:calc(100vh - 80px);overflow-y:auto;
   font-size:12px;line-height:1.5;padding:0;
   background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);
@@ -390,3 +410,8 @@
 .health-history-loading{color:var(--fg-tertiary)}
 @media(max-width:640px){.health-score-section{flex-direction:column-reverse}.health-total{border-left:none;border-bottom:1px solid var(--border);padding:0 0 16px}.health-stats{flex-wrap:wrap;gap:12px}.page-health{padding:20px 16px 80px}}
 @media(max-width:768px){.article-save-indicator{bottom:70px}}
+
+/* Raw source viewer */
+.raw-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--fg-tertiary);background:var(--bg-tertiary);padding:4px 10px;border-radius:999px;margin-bottom:14px;letter-spacing:0.02em;font-family:var(--font-mono,ui-monospace,monospace);word-break:break-all}
+.raw-body{user-select:text}
+.raw-pre{background:var(--bg-tertiary);padding:16px;border-radius:var(--radius);overflow-x:auto;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word}

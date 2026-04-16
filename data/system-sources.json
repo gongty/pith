@@ -1,0 +1,520 @@
+[
+  {
+    "id": "openai-news",
+    "type": "rss",
+    "url": "https://openai.com/news/rss.xml",
+    "label": "OpenAI News",
+    "description": "Official OpenAI announcements: model releases, research previews, product news. Canonical source for GPT/Sora/o-series updates.",
+    "tags": ["ai", "frontier-lab", "blog", "english"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "anthropic-news",
+    "type": "webpage",
+    "url": "https://www.anthropic.com/news",
+    "label": "Anthropic News",
+    "description": "Official Anthropic news index covering Claude releases, safety research, policy posts. No public RSS, scraped as webpage.",
+    "tags": ["ai", "frontier-lab", "blog", "english"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "deepmind-blog",
+    "type": "rss",
+    "url": "https://deepmind.google/blog/rss.xml",
+    "label": "Google DeepMind Blog",
+    "description": "Google DeepMind official blog: Gemini, AlphaFold, AlphaProof, science-focused AI breakthroughs.",
+    "tags": ["ai", "frontier-lab", "blog", "english", "research"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "meta-ai-blog",
+    "type": "webpage",
+    "url": "https://ai.meta.com/blog/",
+    "label": "Meta AI Blog",
+    "description": "Meta AI research and product updates: Llama releases, FAIR research, Ray-Ban Meta AI features. Scraped as webpage (no RSS).",
+    "tags": ["ai", "frontier-lab", "blog", "english", "open-source"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "google-ai-blog",
+    "type": "rss",
+    "url": "https://blog.google/technology/ai/rss/",
+    "label": "Google AI Blog",
+    "description": "Google's consumer-facing AI announcements (separate from DeepMind): Gemini in products, Workspace AI, Search Generative Experience.",
+    "tags": ["ai", "frontier-lab", "blog", "english"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "huggingface-papers",
+    "type": "webpage",
+    "url": "https://huggingface.co/papers",
+    "label": "Hugging Face Daily Papers",
+    "description": "Curated daily AI/ML papers ranked by community votes. Best single source for what frontier researchers are reading today.",
+    "tags": ["ai", "papers", "research", "english", "community"],
+    "lang": "en",
+    "cadence": "daily"
+  },
+  {
+    "id": "huggingface-blog",
+    "type": "rss",
+    "url": "https://huggingface.co/blog/feed.xml",
+    "label": "Hugging Face Blog",
+    "description": "Hugging Face engineering posts: model fine-tuning tutorials, library deep-dives, open-source ecosystem updates.",
+    "tags": ["ai", "blog", "english", "open-source", "engineering", "tutorial"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "arxiv-cs-ai",
+    "type": "rss",
+    "url": "http://export.arxiv.org/rss/cs.AI",
+    "label": "arXiv cs.AI",
+    "description": "arXiv Artificial Intelligence section: daily preprint listings (broad AI scope, including reasoning, planning, multi-agent).",
+    "tags": ["ai", "papers", "research", "english", "preprint"],
+    "lang": "en",
+    "cadence": "daily"
+  },
+  {
+    "id": "arxiv-cs-cl",
+    "type": "rss",
+    "url": "http://export.arxiv.org/rss/cs.CL",
+    "label": "arXiv cs.CL",
+    "description": "arXiv Computation and Language section: NLP and LLM preprints. Where most LLM papers land first.",
+    "tags": ["ai", "papers", "research", "english", "preprint", "nlp"],
+    "lang": "en",
+    "cadence": "daily"
+  },
+  {
+    "id": "arxiv-cs-lg",
+    "type": "rss",
+    "url": "http://export.arxiv.org/rss/cs.LG",
+    "label": "arXiv cs.LG",
+    "description": "arXiv Machine Learning section: training methods, architectures, optimization, theory papers.",
+    "tags": ["ai", "papers", "research", "english", "preprint", "ml"],
+    "lang": "en",
+    "cadence": "daily"
+  },
+  {
+    "id": "the-gradient",
+    "type": "rss",
+    "url": "https://thegradient.pub/rss/",
+    "label": "The Gradient",
+    "description": "Long-form essays on AI research and its societal implications. Editorial, slower-paced, written by researchers for researchers.",
+    "tags": ["ai", "blog", "english", "long-form", "research"],
+    "lang": "en",
+    "cadence": "irregular"
+  },
+  {
+    "id": "distill",
+    "type": "rss",
+    "url": "https://distill.pub/rss.xml",
+    "label": "Distill",
+    "description": "Interactive ML explainers (mostly archived since 2021 but still canonical reference for visualization-first ML writing).",
+    "tags": ["ai", "blog", "english", "long-form", "visualization"],
+    "lang": "en",
+    "cadence": "irregular"
+  },
+  {
+    "id": "lilian-weng",
+    "type": "rss",
+    "url": "https://lilianweng.github.io/index.xml",
+    "label": "Lilian Weng's Blog",
+    "description": "Deep technical surveys on LLM agents, prompt engineering, hallucination, RLHF. Considered a gold-standard reference by ML practitioners.",
+    "tags": ["ai", "blog", "english", "long-form", "research", "survey"],
+    "lang": "en",
+    "cadence": "irregular"
+  },
+  {
+    "id": "simon-willison",
+    "type": "rss",
+    "url": "https://simonwillison.net/atom/everything/",
+    "label": "Simon Willison's Weblog",
+    "description": "High-frequency, hands-on commentary on every new LLM release, tool, and SDK. Best single feed to track what is shipping in AI tooling day-to-day.",
+    "tags": ["ai", "blog", "english", "tools", "engineering"],
+    "lang": "en",
+    "cadence": "daily"
+  },
+  {
+    "id": "sebastian-raschka",
+    "type": "rss",
+    "url": "https://sebastianraschka.com/rss_feed.xml",
+    "label": "Sebastian Raschka's Magazine",
+    "description": "Implementation-focused LLM training and architecture deep-dives from the author of Build a Large Language Model From Scratch.",
+    "tags": ["ai", "blog", "english", "long-form", "engineering", "tutorial"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "andrej-karpathy",
+    "type": "rss",
+    "url": "https://karpathy.github.io/feed.xml",
+    "label": "Andrej Karpathy's Blog",
+    "description": "Andrej Karpathy's classic blog (Tesla / OpenAI / Eureka Labs). Infrequent but each post tends to reframe how the field thinks.",
+    "tags": ["ai", "blog", "english", "long-form"],
+    "lang": "en",
+    "cadence": "irregular"
+  },
+  {
+    "id": "yannic-kilcher-yt",
+    "type": "rss",
+    "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCZHmQk67mSJgfCCTn7xBfew",
+    "label": "Yannic Kilcher (YouTube)",
+    "description": "Paper-walkthrough videos from researcher Yannic Kilcher, RSS via YouTube channel feed. Useful for tracking notable ML papers with video commentary.",
+    "tags": ["ai", "papers", "english", "video", "research"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "claude-code-changelog",
+    "type": "changelog",
+    "url": "https://code.claude.com/docs/en/changelog",
+    "label": "Claude Code Changelog",
+    "description": "Official Claude Code (Anthropic CLI) changelog: new commands, model defaults, plugin/skill APIs, harness behavior.",
+    "tags": ["ai", "tools", "changelog", "english", "developer"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "claude-product-release-notes",
+    "type": "changelog",
+    "url": "https://support.claude.com/en/articles/12138966-release-notes",
+    "label": "Claude Product Release Notes",
+    "description": "Anthropic Claude consumer/web product release notes: UI features, projects, MCP support, model picker changes.",
+    "tags": ["ai", "tools", "changelog", "english"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "openai-codex-changelog",
+    "type": "changelog",
+    "url": "https://developers.openai.com/codex/changelog",
+    "label": "OpenAI Codex Changelog",
+    "description": "OpenAI Codex agent changelog: new tool integrations, model updates, IDE/CLI behavior changes.",
+    "tags": ["ai", "tools", "changelog", "english", "developer"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "gemini-release-notes",
+    "type": "changelog",
+    "url": "https://gemini.google/release-notes/",
+    "label": "Gemini Release Notes",
+    "description": "Google Gemini consumer app release notes: new model versions, Deep Research, Gems, Canvas, image/video features.",
+    "tags": ["ai", "tools", "changelog", "english"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "github-changelog",
+    "type": "rss",
+    "url": "https://github.blog/changelog/feed/",
+    "label": "GitHub Changelog (incl. Copilot)",
+    "description": "Full GitHub product changelog feed including Copilot, Actions, Codespaces, Issues. Filter for Copilot entries to track AI coding updates.",
+    "tags": ["tools", "changelog", "english", "developer", "ai"],
+    "lang": "en",
+    "cadence": "daily"
+  },
+  {
+    "id": "cursor-changelog",
+    "type": "changelog",
+    "url": "https://www.cursor.com/changelog",
+    "label": "Cursor Changelog",
+    "description": "Cursor IDE release notes: agent mode, tab completion model updates, MCP integrations, pricing changes.",
+    "tags": ["ai", "tools", "changelog", "english", "developer", "ide"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "windsurf-changelog",
+    "type": "changelog",
+    "url": "https://windsurf.com/changelog",
+    "label": "Windsurf Changelog",
+    "description": "Windsurf (formerly Codeium) IDE changelog: Cascade agent updates, model availability, new IDE features.",
+    "tags": ["ai", "tools", "changelog", "english", "developer", "ide"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "jetbrains-ai-blog",
+    "type": "rss",
+    "url": "https://blog.jetbrains.com/ai/feed/",
+    "label": "JetBrains AI Blog",
+    "description": "JetBrains AI Assistant and Junie agent updates across IntelliJ, PyCharm, WebStorm. Covers IDE-integrated AI features.",
+    "tags": ["ai", "tools", "changelog", "english", "developer", "ide"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "36kr-aggregator",
+    "type": "aggregator",
+    "url": "https://www.36kr.com/",
+    "label": "36 Kr (36 氪)",
+    "description": "Top Chinese tech/startup business publication. Covers funding, product launches, big-tech moves, AI industry analysis from a Chinese market lens.",
+    "tags": ["china", "tech-news", "startup", "business", "chinese"],
+    "lang": "zh",
+    "cadence": "daily",
+    "subsource": "36kr"
+  },
+  {
+    "id": "weibo-hot",
+    "type": "aggregator",
+    "url": "https://s.weibo.com/top/summary",
+    "label": "Weibo Hot Search",
+    "description": "Real-time Weibo trending topics: Chinese mainstream public opinion barometer, mixed entertainment/news/social. Useful for sensing what China is talking about right now.",
+    "tags": ["china", "social", "trending", "chinese", "community"],
+    "lang": "zh",
+    "cadence": "daily",
+    "subsource": "weibo"
+  },
+  {
+    "id": "tencent-news",
+    "type": "aggregator",
+    "url": "https://news.qq.com/",
+    "label": "Tencent News",
+    "description": "Tencent News mainstream Chinese news aggregator: politics, society, finance, tech. Establishment editorial tone.",
+    "tags": ["china", "tech-news", "chinese"],
+    "lang": "zh",
+    "cadence": "daily",
+    "subsource": "tencent"
+  },
+  {
+    "id": "wallstreetcn",
+    "type": "aggregator",
+    "url": "https://wallstreetcn.com/",
+    "label": "Wall Street CN (华尔街见闻)",
+    "description": "Chinese financial news in real-time: macro markets, US stocks, A-shares, AI stock moves. Bloomberg-equivalent for Chinese readers.",
+    "tags": ["china", "business", "finance", "chinese", "markets"],
+    "lang": "zh",
+    "cadence": "daily",
+    "subsource": "wallstreetcn"
+  },
+  {
+    "id": "v2ex",
+    "type": "aggregator",
+    "url": "https://www.v2ex.com/",
+    "label": "V2EX",
+    "description": "Chinese-language developer community (think HN with Chinese sensibility). Threads on indie hacking, remote work, side projects, tech career.",
+    "tags": ["china", "community", "developer", "chinese"],
+    "lang": "zh",
+    "cadence": "daily",
+    "subsource": "v2ex"
+  },
+  {
+    "id": "sspai",
+    "type": "rss",
+    "url": "https://sspai.com/feed",
+    "label": "少数派 (sspai)",
+    "description": "Chinese independent tech/lifestyle publication: app reviews, productivity workflows, hardware deep-dives. High editorial quality.",
+    "tags": ["china", "tools", "blog", "chinese", "productivity"],
+    "lang": "zh",
+    "cadence": "daily"
+  },
+  {
+    "id": "ifanr",
+    "type": "rss",
+    "url": "https://www.ifanr.com/feed",
+    "label": "爱范儿 (ifanr)",
+    "description": "Chinese consumer tech and design publication: Apple-leaning hardware coverage, AI product reviews, lifestyle gadgets.",
+    "tags": ["china", "tech-news", "blog", "chinese", "consumer"],
+    "lang": "zh",
+    "cadence": "daily"
+  },
+  {
+    "id": "hackernews",
+    "type": "aggregator",
+    "url": "https://news.ycombinator.com",
+    "label": "Hacker News",
+    "description": "The default tech-savvy English aggregator. Best signal for what US/EU developers are debating: SaaS, AI papers, infra outages, Show HN launches.",
+    "tags": ["english", "community", "tech-news", "developer", "startup"],
+    "lang": "en",
+    "cadence": "daily",
+    "subsource": "hackernews"
+  },
+  {
+    "id": "github-trending",
+    "type": "aggregator",
+    "url": "https://github.com/trending",
+    "label": "GitHub Trending",
+    "description": "Daily trending repositories on GitHub. Best leading indicator of which open-source projects (often AI tooling) are gaining traction.",
+    "tags": ["english", "community", "open-source", "developer", "trending"],
+    "lang": "en",
+    "cadence": "daily",
+    "subsource": "github"
+  },
+  {
+    "id": "producthunt",
+    "type": "aggregator",
+    "url": "https://www.producthunt.com",
+    "label": "Product Hunt",
+    "description": "Daily new product launches voted by tech early-adopters. Skews toward AI wrappers, SaaS tools, indie maker projects.",
+    "tags": ["english", "community", "startup", "tools", "trending"],
+    "lang": "en",
+    "cadence": "daily",
+    "subsource": "producthunt"
+  },
+  {
+    "id": "techcrunch",
+    "type": "rss",
+    "url": "https://techcrunch.com/feed/",
+    "label": "TechCrunch",
+    "description": "Major US tech publication with daily startup, funding, and big-tech coverage. Mainstream Silicon Valley editorial tone.",
+    "tags": ["english", "tech-news", "startup", "business"],
+    "lang": "en",
+    "cadence": "daily"
+  },
+  {
+    "id": "the-verge",
+    "type": "rss",
+    "url": "https://www.theverge.com/rss/index.xml",
+    "label": "The Verge",
+    "description": "Consumer tech, culture, and policy reporting with strong design sensibility. Covers AI consumer products, hardware launches, platform regulation.",
+    "tags": ["english", "tech-news", "consumer", "policy"],
+    "lang": "en",
+    "cadence": "daily"
+  },
+  {
+    "id": "ars-technica",
+    "type": "rss",
+    "url": "https://feeds.arstechnica.com/arstechnica/index",
+    "label": "Ars Technica",
+    "description": "In-depth tech journalism: deeper than TechCrunch on infrastructure, security, science, and policy stories. Less hype, more analysis.",
+    "tags": ["english", "tech-news", "long-form", "engineering"],
+    "lang": "en",
+    "cadence": "daily"
+  },
+  {
+    "id": "tldr-tech",
+    "type": "rss",
+    "url": "https://tldr.tech/api/rss/tech",
+    "label": "TLDR Tech Newsletter",
+    "description": "Daily concise tech newsletter: a few sentences each on top stories across startups, big tech, programming. Time-efficient overview.",
+    "tags": ["english", "tech-news", "newsletter", "digest"],
+    "lang": "en",
+    "cadence": "daily"
+  },
+  {
+    "id": "stackoverflow-blog",
+    "type": "rss",
+    "url": "https://stackoverflow.blog/feed/",
+    "label": "Stack Overflow Blog",
+    "description": "Stack Overflow's editorial blog: developer survey results, AI/coding workflow trends, engineering culture posts.",
+    "tags": ["english", "engineering", "developer", "blog"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "smashing-magazine",
+    "type": "rss",
+    "url": "https://www.smashingmagazine.com/feed/",
+    "label": "Smashing Magazine",
+    "description": "Practical web design and front-end development articles: CSS techniques, accessibility, design systems, UX patterns.",
+    "tags": ["english", "design", "engineering", "frontend", "tutorial"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "css-tricks",
+    "type": "rss",
+    "url": "https://css-tricks.com/feed/",
+    "label": "CSS-Tricks",
+    "description": "Front-end development tips, CSS features, snippet-style how-tos. Useful for staying current on browser CSS capabilities.",
+    "tags": ["english", "design", "engineering", "frontend", "tutorial"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "a-list-apart",
+    "type": "rss",
+    "url": "https://alistapart.com/main/feed/",
+    "label": "A List Apart",
+    "description": "Long-form essays on web standards, design strategy, content design. Slower pace, more thoughtful than tutorial sites.",
+    "tags": ["english", "design", "long-form", "frontend"],
+    "lang": "en",
+    "cadence": "irregular"
+  },
+  {
+    "id": "ux-collective",
+    "type": "rss",
+    "url": "https://uxdesign.cc/feed",
+    "label": "UX Collective",
+    "description": "Curated Medium publication on UX/product design. Mix of practitioner essays, case studies, design leadership pieces.",
+    "tags": ["english", "design", "ux", "product"],
+    "lang": "en",
+    "cadence": "daily"
+  },
+  {
+    "id": "dribbble-popular",
+    "type": "rss",
+    "url": "https://dribbble.com/shots/popular.rss",
+    "label": "Dribbble Popular Shots",
+    "description": "Trending visual design shots: UI explorations, illustration, branding. Useful for visual inspiration sourcing.",
+    "tags": ["english", "design", "visual", "inspiration"],
+    "lang": "en",
+    "cadence": "daily"
+  },
+  {
+    "id": "awwwards",
+    "type": "webpage",
+    "url": "https://www.awwwards.com/",
+    "label": "Awwwards",
+    "description": "Award-winning website showcase: bleeding-edge web design and interactive experiences. Scraped as webpage (no working RSS).",
+    "tags": ["english", "design", "visual", "inspiration", "web"],
+    "lang": "en",
+    "cadence": "daily"
+  },
+  {
+    "id": "stratechery",
+    "type": "rss",
+    "url": "https://stratechery.com/feed/",
+    "label": "Stratechery by Ben Thompson",
+    "description": "Ben Thompson's tech business strategy analysis. Aggregation theory, platform dynamics, big-tech earnings deep-dives. Free articles via RSS, paid full archive.",
+    "tags": ["english", "business", "strategy", "long-form", "analysis"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "lennys-newsletter",
+    "type": "rss",
+    "url": "https://www.lennysnewsletter.com/feed",
+    "label": "Lenny's Newsletter",
+    "description": "Product management, growth, and career advice from Lenny Rachitsky. Interviews with PMs at top tech companies.",
+    "tags": ["english", "business", "product", "newsletter", "career"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "nextjs-blog",
+    "type": "rss",
+    "url": "https://nextjs.org/feed.xml",
+    "label": "Next.js Blog",
+    "description": "Official Next.js framework releases and engineering posts. Tracks the dominant React production framework.",
+    "tags": ["english", "engineering", "frontend", "changelog", "tools"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "vercel-blog",
+    "type": "rss",
+    "url": "https://vercel.com/atom",
+    "label": "Vercel Blog",
+    "description": "Vercel platform updates plus engineering essays on edge runtime, AI SDK, deployment infrastructure.",
+    "tags": ["english", "engineering", "tools", "changelog", "ai"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "changelog-podcast",
+    "type": "rss",
+    "url": "https://changelog.com/feed",
+    "label": "Changelog (podcast network feed)",
+    "description": "Open-source and developer culture podcast network. Long-form interviews with maintainers, AI engineers, and infra builders.",
+    "tags": ["english", "podcast", "developer", "open-source", "engineering"],
+    "lang": "en",
+    "cadence": "weekly"
+  }
+]

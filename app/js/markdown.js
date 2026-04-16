@@ -9,7 +9,11 @@ export function renderMd(md, ap) {
     if (/^https?:\/\//.test(href)) return href;
     if (href.startsWith('#/article/')) return href;
     if (!href.endsWith('.md')) return href;
-    if (href.includes('/raw/') || href.startsWith('../../raw/')) return href;
+    if (href.startsWith('../../raw/')) return '#/raw/' + href.slice('../../raw/'.length);
+    if (href.startsWith('../raw/')) return '#/raw/' + href.slice('../raw/'.length);
+    if (href.startsWith('raw/')) return '#/raw/' + href.slice(4);
+    const rawIdx = href.indexOf('/raw/');
+    if (rawIdx >= 0) return '#/raw/' + href.slice(rawIdx + 5);
     let r = href;
     if (href.startsWith('../') || href.startsWith('./')) {
       const b = aDir ? aDir.split('/') : []; const p = href.split('/'); const c = [...b];
