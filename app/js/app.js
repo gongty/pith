@@ -48,7 +48,7 @@ window.precipitateMsg = precipitateMsg;
 window.precipitateConv = precipitateConv;
 window.closePrecipModal = closePrecipModal;
 window.switchSettingsTab = switchSettingsTab;
-window.submitIngest = () => submitIngest(render);
+window.submitIngest = submitIngest;
 window.batchToggleAll = batchToggleAll;
 window.batchFileToggle = batchFileToggle;
 

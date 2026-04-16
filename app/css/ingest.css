@@ -48,48 +48,16 @@
 .ingest-drop-zone.dragover textarea{opacity:0.1}
 .ingest-drop-hint svg{width:32px;height:32px;opacity:0.4}
 
-/* Ingest step progress */
-.ingest-steps{display:flex;align-items:center;gap:0;padding:8px 0}
-.ingest-step{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--fg-tertiary);flex:1}
-.ingest-step-dot{
-  width:22px;height:22px;border-radius:50%;border:2px solid var(--border);
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  font-size:10px;transition:all 200ms;
-}
-.ingest-step.active .ingest-step-dot{border-color:var(--accent);color:var(--accent);animation:stepPulse 1.5s infinite}
-.ingest-step.done .ingest-step-dot{border-color:var(--green);background:var(--green);color:#fff}
-.ingest-step-line{flex:1;height:2px;background:var(--border);margin:0 4px}
-.ingest-step.done .ingest-step-line{background:var(--green)}
-@keyframes stepPulse{0%,100%{opacity:1}50%{opacity:0.5}}
-
-.ingest-result{
-  padding:10px 12px;border-radius:var(--radius);font-size:13px;
-  display:flex;align-items:center;gap:8px;cursor:pointer;
-  transition:background var(--t);
-}
-.ingest-result:hover{background:var(--bg-hover)}
-.ingest-result.done{background:rgba(68,131,97,0.06);color:var(--green)}
-.ingest-result.error{background:rgba(235,87,87,0.06);color:var(--red)}
-
-/* Batch ingest */
+/* Batch ingest preview (in panel) */
 .ingest-batch-list{max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);margin:4px 0}
 .ingest-batch-item{display:flex;align-items:center;gap:8px;padding:7px 12px;font-size:13px;border-bottom:1px solid var(--border)}
 .ingest-batch-item:last-child{border-bottom:none}
 .ingest-batch-item input[type="checkbox"]{margin:0;accent-color:var(--accent)}
 .ingest-batch-item .batch-file-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ingest-batch-item .batch-status-icon{width:16px;height:16px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
-.ingest-batch-item .batch-status-icon svg{width:14px;height:14px}
-.ingest-batch-item.status-processing{background:var(--accent-bg)}
-.ingest-batch-item.status-done .batch-status-icon{color:var(--green)}
-.ingest-batch-item.status-error .batch-status-icon{color:var(--red)}
-.ingest-batch-item.status-processing .batch-status-icon{color:var(--accent);animation:stepPulse 1.5s infinite}
 .ingest-batch-summary{font-size:12px;color:var(--fg-secondary);padding:4px 0;display:flex;align-items:center;justify-content:space-between}
 .ingest-batch-actions{display:flex;gap:8px;align-items:center}
 .ingest-batch-actions button{font-size:12px;color:var(--accent);background:none;border:none;cursor:pointer;padding:0}
 .ingest-batch-actions button:hover{text-decoration:underline}
-.ingest-progress-wrap{height:6px;background:var(--bg-hover);border-radius:3px;overflow:hidden;margin:12px 0}
-.ingest-progress-fill{height:100%;background:var(--accent);border-radius:3px;transition:width 300ms ease;width:0}
-.ingest-progress-info{font-size:12px;color:var(--fg-secondary);display:flex;justify-content:space-between;align-items:center}
 
 /* File type tags */
 .batch-type-tag{
@@ -101,3 +69,28 @@
 .batch-type-tag.type-image{background:rgba(68,131,97,0.1);color:#449961}
 .batch-type-tag.type-audio{background:rgba(90,100,200,0.1);color:#5a64c8}
 .batch-type-tag.type-video{background:rgba(200,130,50,0.1);color:#c88232}
+
+/* ── Global ingest progress toast ── */
+.ingest-toast{
+  position:fixed;bottom:24px;right:24px;z-index:300;
+  width:280px;padding:14px 16px;
+  background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);
+  box-shadow:0 4px 20px rgba(0,0,0,0.1);
+  display:none;
+}
+.ingest-toast.show{display:block}
+.ingest-toast.done{border-color:var(--green)}
+.ingest-toast.error{border-color:var(--red)}
+.ingest-toast-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.ingest-toast-title{font-size:13px;font-weight:500;color:var(--fg)}
+.ingest-toast.done .ingest-toast-title{color:var(--green)}
+.ingest-toast.error .ingest-toast-title{color:var(--red)}
+.ingest-toast-detail{font-size:12px;color:var(--fg-tertiary)}
+.ingest-toast-bar{height:4px;background:var(--bg-hover);border-radius:2px;overflow:hidden}
+.ingest-toast-fill{height:100%;background:var(--accent);border-radius:2px;transition:width 500ms ease;width:0}
+.ingest-toast.done .ingest-toast-fill{background:var(--green)}
+.ingest-toast.error .ingest-toast-fill{background:var(--red)}
+[data-theme="dark"] .ingest-toast{box-shadow:0 4px 20px rgba(0,0,0,0.3)}
+@media(max-width:768px){
+  .ingest-toast{bottom:72px;right:12px;left:12px;width:auto}
+}
