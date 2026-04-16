@@ -33,7 +33,16 @@ export async function delChat(id) {
 
 export async function rChat(c, id) {
   if (!id) {
-    state.convId = null; state.msgs = [];
+    state.convId = null;
+    if (state.pendingChat) {
+      const text = state.pendingChat;
+      state.pendingChat = null;
+      state.msgs = [{ role: 'user', content: text }];
+      renderChatPage(c);
+      sendNewChat(text);
+      return;
+    }
+    state.msgs = [];
     renderChatPage(c);
     return;
   }
@@ -192,6 +201,69 @@ export async function chatSend() {
     }
   }
   state.chatBusy = false; $('cpSendBtn').disabled = false;
+}
+
+/* ── Send new chat (from dashboard/search, already navigated) ── */
+async function sendNewChat(text) {
+  state.chatBusy = true;
+  const sendBtn = document.getElementById('cpSendBtn');
+  if (sendBtn) sendBtn.disabled = true;
+  const msgsEl = $('chatMsgs');
+  // Show typing indicator
+  if (msgsEl) {
+    const inner = msgsEl.querySelector('.chat-messages-inner');
+    if (inner) {
+      inner.innerHTML += '<div class="chat-msg assistant" id="chatTyp"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body"><div class="chat-typing-dots"><span></span><span></span><span></span></div></div></div>';
+      msgsEl.scrollTop = msgsEl.scrollHeight;
+    }
+  }
+  try {
+    const res = await post('/api/chat/new', { firstMessage: text });
+    state.convId = res.conversation.id;
+    state.msgs = [{ role: 'user', content: text }, res.message];
+    state.chatList = null;
+    history.replaceState(null, '', '#/chat/' + state.convId);
+    updSidebarChats();
+    const typ = document.getElementById('chatTyp'); if (typ) typ.remove();
+    if (msgsEl) {
+      const inner = msgsEl.querySelector('.chat-messages-inner');
+      if (inner) {
+        const msgEl = document.createElement('div');
+        msgEl.className = 'chat-msg assistant';
+        msgEl.innerHTML = '<div class="chat-msg-avatar">AI</div><div class="chat-msg-body" id="aiTypeTarget"></div>';
+        const actionsEl = document.createElement('div');
+        actionsEl.className = 'chat-msg-actions'; actionsEl.style.opacity = '0';
+        msgEl.appendChild(actionsEl);
+        inner.appendChild(msgEl);
+        const target = document.getElementById('aiTypeTarget');
+        const finalHtml = fmtChat(res.message.content);
+        const msg = res.message;
+        typeEffect(target, finalHtml, () => {
+          target.removeAttribute('id');
+          if (msg.references && msg.references.length > 0) {
+            let refsHtml = '<div class="chat-refs">';
+            msg.references.forEach(r => { refsHtml += '<a class="chat-ref" href="#/article/' + h(r.path) + '" title="' + h(r.path) + '">' + h(r.title || r.path) + '</a>'; });
+            refsHtml += '</div>';
+            target.insertAdjacentHTML('beforeend', refsHtml);
+          }
+          if (msg.id) {
+            actionsEl.innerHTML = '<button class="precip-btn" onclick="precipitateMsg(\'' + h(msg.id) + '\')" title="沉淀为知识"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg></button>';
+            actionsEl.style.opacity = '';
+          }
+          msgsEl.scrollTop = msgsEl.scrollHeight;
+        });
+        msgsEl.scrollTop = msgsEl.scrollHeight;
+      }
+    }
+  } catch (e) {
+    const typ = document.getElementById('chatTyp'); if (typ) typ.remove();
+    if (msgsEl) {
+      const inner = msgsEl.querySelector('.chat-messages-inner');
+      if (inner) inner.innerHTML += '<div class="chat-msg assistant"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body" style="color:var(--red)">错误: ' + h(e.message) + '</div></div>';
+    }
+  }
+  state.chatBusy = false;
+  if (sendBtn) sendBtn.disabled = false;
 }
 
 /* ── Precipitate (沉淀) ── */

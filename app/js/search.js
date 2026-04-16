@@ -1,4 +1,4 @@
-import { $, h, hRe, api, go, post, toast } from './utils.js';
+import { $, h, hRe, api, go } from './utils.js';
 import state from './state.js';
 
 export function openSearch() {
@@ -70,16 +70,8 @@ window.askFromSearch = async function () {
   const query = $('searchInput').value.trim();
   if (!query || state.chatBusy) return;
   closeSearch();
-  state.chatBusy = true;
-  toast('正在提问...');
-  try {
-    const res = await post('/api/chat/new', { firstMessage: query });
-    state.convId = res.conversation.id;
-    state.msgs = [{ role: 'user', content: query }, res.message];
-    state.chatList = null;
-    go('#/chat/' + state.convId);
-  } catch (e) {
-    toast('提问失败: ' + e.message);
-  }
-  state.chatBusy = false;
+  state.pendingChat = query;
+  state.convId = null;
+  state.msgs = [];
+  go('#/chat');
 };

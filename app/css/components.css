@@ -180,18 +180,6 @@
 }
 .toast-undo:hover{background:rgba(255,255,255,0.15)}
 
-/* ── Shortcuts hint ── */
-.shortcuts-hint{
-  position:fixed;bottom:8px;right:12px;z-index:10;
-  display:flex;gap:10px;font-size:11px;color:var(--fg-tertiary);opacity:0.6;
-  background:var(--bg);padding:4px 10px;border-radius:var(--radius);
-  transition:opacity var(--t);
-}
-.shortcuts-hint:hover{opacity:1}
-.shortcuts-hint kbd{
-  font-family:var(--font-mono);font-size:10px;padding:1px 5px;
-  border:1px solid var(--border);border-radius:3px;background:var(--bg-sidebar);
-}
 
 /* ── Mobile bottom nav ── */
 .mobile-nav{
@@ -223,7 +211,6 @@
   .content{padding-bottom:56px}
   .sidebar-expand-btn{display:none!important}
   .toast{bottom:70px}
-  .shortcuts-hint{display:none}
 }
 
 /* ── Settings tabs ── */

@@ -1,4 +1,4 @@
-import { $, h, relTime, api, post, toast, go, skelLines } from '../utils.js';
+import { $, h, relTime, api, toast, go, skelLines } from '../utils.js';
 import state from '../state.js';
 import { buildComposer, initComposer } from '../composer.js';
 import { initFG } from './graph.js';
@@ -68,13 +68,10 @@ export async function dashAsk(el) { $('dashIn').value = el.dataset.q || el.textC
 
 async function dashSend() {
   const inp = $('dashIn'); const t = inp.value.trim(); if (!t || state.chatBusy) return;
-  state.chatBusy = true; $('dashSendBtn').disabled = true;
-  try {
-    const res = await post('/api/chat/new', { firstMessage: t });
-    state.convId = res.conversation.id; state.msgs = [{ role: 'user', content: t }, res.message];
-    state.chatList = null;
-    go('#/chat/' + state.convId);
-  } catch (e) { toast('发送失败: ' + e.message); }
-  state.chatBusy = false;
+  // Navigate immediately, let chat page handle the API call
+  state.pendingChat = t;
+  state.convId = null;
+  state.msgs = [];
+  go('#/chat');
 }
 
