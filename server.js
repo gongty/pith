@@ -1302,7 +1302,7 @@ function tree(dir) {
           .filter(f => f.isFile() && f.name.endsWith('.md'))
           .map(f => {
             const fp = path.join(topicDir, f.name);
-            return { name: f.name.replace('.md', ''), file: f.name, path: d.name + '/' + f.name, title: extractTitle(fp), mtime: fs.statSync(fp).mtimeMs };
+            return { name: f.name.replace('.md', ''), file: f.name, path: d.name + '/' + f.name, title: extractTitle(fp), tags: extractTags(fp), mtime: fs.statSync(fp).mtimeMs };
           })
           .sort((a, b) => b.mtime - a.mtime);
         return { name: d.name, children };

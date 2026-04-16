@@ -382,7 +382,8 @@ function renderRunSummaryCard(run) {
       const entries = Object.entries(run.sourceStatus);
       if (entries.length) {
         const failed = entries.filter(([, v]) => v && v.status === 'error');
-        const okCount = entries.length - failed.length;
+        // Count `ok` explicitly so an unknown/missing status doesn't get tallied as OK.
+        const okCount = entries.filter(([, v]) => v && v.status === 'ok').length;
         s += '<div class="autotask-history-sources">';
         s += '源 ' + okCount + '/' + entries.length + ' OK';
         if (failed.length) {
@@ -452,7 +453,11 @@ function renderRunItems(run) {
   let s = '<div class="autotask-run-items">';
   items.forEach(it => {
     const status = it.status || 'unknown';
-    const isSmartFill = !!it.smartFill || status === 'smart_fill';
+    const isPending = status === 'kept_pending' || status === 'smart_fill_pending';
+    // Treat as smart_fill (terminal/visible row) only when actually finalized,
+    // not while still pending — otherwise the pending-branch below is unreachable
+    // because isSmartFill catches first.
+    const isSmartFill = (!!it.smartFill || status === 'smart_fill') && !isPending;
     const isGated = status === 'skipped' || status === 'gated_out';
     const isIngested = status === 'ingested';
     const titleStr = h(it.title || '无标题');

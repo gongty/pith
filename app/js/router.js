@@ -18,15 +18,28 @@ function safeDecode(s) {
 
 export function route() {
   const hash = location.hash || '#/';
-  if (hash === '#/' || hash === '#/dashboard') return { v: 'dashboard' };
-  if (hash === '#/chat') return { v: 'chat', id: null };
-  if (hash.startsWith('#/chat/')) return { v: 'chat', id: hash.slice(7) };
-  if (hash === '#/graph') return { v: 'graph' };
-  if (hash === '#/browse') return { v: 'browse' };
-  if (hash === '#/health') return { v: 'health' };
-  if (hash === '#/autotask') return { v: 'autotask' };
-  if (hash.startsWith('#/article/')) return { v: 'article', p: safeDecode(hash.slice(10)) };
-  if (hash.startsWith('#/raw/')) return { v: 'raw', p: safeDecode(hash.slice(6)) };
+  // 拆出查询字符串（例 #/browse?tag=xxx）
+  const qIdx = hash.indexOf('?');
+  const path = qIdx >= 0 ? hash.slice(0, qIdx) : hash;
+  const query = {};
+  if (qIdx >= 0) {
+    for (const kv of hash.slice(qIdx + 1).split('&')) {
+      if (!kv) continue;
+      const eq = kv.indexOf('=');
+      const k = eq >= 0 ? kv.slice(0, eq) : kv;
+      const v = eq >= 0 ? kv.slice(eq + 1) : '';
+      query[safeDecode(k)] = safeDecode(v);
+    }
+  }
+  if (path === '#/' || path === '#/dashboard') return { v: 'dashboard' };
+  if (path === '#/chat') return { v: 'chat', id: null };
+  if (path.startsWith('#/chat/')) return { v: 'chat', id: path.slice(7) };
+  if (path === '#/graph') return { v: 'graph' };
+  if (path === '#/browse') return { v: 'browse', tag: query.tag || '' };
+  if (path === '#/health') return { v: 'health' };
+  if (path === '#/autotask') return { v: 'autotask' };
+  if (path.startsWith('#/article/')) return { v: 'article', p: safeDecode(path.slice(10)) };
+  if (path.startsWith('#/raw/')) return { v: 'raw', p: safeDecode(path.slice(6)) };
   return { v: 'dashboard' };
 }
 
@@ -45,7 +58,9 @@ function updBC(r) {
   else if (r.v === 'chat') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>对话';
   else if (r.v === 'graph') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>知识图谱';
   else if (r.v === 'health') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>健康报告';
-  else if (r.v === 'browse') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>全部文章';
+  else if (r.v === 'browse') bc.innerHTML = r.tag
+    ? '<a href="#/">知识库</a><span class="sep">/</span><a href="#/browse">全部文章</a><span class="sep">/</span>标签 · ' + h(r.tag)
+    : '<a href="#/">知识库</a><span class="sep">/</span>全部文章';
   else if (r.v === 'autotask') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>自动任务';
   else if (r.v === 'raw' && r.p) {
     const pts = r.p.split('/'); const f = pts[pts.length - 1];
@@ -74,7 +89,7 @@ export async function render() {
   if (r.v === 'dashboard') await rDash(c);
   else if (r.v === 'chat') await rChat(c, r.id);
   else if (r.v === 'graph') await rGraph(c);
-  else if (r.v === 'browse') await rBrowse(c);
+  else if (r.v === 'browse') await rBrowse(c, r.tag);
   else if (r.v === 'health') await rHealth(c);
   else if (r.v === 'autotask') await rAutotask(c);
   else if (r.v === 'article') await rArticle(c, r.p);
