@@ -68,9 +68,13 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 .sidebar{
   width:var(--sidebar-w);background:var(--bg-sidebar);
   display:flex;flex-direction:column;flex-shrink:0;
-  border-right:1px solid var(--border);overflow:hidden;
-  transition:width var(--t);
+  overflow:hidden;position:relative;
 }
+.sidebar-resize{
+  position:absolute;top:0;right:0;width:4px;height:100%;cursor:col-resize;z-index:10;
+  transition:background var(--t);
+}
+.sidebar-resize:hover,.sidebar-resize.dragging{background:var(--accent);opacity:0.4}
 .sidebar-header{
   display:flex;align-items:center;gap:8px;padding:10px 12px 6px;
   font-size:14px;font-weight:600;letter-spacing:-0.01em;
@@ -101,16 +105,15 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 .sidebar-page svg{width:16px;height:16px;flex-shrink:0;opacity:0.5}
 .sidebar-topic{padding:8px 16px 2px;font-size:12px;font-weight:500;color:var(--fg-tertiary)}
 .sidebar-bottom{
-  padding:8px;border-top:1px solid var(--border);
-  display:flex;gap:2px;
+  padding:6px 8px;display:flex;flex-direction:column;gap:1px;
 }
 .sidebar-bottom-btn{
-  flex:1;display:flex;align-items:center;justify-content:center;gap:4px;
-  padding:5px;border-radius:var(--radius);font-size:12px;color:var(--fg-tertiary);
+  display:flex;align-items:center;gap:8px;
+  padding:4px 8px;border-radius:var(--radius);font-size:13px;color:var(--fg-secondary);
   transition:background var(--t);
 }
-.sidebar-bottom-btn:hover{background:var(--bg-hover);color:var(--fg-secondary)}
-.sidebar-bottom-btn svg{width:15px;height:15px}
+.sidebar-bottom-btn:hover{background:var(--bg-hover)}
+.sidebar-bottom-btn svg{width:16px;height:16px;opacity:0.5;flex-shrink:0}
 
 /* ── Main ── */
 .main{flex:1;display:flex;flex-direction:column;min-width:0}
@@ -194,18 +197,20 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 .chat-send-btn:disabled{opacity:0.15;cursor:default}
 .chat-send-btn:not(:disabled):hover{opacity:0.8}
 .chat-model-dropdown{
-  position:absolute;bottom:100%;right:0;margin-bottom:6px;
-  background:var(--bg);border:1px solid var(--border);border-radius:8px;
-  box-shadow:0 4px 20px rgba(0,0,0,0.12);min-width:220px;max-height:260px;
-  overflow-y:auto;z-index:50;display:none;padding:4px;
+  position:absolute;bottom:100%;right:0;margin-bottom:8px;
+  background:var(--bg);border-radius:10px;
+  box-shadow:0 0 0 1px rgba(0,0,0,0.04),0 8px 30px rgba(0,0,0,0.08);
+  min-width:200px;max-height:280px;
+  overflow-y:auto;z-index:50;display:none;padding:6px;
 }
+[data-theme="dark"] .chat-model-dropdown{box-shadow:0 0 0 1px rgba(255,255,255,0.06),0 8px 30px rgba(0,0,0,0.3)}
 .chat-model-dropdown.open{display:block}
 .chat-model-opt{
-  padding:7px 12px;border-radius:6px;font-size:13px;
+  padding:8px 12px;border-radius:6px;font-size:14px;
   color:var(--fg-secondary);cursor:pointer;transition:background var(--t);
 }
-.chat-model-opt:hover{background:var(--bg-hover)}
-.chat-model-opt.active{background:var(--accent-bg);color:var(--accent)}
+.chat-model-opt:hover{background:var(--bg-hover);color:var(--fg)}
+.chat-model-opt.active{background:var(--accent-bg);color:var(--accent);font-weight:500}
 
 /* Chat messages */
 .chat-msgs{display:flex;flex-direction:column;gap:20px;margin-bottom:24px;max-height:480px;overflow-y:auto}
@@ -250,11 +255,16 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 
 /* Activity */
 .activity-card{margin-bottom:32px}
-.activity-row{display:flex;gap:10px;padding:6px 0;font-size:13px;align-items:center}
-.activity-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
-.activity-date{font-size:12px;color:var(--fg-tertiary);min-width:42px;font-family:var(--font-mono)}
-.activity-label{color:var(--fg-secondary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.activity-none{color:var(--fg-tertiary);font-size:13px;padding:8px 0}
+.activity-row{
+  display:flex;gap:10px;padding:7px 10px;font-size:14px;align-items:center;
+  border-radius:var(--radius);transition:background var(--t);cursor:default;
+}
+.activity-row:hover{background:var(--bg-hover)}
+.activity-icon{flex-shrink:0;width:20px;height:20px;display:flex;align-items:center;justify-content:center;opacity:0.45}
+.activity-icon svg{width:16px;height:16px}
+.activity-date{font-size:12px;color:var(--fg-tertiary);min-width:42px}
+.activity-label{color:var(--fg);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.activity-none{color:var(--fg-tertiary);font-size:14px;padding:12px 0}
 
 /* Stats */
 .stats-row{display:flex;gap:20px;font-size:12px;color:var(--fg-tertiary);padding-top:8px;border-top:1px solid var(--border)}
@@ -487,6 +497,7 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 
 <!-- Sidebar -->
 <aside class="sidebar" id="sidebar">
+  <div class="sidebar-resize" id="sidebarResize"></div>
   <div class="sidebar-header">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
     知识库
@@ -701,8 +712,8 @@ async function rDash(c){
     s+='<div class="activity-card">';
     if(!ent.length)s+='<div class="activity-none">暂无记录</div>';
     else ent.slice(0,6).forEach(a=>{
-      const c=a.type==='ingest'?'var(--green)':a.type==='query'?'var(--blue)':'var(--orange)';
-      s+='<div class="activity-row"><span class="activity-dot" style="background:'+c+'"></span><span class="activity-date">'+(a.date||'').slice(5)+'</span><span class="activity-label">'+h(a.title)+'</span></div>';
+      const icon=a.type==='ingest'?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>':a.type==='query'?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+      s+='<div class="activity-row"><span class="activity-icon">'+icon+'</span><span class="activity-date">'+(a.date||'').slice(5)+'</span><span class="activity-label">'+h(a.title)+'</span></div>';
     });
     s+='</div>';
 
@@ -1114,6 +1125,28 @@ async function saveSett(){
 async function testConn(){try{await saveSett();const r=await post('/api/settings/test',{});toast(r.ok?'连接成功':'失败: '+r.message)}catch(e){toast('测试失败')}}
 
 /* ── Init ── */
+/* ── Sidebar Resize ── */
+(function(){
+  const handle=$('sidebarResize'),sb=$('sidebar');
+  if(!handle||!sb)return;
+  let startX,startW;
+  handle.addEventListener('mousedown',e=>{
+    e.preventDefault();startX=e.clientX;startW=sb.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove',onMove);
+    document.addEventListener('mouseup',onUp);
+  });
+  function onMove(e){
+    const w=Math.max(180,Math.min(400,startW+(e.clientX-startX)));
+    sb.style.width=w+'px';
+  }
+  function onUp(){
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove',onMove);
+    document.removeEventListener('mouseup',onUp);
+  }
+})();
+
 initTheme();
 render();
 </script>
