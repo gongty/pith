@@ -3685,7 +3685,7 @@ const server = http.createServer(async (req, res) => {
       const s = getBatchSummary(latestBatchId);
       if (s && s.status === 'processing') batch = s;
     }
-    const hasActivity = running.length > 0 || queued.length > 0 || (batch && batch.status === 'processing');
+    const hasActivity = !!(running.length > 0 || queued.length > 0 || (batch && batch.status === 'processing'));
     return json(res, 200, { running, queued, recent, batch, hasActivity });
   }
 
