@@ -153,19 +153,15 @@ const PROVIDERS = {
 };
 
 function loadConfig() {
-  let cfg = { provider: 'local', apiKey: '', model: '', customBaseUrl: '' };
+  let cfg = { provider: 'local', model: '', customBaseUrl: '' };
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const saved = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
       cfg.provider = saved.provider || 'local';
       cfg.model = saved.model || '';
       cfg.customBaseUrl = saved.customBaseUrl || '';
-      // config.json 不再存 key，仅作兼容读取
-      if (saved.apiKey) cfg.apiKey = saved.apiKey;
     }
   } catch {}
-  // 环境变量优先级最高
-  if (process.env.WIKI_API_KEY) cfg.apiKey = process.env.WIKI_API_KEY;
   return cfg;
 }
 
@@ -182,12 +178,13 @@ function saveApiKey(key) {
   fs.chmodSync(API_KEY_PATH, 0o600); // 仅 owner 可读写
 }
 function loadApiKey() {
+  if (process.env.WIKI_API_KEY) return process.env.WIKI_API_KEY;
   try { return fs.readFileSync(API_KEY_PATH, 'utf-8').trim(); } catch { return ''; }
 }
-// 加载时合并 .api-key
+
 function getFullConfig() {
   const cfg = loadConfig();
-  if (!cfg.apiKey) cfg.apiKey = loadApiKey();
+  cfg.apiKey = loadApiKey();
   return cfg;
 }
 
@@ -1744,69 +1741,226 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // GET /api/wiki/lint — Health Check
-  if (p === '/api/wiki/lint') {
-    const excluded = new Set(['index.md', 'log.md']);
-    const allFiles = walkMd(WIKI).filter(f => !excluded.has(path.basename(f)));
-    const allRels = new Set(allFiles.map(f => path.relative(WIKI, f)));
+  // ── runLint: 综合健康检查 ──
+  function runLint() {
+    try {
+      const excluded = new Set(['index.md', 'log.md']);
+      const allFiles = walkMd(WIKI).filter(f => !excluded.has(path.basename(f)));
+      const allRels = new Set(allFiles.map(f => path.relative(WIKI, f)));
 
-    // Read index.md to check which articles are listed
-    let indexContent = '';
-    try { indexContent = fs.readFileSync(path.join(WIKI, 'index.md'), 'utf-8'); } catch {}
-    const indexLinked = new Set();
-    const indexLinkRe = /\[([^\]]*)\]\(([^)]+\.md)\)/g;
-    let im;
-    while ((im = indexLinkRe.exec(indexContent)) !== null) {
-      const resolved = resolveLink(path.join(WIKI, 'index.md'), im[2]);
-      if (resolved) indexLinked.add(resolved);
-    }
+      // Read index.md to check which articles are listed
+      let indexContent = '';
+      try { indexContent = fs.readFileSync(path.join(WIKI, 'index.md'), 'utf-8'); } catch {}
+      const indexLinked = new Set();
+      const indexLinkRe = /\[([^\]]*)\]\(([^)]+\.md)\)/g;
+      let im;
+      while ((im = indexLinkRe.exec(indexContent)) !== null) {
+        const resolved = resolveLink(path.join(WIKI, 'index.md'), im[2]);
+        if (resolved) indexLinked.add(resolved);
+      }
 
-    // Build inbound link map
-    const inboundMap = {};
-    for (const rel of allRels) inboundMap[rel] = [];
-    let totalConnections = 0;
+      // Build inbound link map
+      const inboundMap = {};
+      for (const rel of allRels) inboundMap[rel] = [];
+      let totalConnections = 0;
 
-    const brokenLinks = [];
-    for (const f of allFiles) {
-      const rel = path.relative(WIKI, f);
-      const links = extractLinks(f);
-      for (const link of links) {
-        const target = resolveLink(f, link);
-        if (!target) continue;
-        if (excluded.has(path.basename(target))) continue;
-        if (!allRels.has(target)) {
-          brokenLinks.push({ source: rel, link, target });
-        } else {
-          if (inboundMap[target]) inboundMap[target].push(rel);
-          totalConnections++;
+      const issues = [];
+      const now = Date.now();
+      const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+      let totalWords = 0;
+      let freshCount = 0;
+      let linkedCount = 0;
+      let lastUpdate = null;
+
+      for (const f of allFiles) {
+        const rel = path.relative(WIKI, f);
+        try {
+          const links = extractLinks(f);
+          for (const link of links) {
+            const target = resolveLink(f, link);
+            if (!target) continue;
+            if (excluded.has(path.basename(target))) continue;
+            if (!allRels.has(target)) {
+              issues.push({ type: 'broken_link', severity: 'error', path: rel, message: '链接目标不存在: ' + link });
+            } else {
+              if (inboundMap[target]) inboundMap[target].push(rel);
+              totalConnections++;
+            }
+          }
+          if (links.length > 0) linkedCount++;
+        } catch {}
+
+        // Word count
+        try {
+          const c = fs.readFileSync(f, 'utf-8').replace(/```[\s\S]*?```/g, '').replace(/[#*_`>\[\]\(\)!|~-]/g, '').replace(/\s+/g, '');
+          totalWords += c.length;
+        } catch {}
+
+        // Stale detection: parse Updated/Modified from first 10 lines
+        try {
+          const content = fs.readFileSync(f, 'utf-8');
+          const first10 = content.split('\n').slice(0, 10).join('\n');
+          const dateMatch = first10.match(/(?:Updated|Modified)\s*[:：]\s*(\d{4}[-/]\d{2}[-/]\d{2})/i);
+          if (dateMatch) {
+            const artDate = new Date(dateMatch[1].replace(/\//g, '-'));
+            if (!isNaN(artDate.getTime())) {
+              if (!lastUpdate || artDate > lastUpdate) lastUpdate = artDate;
+              if (now - artDate.getTime() > THIRTY_DAYS) {
+                issues.push({ type: 'stale', severity: 'info', path: rel, message: '超过 30 天未更新' });
+              } else {
+                freshCount++;
+              }
+            } else { freshCount++; } // Can't parse date, assume fresh
+          } else {
+            // No date field — use file mtime
+            const stat = fs.statSync(f);
+            if (!lastUpdate || stat.mtime > lastUpdate) lastUpdate = stat.mtime;
+            if (now - stat.mtime.getTime() > THIRTY_DAYS) {
+              issues.push({ type: 'stale', severity: 'info', path: rel, message: '超过 30 天未更新' });
+            } else {
+              freshCount++;
+            }
+          }
+        } catch { freshCount++; }
+      }
+
+      // Orphan + missing from index
+      for (const rel of allRels) {
+        if ((inboundMap[rel] || []).length === 0) {
+          issues.push({ type: 'orphan', severity: 'warning', path: rel, message: '无入站链接' });
+        }
+        if (!indexLinked.has(rel)) {
+          issues.push({ type: 'missing_index', severity: 'error', path: rel, message: '未在 index.md 中列出' });
         }
       }
-    }
 
-    const orphans = [];
-    const missingFromIndex = [];
-    for (const rel of allRels) {
-      if ((inboundMap[rel] || []).length === 0) {
-        orphans.push({ path: rel, title: extractTitle(path.join(WIKI, rel)) });
+      // Mergeable detection: keyword overlap within same topic
+      const kwCache = {};
+      for (const f of allFiles) {
+        const rel = path.relative(WIKI, f);
+        try { kwCache[rel] = extractKeywords(f); } catch { kwCache[rel] = new Set(); }
       }
-      if (!indexLinked.has(rel)) {
-        missingFromIndex.push({ path: rel, title: extractTitle(path.join(WIKI, rel)) });
+      const topics = {};
+      for (const rel of allRels) {
+        const parts = rel.split(path.sep);
+        const topic = parts.length > 1 ? parts[0] : '_root';
+        if (!topics[topic]) topics[topic] = [];
+        topics[topic].push(rel);
       }
-    }
+      for (const topic of Object.keys(topics)) {
+        const arts = topics[topic];
+        for (let i = 0; i < arts.length; i++) {
+          for (let j = i + 1; j < arts.length; j++) {
+            const kwA = kwCache[arts[i]] || new Set();
+            const kwB = kwCache[arts[j]] || new Set();
+            if (kwA.size === 0 || kwB.size === 0) continue;
+            let overlap = 0;
+            for (const w of kwA) { if (kwB.has(w)) overlap++; }
+            const minSize = Math.min(kwA.size, kwB.size);
+            if (minSize > 0) {
+              const pct = Math.round(overlap / minSize * 100);
+              if (pct > 60) {
+                issues.push({ type: 'mergeable', severity: 'info', paths: [arts[i], arts[j]], message: '关键词重叠度 ' + pct + '%，建议合并' });
+              }
+            }
+          }
+        }
+      }
 
-    // Extra stats
-    const rawFiles = walkMd(RAW);
-    let totalWords = 0;
-    for (const f of allFiles) {
-      try {
-        const c = fs.readFileSync(f, 'utf-8').replace(/```[\s\S]*?```/g, '').replace(/[#*_`>\[\]\(\)!|~-]/g, '').replace(/\s+/g, '');
-        totalWords += c.length;
-      } catch {}
-    }
-    const config = getFullConfig();
-    const providerName = (PROVIDERS[config.provider] || {}).name || config.provider;
+      // Raw files
+      const rawFiles = walkMd(RAW);
 
-    return json(res, 200, { orphans, brokenLinks, missingFromIndex, totalArticles: allRels.size, totalConnections, rawCount: rawFiles.length, totalWords, provider: providerName, hasKey: !!(config.apiKey) || config.provider === 'local' });
+      // Score calculation
+      const totalArticles = allRels.size;
+      const completeness = totalArticles > 0 ? Math.round(linkedCount / totalArticles * 100) : 0;
+      const freshness = totalArticles > 0 ? Math.round(freshCount / totalArticles * 100) : 0;
+      const avgInbound = totalArticles > 0 ? totalConnections / totalArticles : 0;
+      const connectivity = Math.min(100, Math.round(avgInbound / 3 * 100));
+      const issueCount = issues.filter(i => i.severity === 'error' || i.severity === 'warning').length;
+      const consistency = totalArticles > 0 ? Math.round(Math.max(0, (totalArticles - issueCount) / totalArticles * 100)) : 0;
+      const score = Math.round((completeness + freshness + connectivity + consistency) / 4);
+
+      return {
+        timestamp: new Date().toISOString(),
+        score,
+        summary: {
+          totalArticles,
+          totalRaw: rawFiles.length,
+          totalWords,
+          totalConnections,
+          lastUpdate: lastUpdate ? lastUpdate.toISOString() : null
+        },
+        issues,
+        scoreBreakdown: { completeness, freshness, connectivity, consistency }
+      };
+    } catch (e) {
+      return { timestamp: new Date().toISOString(), score: 0, summary: { totalArticles: 0, totalRaw: 0, totalWords: 0, totalConnections: 0, lastUpdate: null }, issues: [{ type: 'error', severity: 'error', path: '', message: '检查失败: ' + e.message }], scoreBreakdown: { completeness: 0, freshness: 0, connectivity: 0, consistency: 0 } };
+    }
+  }
+
+  // ── 报告存储 ──
+  const REPORTS_DIR = path.join(ROOT, 'data', 'reports');
+
+  function ensureReportsDir() {
+    if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
+  }
+
+  function saveLintReport(report) {
+    ensureReportsDir();
+    const dateStr = report.timestamp.slice(0, 10);
+    fs.writeFileSync(path.join(REPORTS_DIR, 'lint-' + dateStr + '.json'), JSON.stringify(report, null, 2), 'utf-8');
+    // 清理旧报告，保留最近 30 份
+    try {
+      const files = fs.readdirSync(REPORTS_DIR).filter(f => f.startsWith('lint-') && f.endsWith('.json')).sort().reverse();
+      for (let i = 30; i < files.length; i++) {
+        try { fs.unlinkSync(path.join(REPORTS_DIR, files[i])); } catch {}
+      }
+    } catch {}
+  }
+
+  function runAndSaveLint() {
+    const report = runLint();
+    saveLintReport(report);
+    return report;
+  }
+
+  // GET /api/wiki/lint — 即时健康检查
+  if (p === '/api/wiki/lint') {
+    return json(res, 200, runLint());
+  }
+
+  // GET /api/reports/list — 报告列表
+  if (p === '/api/reports/list') {
+    ensureReportsDir();
+    try {
+      const files = fs.readdirSync(REPORTS_DIR).filter(f => f.startsWith('lint-') && f.endsWith('.json')).sort().reverse();
+      return json(res, 200, { files });
+    } catch { return json(res, 200, { files: [] }); }
+  }
+
+  // GET /api/reports/latest — 最新报告
+  if (p === '/api/reports/latest') {
+    ensureReportsDir();
+    try {
+      const files = fs.readdirSync(REPORTS_DIR).filter(f => f.startsWith('lint-') && f.endsWith('.json')).sort().reverse();
+      if (files.length === 0) {
+        // 没有历史报告，即时生成一份
+        const report = runAndSaveLint();
+        return json(res, 200, report);
+      }
+      const content = fs.readFileSync(path.join(REPORTS_DIR, files[0]), 'utf-8');
+      return json(res, 200, JSON.parse(content));
+    } catch (e) { return json(res, 500, { error: '读取报告失败: ' + e.message }); }
+  }
+
+  // GET /api/reports/:date — 指定日期报告
+  if (p.startsWith('/api/reports/') && p !== '/api/reports/list' && p !== '/api/reports/latest') {
+    const date = p.slice('/api/reports/'.length);
+    const filePath = path.join(REPORTS_DIR, 'lint-' + date + '.json');
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      return json(res, 200, JSON.parse(content));
+    } catch { return json(res, 404, { error: '报告不存在: ' + date }); }
   }
 
   // GET /api/settings — 获取当前配置
@@ -1951,4 +2105,61 @@ const server = http.createServer(async (req, res) => {
 });
 
 migrateMemory();
+
+// ── 定时健康检查 ──
+const REPORTS_DIR_INIT = path.join(ROOT, 'data', 'reports');
+if (!fs.existsSync(REPORTS_DIR_INIT)) fs.mkdirSync(REPORTS_DIR_INIT, { recursive: true });
+
+// 启动时清理旧报告
+try {
+  const oldFiles = fs.readdirSync(REPORTS_DIR_INIT).filter(f => f.startsWith('lint-') && f.endsWith('.json')).sort().reverse();
+  for (let i = 30; i < oldFiles.length; i++) {
+    try { fs.unlinkSync(path.join(REPORTS_DIR_INIT, oldFiles[i])); } catch {}
+  }
+} catch {}
+
+// 启动时运行一次 lint
+setTimeout(() => {
+  try {
+    // 内联 runLint 逻辑用于启动检查
+    const handler = server.listeners('request')[0];
+    // 直接调用 server.js 内的 runAndSaveLint 不可行（在闭包内），
+    // 所以我们用 http 请求自身来触发
+    const req = http.request({ hostname: '127.0.0.1', port: PORT, path: '/api/wiki/lint', method: 'GET' }, (res) => {
+      let body = '';
+      res.on('data', c => body += c);
+      res.on('end', () => {
+        try {
+          const report = JSON.parse(body);
+          const dateStr = report.timestamp ? report.timestamp.slice(0, 10) : new Date().toISOString().slice(0, 10);
+          fs.writeFileSync(path.join(REPORTS_DIR_INIT, 'lint-' + dateStr + '.json'), JSON.stringify(report, null, 2), 'utf-8');
+          console.log('健康检查完成，评分: ' + report.score);
+        } catch {}
+      });
+    });
+    req.on('error', () => {});
+    req.end();
+  } catch {}
+}, 2000);
+
+// 每 24 小时运行一次
+setInterval(() => {
+  try {
+    const req = http.request({ hostname: '127.0.0.1', port: PORT, path: '/api/wiki/lint', method: 'GET' }, (res) => {
+      let body = '';
+      res.on('data', c => body += c);
+      res.on('end', () => {
+        try {
+          const report = JSON.parse(body);
+          const dateStr = report.timestamp ? report.timestamp.slice(0, 10) : new Date().toISOString().slice(0, 10);
+          fs.writeFileSync(path.join(REPORTS_DIR_INIT, 'lint-' + dateStr + '.json'), JSON.stringify(report, null, 2), 'utf-8');
+          console.log('定时健康检查完成，评分: ' + report.score);
+        } catch {}
+      });
+    });
+    req.on('error', () => {});
+    req.end();
+  } catch {}
+}, 24 * 60 * 60 * 1000);
+
 server.listen(PORT, () => console.log(`Wiki 应用已启动：http://localhost:${PORT}`));

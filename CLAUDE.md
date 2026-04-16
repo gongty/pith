@@ -77,14 +77,15 @@ data/chats/         → JSON conversation files + _index.json
 
 API keys are **never** returned by any API endpoint. `GET /api/settings` only returns `hasKey: true/false`.
 
-Key storage priority chain (highest wins):
+Key storage (highest priority wins):
 1. `WIKI_API_KEY` environment variable
 2. `.api-key` file (chmod 600, created by settings save)
-3. `config.json` legacy fallback (read-only, not written to)
+
+`config.json` only stores provider/model/customBaseUrl — **never** API keys. The key is written to `.api-key` with `0o600` permissions.
+
+`loadConfig()` reads provider/model. `loadApiKey()` reads the key. `getFullConfig()` merges both. Never put key logic in `loadConfig()`.
 
 Files excluded from git (`.gitignore`): `config.json`, `.api-key`, `profile.json`.
-
-When saving settings via the UI, `config.json` stores provider/model only. The API key is written to `.api-key` separately with `0o600` permissions.
 
 ## Conventions
 
