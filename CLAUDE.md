@@ -21,7 +21,7 @@ No npm install, no build step, no package.json. Pure Node.js stdlib + vanilla JS
 
 Raw Node.js HTTP server. Key subsystems:
 
-- **LLM Integration** — 7 providers (Bailian/阿里云, OpenRouter, Anthropic, OpenAI, DeepSeek, custom, local Claude CLI). Config in `config.json`. `callLLM()` is the universal entry point.
+- **LLM Integration** — 7 providers (Bailian/阿里云, OpenRouter, Anthropic, OpenAI, DeepSeek, custom, local Claude CLI). Provider/model in `config.json`, API key in `.api-key` file or `WIKI_API_KEY` env var. `callLLM()` is the universal entry point; `getFullConfig()` merges all config sources.
 - **Compilation Engine** — `compileArticle()` takes raw content, calls LLM to produce structured wiki articles. Two modes: local CLI (spawns `claude` with tools) and API (server-driven JSON generation). Embedded rules in `COMPILE_RULES` constant.
 - **Chat System** — JSON file storage in `data/chats/`. Per-conversation files `conv_*.json` + `_index.json` index. Supports context retrieval from wiki for RAG.
 - **Wiki Data** — `buildGraph()` creates 3-layer knowledge graph (explicit links → keyword co-occurrence → topic affinity). `searchWiki()` for full-text search. `retrieveContext()` for chat RAG.
@@ -73,9 +73,23 @@ data/chats/         → JSON conversation files + _index.json
 - **LLM provider switching** happens in `config.json`. The `callLLM()` function normalizes all providers to a common interface. Bailian uses OpenAI-compatible API at `dashscope.aliyuncs.com`.
 - **Ingest is single-threaded** — one compilation at a time. Batch mode processes items sequentially and updates `batchProgress` which frontend polls via `/api/ingest/batch/status`.
 
+## Secrets & Config
+
+API keys are **never** returned by any API endpoint. `GET /api/settings` only returns `hasKey: true/false`.
+
+Key storage priority chain (highest wins):
+1. `WIKI_API_KEY` environment variable
+2. `.api-key` file (chmod 600, created by settings save)
+3. `config.json` legacy fallback (read-only, not written to)
+
+Files excluded from git (`.gitignore`): `config.json`, `.api-key`, `profile.json`.
+
+When saving settings via the UI, `config.json` stores provider/model only. The API key is written to `.api-key` separately with `0o600` permissions.
+
 ## Conventions
 
 - UI language: Chinese (中文)
 - Wiki articles written in Chinese; raw materials preserve original language
 - Design tokens use CSS custom properties — change colors/radius in `base.css :root`, they cascade everywhere
 - Dark mode: `[data-theme="dark"]` overrides in each CSS file. Token overrides in `base.css`.
+- Never commit secrets — `config.json`, `.api-key`, `profile.json` are gitignored
