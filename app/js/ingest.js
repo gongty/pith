@@ -288,7 +288,15 @@ async function loadModels2(id) {
     // 只显示当前配置的提供商的模型，没配 key 的渠道不展示
     const provKey = s.provider || 'local';
     const prov = s.providers && s.providers[provKey];
-    if (prov) prov.models.forEach(m => { const o = document.createElement('option'); o.value = provKey + '|' + m; o.textContent = m; sel.appendChild(o); });
+    if (prov && Array.isArray(prov.models)) prov.models.forEach(m => {
+      const mid   = typeof m === 'string' ? m : (m && m.id) || '';
+      const label = typeof m === 'string' ? m : (m && (m.label || m.id)) || '';
+      if (!mid) return;
+      const o = document.createElement('option');
+      o.value = provKey + '|' + mid;
+      o.textContent = label;
+      sel.appendChild(o);
+    });
     // 恢复上次选择，没有则用设置默认值
     const saved = localStorage.getItem('ingestModel');
     if (saved) sel.value = saved;
@@ -385,6 +393,51 @@ export async function submitIngest() {
 
 // ── 全局进度追踪（面板关闭后持续运行） ──
 
+const STAGE_ICONS = { pending:'○', running:'▶', done:'✓', error:'✕', skipped:'⊘' };
+const STAGE_ORDER = ['title','topic','filename','content','summary','seealso','persist'];
+const STAGE_NUM   = ['①','②','③','④','⑤','⑥','⑦'];
+
+function stageMeta(st) {
+  const parts = [];
+  if (st.source) {
+    if (st.source.startsWith('llm:')) parts.push(st.source.slice(4));
+    else if (st.source === 'code') parts.push('代码');
+    else if (st.source === 'user') parts.push('用户');
+    else if (st.source === 'llm')  parts.push('LLM');
+    else if (st.source === 'code_plus_llm') parts.push('代码+LLM');
+    else parts.push(st.source);
+  }
+  if (typeof st.durationMs === 'number') parts.push(st.durationMs + 'ms');
+  return parts.join(' · ');
+}
+
+function renderStages(stages) {
+  const host = $('itStages'); if (!host) return;
+  // Sort by canonical order, fall back to array order if unknown keys
+  const sorted = stages.slice().sort((a, b) => {
+    const ia = STAGE_ORDER.indexOf(a.key); const ib = STAGE_ORDER.indexOf(b.key);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+  host.innerHTML = sorted.map(st => {
+    const ki = STAGE_ORDER.indexOf(st.key);
+    const prefix = ki >= 0 ? STAGE_NUM[ki] + ' ' : '';
+    const icon = STAGE_ICONS[st.status] || '○';
+    return `<div class="stage-row" data-key="${h(st.key||'')}" data-status="${h(st.status||'pending')}">
+      <span class="stage-icon">${icon}</span>
+      <span class="stage-label">${prefix}${h(st.label || st.key || '')}</span>
+      <span class="stage-meta">${h(stageMeta(st))}</span>
+      <span class="stage-detail">${h(st.detail || '')}</span>
+    </div>`;
+  }).join('');
+}
+
+function computeStagePct(stages) {
+  if (!stages || !stages.length) return 0;
+  const done = stages.filter(s => s.status === 'done' || s.status === 'skipped').length;
+  const running = stages.some(s => s.status === 'running') ? 0.5 : 0;
+  return Math.round((done + running) / stages.length * 100);
+}
+
 function startProgressTracking(isBatch, totalFiles) {
   const el = $('ingestToast');
   el.className = 'ingest-toast show';
@@ -393,6 +446,10 @@ function startProgressTracking(isBatch, totalFiles) {
   $('itTitle').textContent = isBatch ? '\u7F16\u8BD1\u4E2D... 0/' + totalFiles : '\u7F16\u8BD1\u4E2D...';
   $('itDetail').textContent = '';
   $('itFill').style.width = '0%';
+  // reset stages block (hidden by default)
+  const stagesEl = $('itStages'); if (stagesEl) { stagesEl.innerHTML = ''; stagesEl.hidden = true; }
+  const expandBtn = $('itExpand'); if (expandBtn) { expandBtn.textContent = '▾'; expandBtn.setAttribute('aria-expanded', 'false'); expandBtn.style.display = isBatch ? 'none' : ''; }
+  wireToastExpand();
 
   if (state.ipt) clearInterval(state.ipt);
 
@@ -417,9 +474,21 @@ function startProgressTracking(isBatch, totalFiles) {
           showProgressDone(true, s.completed + ' \u7BC7\u5DF2\u5165\u5E93' + (s.failed > 0 ? '\uFF0C' + s.failed + ' \u5931\u8D25' : ''));
         }
       } else {
-        // 单文件：模拟进度
-        fakeProgress = Math.min(fakeProgress + 5 + Math.random() * 8, 85);
-        $('itFill').style.width = fakeProgress + '%';
+        // 单文件：优先使用 stages；没有则回退到 fakeProgress
+        if (Array.isArray(s.stages) && s.stages.length) {
+          renderStages(s.stages);
+          $('itFill').style.width = computeStagePct(s.stages) + '%';
+          // auto-expand on any error
+          if (s.stages.some(st => st.status === 'error')) {
+            const stgs = $('itStages'); const btn = $('itExpand');
+            if (stgs && stgs.hidden) { stgs.hidden = false; if (btn) { btn.textContent = '▴'; btn.setAttribute('aria-expanded', 'true'); } }
+          }
+          const running = s.stages.find(st => st.status === 'running');
+          if (running) $('itDetail').textContent = (running.label || running.key || '') + '...';
+        } else {
+          fakeProgress = Math.min(fakeProgress + 5 + Math.random() * 8, 85);
+          $('itFill').style.width = fakeProgress + '%';
+        }
 
         if (s.status === 'done') {
           clearInterval(state.ipt); state.ipt = null;
@@ -433,6 +502,18 @@ function startProgressTracking(isBatch, totalFiles) {
       }
     } catch {}
   }, 2000);
+}
+
+function wireToastExpand() {
+  const btn = $('itExpand'); if (!btn || btn.__wired) return;
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const stg = $('itStages'); if (!stg) return;
+    stg.hidden = !stg.hidden;
+    btn.textContent = stg.hidden ? '▾' : '▴';
+    btn.setAttribute('aria-expanded', stg.hidden ? 'false' : 'true');
+  });
+  btn.__wired = true;
 }
 
 function showProgressDone(success, msg, articlePath) {

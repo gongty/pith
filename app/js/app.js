@@ -12,7 +12,7 @@ import { dashAsk } from './pages/dashboard.js';
 import { chatSend, delChat, archiveChat, precipitateMsg, precipitateConv, closePrecipModal } from './pages/chat.js';
 import { toggleToc, scrollToH, onArtChange, fmtCmd, closeDel, doDel, newArticle, pickSlash, closeSlashMenu, imgAlign, imgSize, deselectImg } from './pages/article.js';
 import { gZoom, applyGF } from './pages/graph.js';
-import { openAutotaskModal, closeAutotaskModal, saveAutotask, closeAutotaskDetail, runAutotask, toggleAutotaskEnabled, deleteAutotask, testAutotaskSource, showRunDetail, deleteRun, switchAutotaskTab } from './pages/autotask.js';
+import { openAutotaskModal, closeAutotaskModal, closeAutotaskDetail, runAutotask, toggleAutotaskEnabled, deleteAutotask, testAutotaskSource, showRunDetail, switchAutotaskTab, switchHistoryRange, pickTemplate, submitWizardNL, submitWizardIterate, backToWizardStep1, toggleWizardAdvanced, confirmWizardCreate, editFieldInline, setDraftField } from './pages/autotask.js';
 
 /* ── Expose functions to inline onclick handlers ── */
 window.go = go;
@@ -61,15 +61,22 @@ window.imgSize = imgSize;
 window.deselectImg = deselectImg;
 window.openAutotaskModal = openAutotaskModal;
 window.closeAutotaskModal = closeAutotaskModal;
-window.saveAutotask = saveAutotask;
 window.closeAutotaskDetail = closeAutotaskDetail;
 window.runAutotask = runAutotask;
 window.toggleAutotaskEnabled = toggleAutotaskEnabled;
 window.deleteAutotask = deleteAutotask;
 window.testAutotaskSource = testAutotaskSource;
 window.showRunDetail = showRunDetail;
-window.deleteRun = deleteRun;
 window.switchAutotaskTab = switchAutotaskTab;
+window.switchHistoryRange = switchHistoryRange;
+window.pickTemplate = pickTemplate;
+window.submitWizardNL = submitWizardNL;
+window.submitWizardIterate = submitWizardIterate;
+window.backToWizardStep1 = backToWizardStep1;
+window.toggleWizardAdvanced = toggleWizardAdvanced;
+window.confirmWizardCreate = confirmWizardCreate;
+window.editFieldInline = editFieldInline;
+window.setDraftField = setDraftField;
 
 /* ── Sidebar resize ── */
 (function () {

@@ -166,6 +166,7 @@
       <button class="settings-tab active" data-tab="general" onclick="switchSettingsTab('general')">通用</button>
       <button class="settings-tab" data-tab="memory" onclick="switchSettingsTab('memory')">记忆</button>
       <button class="settings-tab" data-tab="provider" onclick="switchSettingsTab('provider')">模型配置</button>
+      <button class="settings-tab" data-tab="pipeline" onclick="switchSettingsTab('pipeline')">编译流水线</button>
     </div>
     <div class="settings-tab-content" id="settingsTabGeneral">
       <div class="modal-form">
@@ -183,11 +184,40 @@
       <div class="modal-form">
         <div><label class="field-label">提供商</label><select class="field-select" id="sProv" onchange="onProvChange()"></select></div>
         <div><label class="field-label">API Key</label><input class="field-input" type="password" id="sKey" placeholder="输入 API Key..."></div>
-        <div><label class="field-label">模型</label><select class="field-select" id="sModel"></select></div>
+        <div><label class="field-label">当前主模型</label><select class="field-select" id="sModel"></select></div>
+        <div class="settings-section">
+          <div class="settings-section-head">
+            <h4>模型列表</h4>
+            <div class="settings-section-actions">
+              <button type="button" class="btn-outline btn-xs" id="addModelBtn">＋ 添加模型</button>
+              <button type="button" class="btn-outline btn-xs" id="restoreDefaultsBtn">↻ 恢复内建默认</button>
+            </div>
+          </div>
+          <div id="modelListTable" class="model-list-table"></div>
+          <div class="settings-section-hint">内建模型不可删除；用途 (use) 决定预设如何映射：strong=最强、main=日常、fast=轻量。</div>
+        </div>
       </div>
       <div class="modal-foot">
         <button class="btn-outline" onclick="testConn()">测试连接</button>
         <button class="btn-sm-fill" onclick="saveSett()">保存</button>
+      </div>
+    </div>
+    <div class="settings-tab-content" id="settingsTabPipeline" style="display:none">
+      <div class="modal-form" id="pipelinePanel">
+        <div class="pipeline-presets">
+          <label class="field-label">预设</label>
+          <div class="pipeline-preset-row" id="pipelinePresetRow">
+            <button type="button" class="preset-btn" data-preset="fast">极速</button>
+            <button type="button" class="preset-btn active" data-preset="balanced">平衡 <span class="preset-tag">推荐</span></button>
+            <button type="button" class="preset-btn" data-preset="quality">最稳</button>
+            <span class="preset-custom-badge" id="presetCustomBadge" hidden>⚠️ 自定义</span>
+          </div>
+        </div>
+        <div class="pipeline-stages" id="pipelineStages"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-outline" id="pipelineResetBtn" type="button">重置为预设</button>
+        <button class="btn-sm-fill" id="pipelineSaveBtn" type="button">保存</button>
       </div>
     </div>
   </div>
@@ -203,8 +233,13 @@
 
 <!-- Ingest progress toast -->
 <div class="ingest-toast" id="ingestToast">
-  <div class="ingest-toast-row"><span class="ingest-toast-title" id="itTitle"></span><span class="ingest-toast-detail" id="itDetail"></span></div>
+  <div class="ingest-toast-header">
+    <span class="ingest-toast-title" id="itTitle"></span>
+    <span class="ingest-toast-detail" id="itDetail"></span>
+    <button id="itExpand" class="it-expand-btn" title="展开" type="button" aria-expanded="false">▾</button>
+  </div>
   <div class="ingest-toast-bar"><div class="ingest-toast-fill" id="itFill"></div></div>
+  <div class="ingest-toast-stages" id="itStages" hidden></div>
 </div>
 
 <!-- Toast -->
@@ -240,11 +275,7 @@
 <div class="autotask-modal-bg" id="autotaskModal" onclick="if(event.target===this)closeAutotaskModal()">
   <div class="autotask-modal">
     <div class="modal-top"><h3 id="autotaskModalTitle">新建任务</h3><button onclick="closeAutotaskModal()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
-    <div class="modal-form" id="autotaskForm"></div>
-    <div class="modal-foot">
-      <button class="btn-outline" onclick="closeAutotaskModal()">取消</button>
-      <button class="btn-sm-fill" id="autotaskSaveBtn" onclick="saveAutotask()">保存</button>
-    </div>
+    <div id="autotaskWizard" class="autotask-wizard"></div>
   </div>
 </div>
 

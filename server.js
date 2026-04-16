@@ -111,60 +111,203 @@ const indexCache = new SimpleCache(1, 60000);    // wiki index cache
 
 // ── 模型配置 ──
 
-const PROVIDERS = {
+// ── 内置 Provider 定义（模型对象格式） ──
+// 每个 model 对象: { id, label, use?, thinkingCapable?, defaultThinking?, streamOnly? }
+const BUILTIN_PROVIDERS = {
   bailian: {
     name: '百炼 (阿里云)',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    models: ['qwen-max', 'qwen-plus', 'qwen-turbo', 'qwen-long', 'qwen3.6-plus'],
-    defaultModel: 'qwen-plus',
-    format: 'openai'
+    format: 'openai',
+    defaultModel: 'qwen3.6-plus',
+    models: [
+      { id: 'qwen3-max',          label: 'Qwen3 Max',          use: 'strong',  thinkingCapable: true,  defaultThinking: false },
+      { id: 'qwen3.6-plus',       label: 'Qwen 3.6 Plus',      use: 'main',    thinkingCapable: true,  defaultThinking: false },
+      { id: 'qwen-plus-latest',   label: 'Qwen Plus (latest)', use: 'main',    thinkingCapable: true,  defaultThinking: false },
+      { id: 'qwen3.5-plus',       label: 'Qwen 3.5 Plus',      use: 'main',    thinkingCapable: true,  defaultThinking: false },
+      { id: 'qwen3.5-flash',      label: 'Qwen 3.5 Flash',     use: 'fast',    thinkingCapable: true,  defaultThinking: false },
+      { id: 'qwen-turbo-latest',  label: 'Qwen Turbo',         use: 'fast',    thinkingCapable: true,  defaultThinking: false },
+      { id: 'qwen-flash',         label: 'Qwen Flash',         use: 'fast',    thinkingCapable: true,  defaultThinking: false },
+      { id: 'qwen3-coder-plus',   label: 'Qwen3 Coder',        use: 'code' },
+      { id: 'qwen-long',          label: 'Qwen Long (10M)',    use: 'longctx' },
+      { id: 'qwen-vl-max-latest', label: 'Qwen VL Max',        use: 'vision' },
+      { id: 'qwen3-vl-plus',      label: 'Qwen3 VL Plus',      use: 'vision' }
+    ]
   },
   openrouter: {
     name: 'OpenRouter',
     baseUrl: 'https://openrouter.ai/api/v1',
-    models: ['anthropic/claude-sonnet-4', 'google/gemini-2.5-pro', 'openai/gpt-4o', 'meta-llama/llama-3.1-70b-instruct'],
+    format: 'openai',
     defaultModel: 'anthropic/claude-sonnet-4',
-    format: 'openai'
+    models: [
+      { id: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4', use: 'main' },
+      { id: 'openai/gpt-4o', label: 'GPT-4o', use: 'main' },
+      { id: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro', use: 'main' },
+      { id: 'meta-llama/llama-3.1-70b-instruct', label: 'Llama 3.1 70B', use: 'fast' }
+    ]
   },
   anthropic: {
     name: 'Anthropic',
     baseUrl: 'https://api.anthropic.com',
-    models: ['claude-sonnet-4-20250514', 'claude-haiku-4-20250414'],
-    defaultModel: 'claude-sonnet-4-20250514',
-    format: 'anthropic'
+    format: 'anthropic',
+    defaultModel: 'claude-sonnet-4-6',
+    models: [
+      { id: 'claude-opus-4-6',              label: 'Claude Opus 4.6',   use: 'strong' },
+      { id: 'claude-sonnet-4-6',            label: 'Claude Sonnet 4.6', use: 'main'   },
+      { id: 'claude-haiku-4-5-20251001',    label: 'Claude Haiku 4.5',  use: 'fast'   }
+    ]
   },
   openai: {
     name: 'OpenAI',
     baseUrl: 'https://api.openai.com/v1',
-    models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'],
+    format: 'openai',
     defaultModel: 'gpt-4o',
-    format: 'openai'
+    models: [
+      { id: 'gpt-4o',      label: 'GPT-4o',       use: 'main' },
+      { id: 'gpt-4o-mini', label: 'GPT-4o mini',  use: 'fast' },
+      { id: 'o3-mini',     label: 'o3-mini',      use: 'reasoning' }
+    ]
   },
   deepseek: {
     name: 'DeepSeek',
     baseUrl: 'https://api.deepseek.com/v1',
-    models: ['deepseek-chat', 'deepseek-reasoner'],
+    format: 'openai',
     defaultModel: 'deepseek-chat',
-    format: 'openai'
+    models: [
+      { id: 'deepseek-chat',     label: 'DeepSeek Chat',     use: 'main' },
+      { id: 'deepseek-reasoner', label: 'DeepSeek Reasoner', use: 'reasoning' }
+    ]
   },
   custom: {
     name: '自定义 (OpenAI 兼容)',
     baseUrl: '',
-    models: [],
+    format: 'openai',
     defaultModel: '',
-    format: 'openai'
+    models: []
   },
   local: {
     name: '本地 Claude CLI',
     baseUrl: '',
-    models: ['claude'],
+    format: 'cli',
     defaultModel: 'claude',
-    format: 'cli'
+    models: [
+      { id: 'claude', label: 'Local Claude CLI', use: 'main' }
+    ]
   }
 };
 
+// 向后兼容的只读视图：PROVIDERS[k].models 是 id 字符串数组
+const PROVIDERS = Object.fromEntries(
+  Object.entries(BUILTIN_PROVIDERS).map(([k, p]) => [k, {
+    ...p,
+    models: (p.models || []).map(m => m.id)
+  }])
+);
+
+// 返回 provider 的合并后模型列表（用户覆盖 > builtin）
+function getProviderModels(providerKey, cfg) {
+  const config = cfg || loadConfig();
+  const builtin = (BUILTIN_PROVIDERS[providerKey] && BUILTIN_PROVIDERS[providerKey].models) || [];
+  const userOverride = config && config.providers && config.providers[providerKey] && config.providers[providerKey].models;
+  const builtinIds = new Set(builtin.map(m => m.id));
+  if (Array.isArray(userOverride) && userOverride.length >= 0 && (config.providers && config.providers[providerKey])) {
+    // user override replaces builtin list
+    return userOverride.map(m => ({ ...m, isBuiltin: builtinIds.has(m.id) }));
+  }
+  return builtin.map(m => ({ ...m, isBuiltin: true }));
+}
+
+// 查找单个模型的 meta（不存在则返回 null）
+function findModelMeta(providerKey, modelId, cfg) {
+  const list = getProviderModels(providerKey, cfg);
+  return list.find(m => m.id === modelId) || null;
+}
+
+// 根据 use 类型选第一个模型 id，fallback 到 defaultModel
+function pickModelByUse(providerKey, useKey, cfg) {
+  const list = getProviderModels(providerKey, cfg);
+  const pref = list.find(m => m.use === useKey);
+  if (pref) return pref.id;
+  // fallbacks
+  const fallbackOrder = useKey === 'strong'
+    ? ['strong', 'main', 'fast']
+    : useKey === 'fast'
+      ? ['fast', 'main', 'strong']
+      : ['main', 'strong', 'fast'];
+  for (const u of fallbackOrder) {
+    const m = list.find(x => x.use === u);
+    if (m) return m.id;
+  }
+  return (BUILTIN_PROVIDERS[providerKey] && BUILTIN_PROVIDERS[providerKey].defaultModel) || (list[0] && list[0].id) || '';
+}
+
+// Pipeline 预设（在运行时用 pickModelByUse 解析到具体 id）
+const PIPELINE_PRESETS = {
+  fast: {
+    content: { use: 'fast',   thinking: false, stream: true, retryUse: 'main',  maxTokens: 16384 },
+    summary: { source: 'inline' },
+    seealso: { source: 'code', topK: 3 }
+  },
+  balanced: {
+    content: { use: 'main',   thinking: false, stream: true, retryUse: 'fast',  maxTokens: 16384 },
+    summary: { source: 'llm', use: 'fast', maxLength: 30 },
+    seealso: { source: 'code_plus_llm', use: 'fast', topK: 5 }
+  },
+  quality: {
+    content: { use: 'strong', thinking: false, stream: true, retryUse: 'main',  maxTokens: 16384 },
+    summary: { source: 'llm', use: 'main', maxLength: 30 },
+    seealso: { source: 'code_plus_llm', use: 'main', topK: 5 }
+  }
+};
+
+// 把 preset 解析为具体 stages（填入真实 model id）
+function resolvePresetForProvider(presetKey, providerKey, cfg) {
+  const preset = PIPELINE_PRESETS[presetKey] || PIPELINE_PRESETS.balanced;
+  const contentModel = pickModelByUse(providerKey, preset.content.use, cfg);
+  const retryModel   = pickModelByUse(providerKey, preset.content.retryUse, cfg);
+  const stages = {
+    title:    { source: 'code' },
+    topic:    { source: 'user' },
+    filename: { source: 'code' },
+    content:  {
+      model: contentModel,
+      thinking: preset.content.thinking,
+      stream: preset.content.stream,
+      retryModel,
+      maxTokens: preset.content.maxTokens
+    }
+  };
+  if (preset.summary.source === 'inline') {
+    stages.summary = { source: 'inline' };
+  } else {
+    stages.summary = {
+      source: 'llm',
+      model: pickModelByUse(providerKey, preset.summary.use, cfg),
+      maxLength: preset.summary.maxLength
+    };
+  }
+  if (preset.seealso.source === 'code') {
+    stages.seealso = { source: 'code', topK: preset.seealso.topK };
+  } else if (preset.seealso.source === 'skip') {
+    stages.seealso = { source: 'skip' };
+  } else {
+    stages.seealso = {
+      source: 'code_plus_llm',
+      model: pickModelByUse(providerKey, preset.seealso.use, cfg),
+      topK: preset.seealso.topK
+    };
+  }
+  return stages;
+}
+
 function loadConfig() {
-  let cfg = { provider: 'local', model: '', customBaseUrl: '', wikiLang: 'zh' };
+  let cfg = {
+    provider: 'local',
+    model: '',
+    customBaseUrl: '',
+    wikiLang: 'zh',
+    providers: {},
+    pipeline: null
+  };
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const saved = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
@@ -172,14 +315,30 @@ function loadConfig() {
       cfg.model = saved.model || '';
       cfg.customBaseUrl = saved.customBaseUrl || '';
       cfg.wikiLang = saved.wikiLang || 'zh';
+      cfg.providers = saved.providers && typeof saved.providers === 'object' ? saved.providers : {};
+      cfg.pipeline = saved.pipeline && typeof saved.pipeline === 'object' ? saved.pipeline : null;
     }
   } catch {}
+  // migration: initialize pipeline to balanced preset if missing
+  if (!cfg.pipeline || !cfg.pipeline.stages) {
+    cfg.pipeline = {
+      preset: 'balanced',
+      stages: resolvePresetForProvider('balanced', cfg.provider, cfg)
+    };
+  }
   return cfg;
 }
 
 function saveConfig(cfg) {
-  // 只存 provider/model/customBaseUrl/wikiLang，不存 apiKey
-  const toSave = { provider: cfg.provider, model: cfg.model, customBaseUrl: cfg.customBaseUrl || '', wikiLang: cfg.wikiLang || 'zh' };
+  // 只存 provider/model/customBaseUrl/wikiLang/providers/pipeline，不存 apiKey
+  const toSave = {
+    provider: cfg.provider,
+    model: cfg.model,
+    customBaseUrl: cfg.customBaseUrl || '',
+    wikiLang: cfg.wikiLang || 'zh'
+  };
+  if (cfg.providers && typeof cfg.providers === 'object') toSave.providers = cfg.providers;
+  if (cfg.pipeline && typeof cfg.pipeline === 'object') toSave.pipeline = cfg.pipeline;
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(toSave, null, 2), 'utf-8');
 }
 
@@ -298,32 +457,102 @@ function httpPost(url, headers, body) {
   });
 }
 
-async function callLLM(systemPrompt, messages, overrides) {
+// 流式 OpenAI-compatible chat completions。累积 delta.content，忽略 reasoning_content。
+// 返回完整拼接后的字符串。onChunk 回调每收到一段 content 时触发。
+function streamChatCompletion(url, headers, bodyObj, onChunk) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(bodyObj);
+    const parsed = new URL(url);
+    const mod = parsed.protocol === 'https:' ? https : http;
+    const options = {
+      hostname: parsed.hostname,
+      port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+      path: parsed.pathname + parsed.search,
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        'Accept': 'text/event-stream'
+      }
+    };
+    const req = mod.request(options, res => {
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        let errData = '';
+        res.on('data', c => errData += c);
+        res.on('end', () => reject(new Error(humanizeHttpError(res.statusCode, errData))));
+        return;
+      }
+      let buf = '';
+      let full = '';
+      res.setEncoding('utf-8');
+      res.on('data', chunk => {
+        buf += chunk;
+        // SSE events separated by \n\n
+        let idx;
+        while ((idx = buf.indexOf('\n\n')) !== -1) {
+          const event = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          // Each event has lines; collect "data: ..." lines
+          const lines = event.split('\n').filter(l => l.startsWith('data:'));
+          for (const line of lines) {
+            const payload = line.slice(5).trim();
+            if (!payload || payload === '[DONE]') continue;
+            try {
+              const obj = JSON.parse(payload);
+              const choice = obj.choices && obj.choices[0];
+              if (!choice) continue;
+              const delta = choice.delta || {};
+              // Ignore reasoning_content (thinking tokens); only accumulate content
+              if (typeof delta.content === 'string' && delta.content.length > 0) {
+                full += delta.content;
+                try { if (onChunk) onChunk(delta.content); } catch {}
+              }
+            } catch {}
+          }
+        }
+      });
+      res.on('end', () => resolve(full));
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.setTimeout(600000, () => { req.destroy(); reject(new Error('流式请求超时 (600s)')); });
+    req.write(body);
+    req.end();
+  });
+}
+
+async function callLLM(systemPrompt, messages, overrides, opts = {}) {
   // If messages is a string, convert to single-message array for backward compat
   const msgArray = typeof messages === 'string'
     ? [{ role: 'user', content: messages }]
     : messages;
 
+  const temperature = (opts && typeof opts.temperature === 'number') ? opts.temperature : 0.3;
+  const maxTokens = (opts && typeof opts.maxTokens === 'number') ? opts.maxTokens : 8192;
+
   const config = getFullConfig();
   const providerKey = (overrides && overrides.provider) || config.provider || 'local';
-  const provider = PROVIDERS[providerKey] || PROVIDERS.local;
-  const model = (overrides && overrides.model) || config.model || provider.defaultModel;
+  const providerBuiltin = BUILTIN_PROVIDERS[providerKey] || BUILTIN_PROVIDERS.local;
+  const model = (overrides && overrides.model) || config.model || providerBuiltin.defaultModel;
   const apiKey = config.apiKey;
 
-  if (provider.format === 'cli') {
+  if (providerBuiltin.format === 'cli') {
     const combined = msgArray.map(m => `${m.role}: ${m.content}`).join('\n\n');
     return callLocalCLI(systemPrompt + '\n\n' + combined);
   }
 
   if (!apiKey) throw new Error('未配置 API Key，请在设置中配置');
 
-  const baseUrl = (providerKey === 'custom' && config.customBaseUrl) ? config.customBaseUrl : provider.baseUrl;
+  const baseUrl = (providerKey === 'custom' && config.customBaseUrl) ? config.customBaseUrl : providerBuiltin.baseUrl;
+  const modelMeta = findModelMeta(providerKey, model, config) || {};
 
-  if (provider.format === 'anthropic') {
+  if (providerBuiltin.format === 'anthropic') {
+    // Anthropic path unchanged (thinking/streaming not implemented here)
     const result = await httpPost(`${baseUrl}/v1/messages`, {
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01'
-    }, JSON.stringify({ model, max_tokens: 8192, system: systemPrompt, messages: msgArray }));
+    }, JSON.stringify({ model, max_tokens: maxTokens, system: systemPrompt, messages: msgArray }));
     return result.content[0].text;
   }
 
@@ -333,12 +562,33 @@ async function callLLM(systemPrompt, messages, overrides) {
     headers['HTTP-Referer'] = `http://localhost:${PORT}`;
     headers['X-Title'] = 'Wiki Knowledge Base';
   }
-  const result = await httpPost(`${baseUrl}/chat/completions`, headers, JSON.stringify({
+
+  // Resolve thinking + stream
+  const canThink = providerKey === 'bailian' && !!modelMeta.thinkingCapable;
+  let wantThinking;
+  if (opts && typeof opts.thinking === 'boolean') wantThinking = opts.thinking;
+  else if (typeof modelMeta.defaultThinking === 'boolean') wantThinking = modelMeta.defaultThinking;
+  else wantThinking = false;
+  if (!canThink) wantThinking = false;
+
+  const wantStream = !!(opts && opts.stream) || wantThinking || !!modelMeta.streamOnly;
+
+  const body = {
     model,
     messages: [{ role: 'system', content: systemPrompt }, ...msgArray],
-    temperature: 0.3,
-    max_tokens: 8192
-  }));
+    temperature,
+    max_tokens: maxTokens
+  };
+
+  // 百炼 enable_thinking 必须放在 body 顶层
+  if (canThink) body.enable_thinking = wantThinking;
+
+  if (wantStream) {
+    body.stream = true;
+    return await streamChatCompletion(`${baseUrl}/chat/completions`, headers, body, opts && opts.onChunk);
+  }
+
+  const result = await httpPost(`${baseUrl}/chat/completions`, headers, JSON.stringify(body));
   return result.choices[0].message.content;
 }
 
@@ -390,41 +640,224 @@ async function compileArticle(topicDir, filename, filePath, task, overrides) {
     });
   }
 
-  // API 模式：服务端驱动编译（精简 prompt，不传 index 全文）
-  try {
-    const rawContent = fs.readFileSync(filePath, 'utf-8');
+  // API 模式：管线编译
+  return await runCompilePipeline(topicDir, filename, filePath, task, overrides);
+}
 
-    const existingTopics = [];
-    const existingArticles = [];
-    if (fs.existsSync(WIKI)) {
-      for (const d of fs.readdirSync(WIKI, { withFileTypes: true })) {
-        if (d.isDirectory() && !d.name.startsWith('.')) {
-          existingTopics.push(d.name);
-          const topicPath = path.join(WIKI, d.name);
-          for (const f of fs.readdirSync(topicPath)) {
-            if (f.endsWith('.md')) {
-              const title = extractTitle(path.join(topicPath, f));
-              existingArticles.push(`${d.name}/${f} — ${title}`);
-            }
+// ── 编译管线（API 模式） ──
+
+// 简单中英文 slug 化：去符号、空格→'-'、转小写（保留中文字符）
+function slugifyTitle(title) {
+  if (!title) return `article-${Date.now()}`;
+  let s = String(title).trim();
+  // 去掉常见符号
+  s = s.replace(/[\/\\:*?"<>|#`~!@$%^&()+=\[\]{};,.]/g, ' ');
+  s = s.replace(/\s+/g, '-');
+  s = s.replace(/-+/g, '-');
+  s = s.replace(/^-|-$/g, '');
+  s = s.toLowerCase();
+  if (!s) s = `article-${Date.now()}`;
+  // 限长
+  if (s.length > 80) s = s.slice(0, 80).replace(/-$/, '');
+  return s + '.md';
+}
+
+// 宽松地去掉外层 ```...``` fence；只在首尾都有 fence 时才剥
+function stripOuterCodeFences(text) {
+  if (!text) return text;
+  const t = text.trim();
+  if (!t.startsWith('```')) return text;
+  const m = t.match(/^```[a-zA-Z]*\s*\n?([\s\S]*?)\n?\s*```$/);
+  return m ? m[1] : text;
+}
+
+// 从原始内容里去掉 "# Source" 头块（如有），返回内容体
+function stripSourceHeader(raw) {
+  if (!raw) return raw;
+  // 如果前几行是 "# Source" 或 "Source:" 块，切到第一个空行后
+  const lines = raw.split('\n');
+  if (/^#\s*Source/i.test(lines[0] || '') || /^Source\s*[:：]/i.test(lines[0] || '')) {
+    const idx = lines.findIndex((l, i) => i > 0 && l.trim() === '');
+    if (idx > 0) return lines.slice(idx + 1).join('\n');
+  }
+  return raw;
+}
+
+// stage 辅助：开始/结束
+function startStage(task, key, label, extra) {
+  const s = { key, label, status: 'running', startedAt: Date.now(), ...(extra || {}) };
+  task.stages = task.stages || [];
+  task.stages.push(s);
+  return s;
+}
+function doneStage(s, extra) {
+  s.status = 'done';
+  s.durationMs = Date.now() - s.startedAt;
+  if (extra) Object.assign(s, extra);
+}
+function errorStage(s, err) {
+  s.status = 'error';
+  s.durationMs = Date.now() - s.startedAt;
+  s.error = (err && err.message) ? err.message : String(err);
+}
+function skipStage(s, detail) {
+  s.status = 'skipped';
+  s.durationMs = Date.now() - s.startedAt;
+  if (detail) s.detail = detail;
+}
+
+// 简单关键词匹配评分（和 searchWiki 类似的 ngram-ish）
+function scoreArticleRelevance(queryText, articleTitle) {
+  if (!queryText || !articleTitle) return 0;
+  const q = queryText.toLowerCase();
+  const t = articleTitle.toLowerCase();
+  let score = 0;
+  // title 出现完整包含
+  if (q.includes(t) || t.includes(q)) score += 3;
+  // 逐个 2-gram（中文）+ 空格 tokens
+  const tokens = new Set();
+  for (const tok of q.split(/[\s,，。、.;:；：!?？！"'()（）]+/)) {
+    if (tok.length >= 2) tokens.add(tok);
+  }
+  for (let i = 0; i + 2 <= q.length; i++) {
+    const g = q.slice(i, i + 2);
+    if (/[\u4e00-\u9fa5]{2}/.test(g)) tokens.add(g);
+  }
+  for (const tok of tokens) {
+    if (t.includes(tok)) score += 1;
+  }
+  return score;
+}
+
+async function runCompilePipeline(topicDir, filename, filePath, task, overrides) {
+  const config = getFullConfig();
+  const providerKey = (overrides && overrides.provider) || config.provider || 'local';
+
+  // 解析当前管线：overrides.pipeline > config.pipeline > balanced 预设
+  const pipelineCfg = (overrides && overrides.pipeline) || config.pipeline || {
+    preset: 'balanced',
+    stages: resolvePresetForProvider('balanced', providerKey, config)
+  };
+  const stagesCfg = pipelineCfg.stages || resolvePresetForProvider(pipelineCfg.preset || 'balanced', providerKey, config);
+
+  task.stages = [];
+
+  let rawContent = '';
+  try { rawContent = fs.readFileSync(filePath, 'utf-8'); }
+  catch (e) { task.status = 'error'; task.message = `读取原始内容失败: ${e.message}`; return; }
+
+  const rawBody = stripSourceHeader(rawContent);
+
+  // 收集已有主题/文章
+  const existingTopics = [];
+  const existingArticles = []; // {path, title}
+  if (fs.existsSync(WIKI)) {
+    for (const d of fs.readdirSync(WIKI, { withFileTypes: true })) {
+      if (d.isDirectory() && !d.name.startsWith('.')) {
+        existingTopics.push(d.name);
+        const topicPath = path.join(WIKI, d.name);
+        for (const f of fs.readdirSync(topicPath)) {
+          if (f.endsWith('.md')) {
+            const title = extractTitle(path.join(topicPath, f));
+            existingArticles.push({ path: `${d.name}/${f}`, title });
           }
         }
       }
     }
+  }
 
-    const memCtxApi = buildMemoryContext();
-    const bioContext = memCtxApi ? `\n\n${memCtxApi}\n请根据用户背景调整文章深度和侧重点。` : '';
+  const wikiLang = config.wikiLang || 'zh';
+  const LANG_MAP = { zh: '中文', en: 'English', ja: '日本語', ko: '한국어', auto: null };
+  const langName = LANG_MAP[wikiLang] || wikiLang;
+  const langInstruction = wikiLang === 'auto' ? '跟随原文语言（原文是什么语言就用什么语言输出）' : langName;
 
-    const wikiLang = loadConfig().wikiLang || 'zh';
-    const LANG_MAP = { zh: '中文', en: 'English', ja: '日本語', ko: '한국어', auto: null };
-    const langName = LANG_MAP[wikiLang] || wikiLang;
-    const langInstruction = wikiLang === 'auto'
-      ? '跟随原文语言（原文是什么语言就用什么语言输出）'
-      : langName;
+  // ─ Stage 1: title ─
+  let articleTitle = '';
+  {
+    const cfgT = stagesCfg.title || { source: 'code' };
+    const s = startStage(task, 'title', '提取标题', { source: cfgT.source });
+    try {
+      if (cfgT.source === 'code' || !cfgT.source) {
+        const m = rawBody.match(/^#\s+(.+)$/m);
+        if (m) { articleTitle = m[1].trim(); doneStage(s, { detail: articleTitle }); }
+        else {
+          // Fallback: LLM pick
+          const titleModel = cfgT.model || pickModelByUse(providerKey, 'fast', config);
+          const resp = await callLLM(
+            '你是一个标题提取助手。根据内容给一个简洁的中文标题（≤30 字），只输出标题本身，不要加引号或解释。',
+            rawBody.slice(0, 4000),
+            { ...(overrides || {}), model: titleModel },
+            { maxTokens: 200, temperature: 0.2 }
+          );
+          articleTitle = (resp || '').trim().split('\n')[0].replace(/^#+\s*/, '').slice(0, 80);
+          s.source = 'llm_fallback';
+          doneStage(s, { detail: articleTitle });
+        }
+      } else if (cfgT.source === 'llm') {
+        const titleModel = cfgT.model || pickModelByUse(providerKey, 'fast', config);
+        const resp = await callLLM(
+          '你是一个标题提取助手。根据内容给一个简洁的中文标题（≤30 字），只输出标题本身。',
+          rawBody.slice(0, 4000),
+          { ...(overrides || {}), model: titleModel },
+          { maxTokens: 200, temperature: 0.2 }
+        );
+        articleTitle = (resp || '').trim().split('\n')[0].replace(/^#+\s*/, '').slice(0, 80);
+        doneStage(s, { detail: articleTitle });
+      }
+    } catch (e) {
+      errorStage(s, e);
+      articleTitle = path.basename(filename, path.extname(filename)) || 'untitled';
+    }
+    if (!articleTitle) articleTitle = path.basename(filename, path.extname(filename)) || 'untitled';
+  }
 
-    const systemPrompt = `你是知识库编译助手。将原始素材编译为结构清晰、信息保真的知识库文章。
+  // ─ Stage 2: topic ─
+  let articleTopic = topicDir || 'general';
+  {
+    const cfgT = stagesCfg.topic || { source: 'user' };
+    const s = startStage(task, 'topic', '确定主题', { source: cfgT.source });
+    try {
+      if (cfgT.source === 'llm' || (articleTopic === 'general' && cfgT.source !== 'user')) {
+        const topicModel = cfgT.model || pickModelByUse(providerKey, 'fast', config);
+        const resp = await callLLM(
+          '你是一个主题分类助手。从候选主题中选择最合适的一个（返回 kebab-case 英文目录名，不加引号和解释）。若都不合适，返回一个新的 kebab-case 英文名。',
+          `## 已有主题\n${existingTopics.join(', ') || '（暂无）'}\n\n## 内容标题\n${articleTitle}\n\n## 内容摘要\n${rawBody.slice(0, 1500)}`,
+          { ...(overrides || {}), model: topicModel },
+          { maxTokens: 60, temperature: 0.2 }
+        );
+        const cand = (resp || '').trim().split(/\s+/)[0].replace(/[^a-zA-Z0-9-]/g, '').toLowerCase();
+        if (cand) articleTopic = cand;
+      }
+      doneStage(s, { detail: articleTopic });
+    } catch (e) {
+      errorStage(s, e);
+    }
+  }
+
+  // ─ Stage 3: filename ─
+  let articleFilename = filename ? filename.replace(/\.(txt|md|json)$/i, '.md') : '';
+  {
+    const cfgF = stagesCfg.filename || { source: 'code' };
+    const s = startStage(task, 'filename', '生成文件名', { source: cfgF.source });
+    try {
+      articleFilename = slugifyTitle(articleTitle);
+      doneStage(s, { detail: articleFilename });
+    } catch (e) {
+      errorStage(s, e);
+      articleFilename = `article-${Date.now()}.md`;
+    }
+  }
+
+  // ─ Stage 4 + 5 并行：content + summary ─
+  const cfgC = stagesCfg.content || { model: pickModelByUse(providerKey, 'main', config), thinking: false, stream: true, maxTokens: 16384 };
+  const cfgS = stagesCfg.summary || { source: 'llm', model: pickModelByUse(providerKey, 'fast', config), maxLength: 30 };
+
+  const memCtxApi = buildMemoryContext();
+  const bioContext = memCtxApi ? `\n\n${memCtxApi}\n请根据用户背景调整文章深度和侧重点。` : '';
+  const contentSystemPrompt = `你是知识库编译助手。将原始素材编译为结构清晰、信息保真的纯 Markdown 知识库文章。
 
 ## 文章模板
-# 标题
+# ${articleTitle}
 > 来源：作者/机构，日期
 > 原文：[${filename}](../../raw/${topicDir}/${filename})
 
@@ -434,57 +867,191 @@ async function compileArticle(topicDir, filename, filePath, task, overrides) {
 ## 正文
 按逻辑分章节（## 二级标题）。章节内可用 ### 三级标题。
 
-## See Also
-- [相关文章标题](相关文章相对路径.md)
-
 ## 编译原则（重要）
-1. **信息保真**：原文的数据、数字、对比、决策理由必须保留，不可概括为"等"
-2. **保留结构**：原文中的表格、列表、对比矩阵照搬为 Markdown 表格，不要摊平成散文
-3. **保留图片**：原文中的 ![图片](images/xxx) 原样保留在对应位置，路径不要改
-4. **保留引用**：原文中有价值的原话用 > 引用块保留
-5. **决策要有 Why**：如果原文提到"做了 X"，必须保留"为什么做 X"的理由
-6. **不要发明内容**：只编译原文中有的信息，不添加原文没有的分析
-7. **概述要精准**：概述段要提炼核心观点，不是泛泛的"本文介绍了…"
+1. 信息保真：原文的数据、数字、对比、决策理由必须保留，不可概括为"等"
+2. 保留结构：原文中的表格、列表、对比矩阵照搬为 Markdown 表格，不要摊平成散文
+3. 保留图片：原文中的 ![图片](images/xxx) 原样保留在对应位置，路径不要改
+4. 保留引用：原文中有价值的原话用 > 引用块保留
+5. 决策要有 Why：如果原文提到"做了 X"，必须保留"为什么做 X"的理由
+6. 不要发明内容：只编译原文中有的信息，不添加原文没有的分析
 
-## 约定
+## 输出要求（重要）
+- 输出**纯 Markdown 文章**，不要用 JSON 包裹、不要用代码块 fence 包裹整篇文章
+- **不要写 See Also 章节**（系统会自动追加）
+- 第一行就是 "# ${articleTitle}"
 - 输出语言：${langInstruction}
-- topic 目录名：英文 kebab-case
-- filename：基于核心概念命名，如 ai-distillation-skills.md
-- 已有主题：${existingTopics.join(', ') || '（暂无）'}（优先归入已有主题，无匹配才建新的）
-- See Also：**只链接已存在的文章**，不要虚构不存在的链接。同 topic 内用 filename.md，跨 topic 用 ../topic/filename.md。如果没有相关的已有文章，See Also 章节留空或省略。
-- 已有文章：${existingArticles.length ? existingArticles.join('；') : '（暂无）'}
+- 已有主题：${existingTopics.join(', ') || '（暂无）'}${bioContext}`;
 
-输出纯 JSON，不要代码块：
-{"title":"中文标题","topic":"目录名","filename":"文件名.md","content":"完整Markdown内容","summary":"≤15字摘要"}${bioContext}`;
+  const contentP = (async () => {
+    const s = startStage(task, 'content', '编译正文', { model: cfgC.model });
+    let chosenModel = cfgC.model;
+    try {
+      const modelOverride = { ...(overrides || {}), model: cfgC.model };
+      const maxTok = cfgC.maxTokens || 16384;
+      const resp = await callLLM(contentSystemPrompt, rawBody, modelOverride, {
+        stream: !!cfgC.stream,
+        thinking: !!cfgC.thinking,
+        maxTokens: maxTok
+      });
+      doneStage(s, { detail: `${(resp || '').length} chars` });
+      return resp;
+    } catch (e) {
+      // 重试：retryModel
+      if (cfgC.retryModel && cfgC.retryModel !== cfgC.model) {
+        try {
+          chosenModel = cfgC.retryModel;
+          s.detail = `retry with ${cfgC.retryModel}`;
+          const modelOverride2 = { ...(overrides || {}), model: cfgC.retryModel };
+          const maxTok = cfgC.maxTokens || 16384;
+          const resp2 = await callLLM(contentSystemPrompt, rawBody, modelOverride2, {
+            stream: !!cfgC.stream,
+            thinking: false,
+            maxTokens: maxTok
+          });
+          doneStage(s, { detail: `retry ok (${cfgC.retryModel}), ${(resp2 || '').length} chars`, model: cfgC.retryModel });
+          return resp2;
+        } catch (e2) {
+          errorStage(s, e2);
+          return null;
+        }
+      } else {
+        errorStage(s, e);
+        return null;
+      }
+    }
+  })();
 
-    const response = await callLLM(systemPrompt, rawContent, overrides);
+  const summaryP = (async () => {
+    const s = startStage(task, 'summary', '生成摘要', { source: cfgS.source });
+    try {
+      if (cfgS.source === 'inline' || cfgS.source === 'skip') {
+        skipStage(s, 'inline/skip — 稍后从正文提取');
+        return null;
+      }
+      const sumModel = cfgS.model || pickModelByUse(providerKey, 'fast', config);
+      s.model = sumModel;
+      const maxLen = cfgS.maxLength || 30;
+      const resp = await callLLM(
+        `你是摘要助手。用 1 句话（≤${maxLen} 字）概括以下内容的核心价值。只输出摘要本身，不要加前缀、引号或解释。`,
+        rawBody.slice(0, 8000),
+        { ...(overrides || {}), model: sumModel },
+        { maxTokens: 120, temperature: 0.2 }
+      );
+      const summary = (resp || '').trim().replace(/^["'"'《]/, '').replace(/["'"'》]$/, '').split('\n')[0];
+      doneStage(s, { detail: summary });
+      return summary;
+    } catch (e) {
+      errorStage(s, e);
+      return null;
+    }
+  })();
 
-    // 解析 JSON（兼容代码块包裹）
-    let jsonStr = response.trim();
-    const cbMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
-    if (cbMatch) jsonStr = cbMatch[1].trim();
-    const result = JSON.parse(jsonStr);
+  const [contentResp, summaryResp] = await Promise.all([contentP, summaryP]);
 
-    // 写入文章（不同文件，可并发）
-    const articleTopic = result.topic || topicDir || 'general';
-    const articleDir = path.join(WIKI, articleTopic);
-    fs.mkdirSync(articleDir, { recursive: true });
-    const articleFilename = result.filename || `${Date.now()}.md`;
-    const articlePath = path.join(articleDir, articleFilename);
-    // 后处理：把 images/xxx 路径修正为相对于 wiki 文章指向 raw 目录
-    let articleContent = result.content;
+  let articleContent = contentResp;
+  let contentErrored = !articleContent;
+
+  // 如果 content 彻底失败，用 rawBody 作为 fallback
+  if (!articleContent) {
+    articleContent = `# ${articleTitle}\n\n> 注意：正文编译失败，以下为原始素材。\n\n${rawBody}`;
+  } else {
+    articleContent = stripOuterCodeFences(articleContent);
+  }
+
+  // summary fallback: 从正文第一段抽取
+  let articleSummary = summaryResp;
+  if (!articleSummary) {
+    // 取正文第一段（H1 之后第一个非空段落）
+    const m = articleContent.match(/^#\s+.+\n+([\s\S]+?)(?:\n\n|$)/m);
+    if (m) {
+      articleSummary = m[1].trim().replace(/\n/g, ' ').slice(0, 30);
+    } else {
+      articleSummary = articleTitle.slice(0, 30);
+    }
+  }
+
+  // ─ Stage 6: seealso ─
+  {
+    const cfgSA = stagesCfg.seealso || { source: 'code_plus_llm', topK: 5 };
+    const s = startStage(task, 'seealso', '推荐相关文章', { source: cfgSA.source });
+    try {
+      if (cfgSA.source === 'skip') {
+        skipStage(s);
+      } else {
+        const topK = cfgSA.topK || 5;
+        // 评分
+        const queryText = `${articleTitle} ${articleSummary}`;
+        const scored = existingArticles
+          .map(a => ({ ...a, score: scoreArticleRelevance(queryText, a.title) }))
+          .filter(a => a.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, topK);
+
+        let picked = [];
+        if (cfgSA.source === 'code') {
+          picked = scored.slice(0, 3);
+        } else if (scored.length > 0) {
+          // code_plus_llm
+          const saModel = cfgSA.model || pickModelByUse(providerKey, 'fast', config);
+          s.model = saModel;
+          const candidatesStr = scored.map((a, i) => `${i + 1}. ${a.title} (${a.path})`).join('\n');
+          try {
+            const resp = await callLLM(
+              '你是一个相关文章推荐助手。从候选列表中选出与目标文章真正相关的 0-3 篇（宁缺勿滥）。只输出选中的序号，用英文逗号分隔，例如 "1,3"。如果都不相关，输出 "none"。',
+              `## 目标文章\n标题：${articleTitle}\n摘要：${articleSummary}\n\n## 候选\n${candidatesStr}`,
+              { ...(overrides || {}), model: saModel },
+              { maxTokens: 60, temperature: 0.2 }
+            );
+            const idxs = (resp || '').trim().toLowerCase();
+            if (idxs !== 'none' && idxs !== '') {
+              const nums = idxs.split(/[,，\s]+/).map(x => parseInt(x, 10)).filter(n => !isNaN(n) && n >= 1 && n <= scored.length);
+              picked = nums.slice(0, 3).map(n => scored[n - 1]);
+            }
+          } catch {
+            // LLM 失败时退回到 code 结果
+            picked = scored.slice(0, 3);
+          }
+        }
+        if (picked.length > 0) {
+          // 追加 See Also 块（同 topic 用 filename.md，跨 topic 用 ../topic/filename.md）
+          const lines = picked.map(a => {
+            const [aTopic, aFile] = a.path.split('/');
+            const rel = aTopic === articleTopic ? aFile : `../${aTopic}/${aFile}`;
+            return `- [${a.title}](${rel})`;
+          });
+          // 避免重复的 See Also
+          if (!/^##\s+See Also\s*$/m.test(articleContent)) {
+            articleContent = articleContent.trimEnd() + `\n\n## See Also\n${lines.join('\n')}\n`;
+          }
+          doneStage(s, { detail: `${picked.length} 篇` });
+        } else {
+          doneStage(s, { detail: '无相关文章' });
+        }
+      }
+    } catch (e) {
+      errorStage(s, e);
+    }
+  }
+
+  // ─ Stage 7: persist ─
+  let relPath = '';
+  const persistStage = startStage(task, 'persist', '写入文件', { source: 'code' });
+  try {
+    // 修正 images 路径
     articleContent = articleContent.replace(/!\[([^\]]*)\]\(images\/([^)]+)\)/g,
       `![$1](../../raw/${topicDir}/images/$2)`);
-    fs.writeFileSync(articlePath, articleContent, 'utf-8');
 
-    const relPath = `${articleTopic}/${articleFilename}`;
+    const articleDir = path.join(WIKI, articleTopic);
+    fs.mkdirSync(articleDir, { recursive: true });
+    const articlePath = path.join(articleDir, articleFilename);
+    fs.writeFileSync(articlePath, articleContent, 'utf-8');
+    relPath = `${articleTopic}/${articleFilename}`;
     const today = new Date().toISOString().slice(0, 10);
 
-    // 更新 index.md 和 log.md（串行锁，防并发写坏）
     await (writeLock = writeLock.catch(() => {}).then(() => {
       const indexPath = path.join(WIKI, 'index.md');
       let idx = ''; try { idx = fs.readFileSync(indexPath, 'utf-8'); } catch { idx = '# Knowledge Base Index\n'; }
-      const newEntry = `| [${result.title}](${articleTopic}/${articleFilename}) | ${result.summary || ''} | ${today} |`;
+      const newEntry = `| [${articleTitle}](${articleTopic}/${articleFilename}) | ${articleSummary || ''} | ${today} |`;
       const topicHeader = `### ${articleTopic}`;
       if (idx.includes(topicHeader)) {
         const lines = idx.split('\n');
@@ -509,16 +1076,27 @@ async function compileArticle(topicDir, filename, filePath, task, overrides) {
 
       const logPath = path.join(WIKI, 'log.md');
       let log = ''; try { log = fs.readFileSync(logPath, 'utf-8'); } catch { log = '# Wiki Log\n'; }
-      log += `\n## [${today}] ingest | ${result.title}\n`;
+      log += `\n## [${today}] ingest | ${articleTitle}\n`;
       fs.writeFileSync(logPath, log, 'utf-8');
 
       indexCache.invalidate('index');
       wikiCache.invalidate();
     }));
-
-    task.status = 'done'; task.message = '编译完成'; task.created = [{ path: relPath, title: result.title }];
+    doneStage(persistStage, { detail: relPath });
   } catch (e) {
-    task.status = 'error'; task.message = `编译失败: ${e.message}`;
+    errorStage(persistStage, e);
+    task.status = 'error';
+    task.message = `编译失败: ${e.message}`;
+    return;
+  }
+
+  task.created = [{ path: relPath, title: articleTitle }];
+  if (contentErrored) {
+    task.status = 'partial';
+    task.message = '编译完成（正文降级为原文）';
+  } else {
+    task.status = 'done';
+    task.message = '编译完成';
   }
 }
 
@@ -1251,8 +1829,8 @@ async function ocrImage(b64, filename) {
   }
 
   let visionModel = model;
-  if (providerKey === 'bailian' && !model.startsWith('qwen-vl')) {
-    visionModel = 'qwen-vl-plus';
+  if (providerKey === 'bailian' && !model.startsWith('qwen-vl') && !model.startsWith('qwen3-vl')) {
+    visionModel = 'qwen-vl-max-latest';
   }
   if (providerKey === 'openai' && !model.startsWith('gpt-4o') && !model.startsWith('gpt-4-turbo')) {
     visionModel = 'gpt-4o';
@@ -1365,7 +1943,17 @@ async function extractContent(type, content, filename, urlVal, rawDir) {
 
 // ── 自动化任务 ──
 
-function loadAutotasks() { try { return JSON.parse(fs.readFileSync(path.join(AUTOTASKS_DIR, 'tasks.json'), 'utf-8')); } catch { return []; } }
+function normalizeTask(t) {
+  return {
+    ...t,
+    model: t.model || null,
+    provider: t.provider || null,
+    nlSummary: t.nlSummary || null,
+    templateId: t.templateId || null,
+    version: t.version || 1
+  };
+}
+function loadAutotasks() { try { const tasks = JSON.parse(fs.readFileSync(path.join(AUTOTASKS_DIR, 'tasks.json'), 'utf-8')); return tasks.map(normalizeTask); } catch { return []; } }
 function saveAutotasks(tasks) { fs.writeFileSync(path.join(AUTOTASKS_DIR, 'tasks.json'), JSON.stringify(tasks, null, 2), 'utf-8'); }
 function loadHistory() { try { return JSON.parse(fs.readFileSync(path.join(AUTOTASKS_DIR, 'history.json'), 'utf-8')); } catch { return []; } }
 function saveHistory(hist) { fs.writeFileSync(path.join(AUTOTASKS_DIR, 'history.json'), JSON.stringify(hist, null, 2), 'utf-8'); if (hist.length > 200) saveHistory(hist.slice(-200)); }
@@ -1480,6 +2068,8 @@ async function executeAutotask(taskId, isManual = false) {
   const task = tasks.find(t => t.id === taskId);
   if (!task) throw new Error('任务不存在');
 
+  const modelOverrides = (task.provider && task.model) ? { provider: task.provider, model: task.model } : null;
+
   const runId = genId('run');
   const run = {
     id: runId, taskId: task.id, taskName: task.name,
@@ -1516,7 +2106,7 @@ async function executeAutotask(taskId, isManual = false) {
     }
 
     // 2. Apply maxItems limit
-    const maxItems = task.sourceConfig.maxItems || 10;
+    const maxItems = task.sourceConfig.maxItems || 5;
     sourceItems = sourceItems.slice(0, maxItems);
     run.itemsFound = sourceItems.length;
 
@@ -1580,7 +2170,7 @@ async function executeAutotask(taskId, isManual = false) {
 
         // Compile article
         const compileTask = pushTask('autotask');
-        await compileArticle(topicDir, rawFilename, filePath, compileTask, null);
+        await compileArticle(topicDir, rawFilename, filePath, compileTask, modelOverrides);
 
         // Mark as ingested in dedup
         markIngested(item.url, extractedText, runId);
@@ -2408,6 +2998,7 @@ const server = http.createServer(async (req, res) => {
     const task = latestTask();
     if (!task) return json(res, 200, { status: 'idle' });
     const resp = { id: task.id, status: task.status, message: task.message };
+    if (task.stages) resp.stages = task.stages;
     if (task.created) {
       resp.created = task.created;
       if (task.created.length > 0) resp.article = task.created[0];
@@ -2669,28 +3260,74 @@ const server = http.createServer(async (req, res) => {
   // GET /api/settings — 获取当前配置
   if (p === '/api/settings' && req.method === 'GET') {
     const config = getFullConfig();
+    // 构造 providers 视图：合并 builtin + 用户覆盖，带 isBuiltin
+    const providersOut = {};
+    for (const key of Object.keys(BUILTIN_PROVIDERS)) {
+      const bp = BUILTIN_PROVIDERS[key];
+      providersOut[key] = {
+        name: bp.name,
+        baseUrl: bp.baseUrl,
+        format: bp.format,
+        defaultModel: bp.defaultModel,
+        models: getProviderModels(key, config)
+      };
+    }
     return json(res, 200, {
       provider: config.provider,
       model: config.model,
       customBaseUrl: config.customBaseUrl || '',
       wikiLang: config.wikiLang || 'zh',
-      providers: PROVIDERS,
+      providers: providersOut,
+      pipeline: config.pipeline || { preset: 'balanced', stages: resolvePresetForProvider('balanced', config.provider, config) },
       hasKey: !!config.apiKey
     });
   }
 
-  // PUT /api/settings — 保存配置
+  // GET /api/models/defaults?provider=xxx — 返回该 provider 的 builtin 默认列表
+  if (p === '/api/models/defaults' && req.method === 'GET') {
+    const url = new URL(req.url, `http://localhost`);
+    const providerKey = url.searchParams.get('provider');
+    if (!providerKey || !BUILTIN_PROVIDERS[providerKey]) {
+      return json(res, 400, { error: 'invalid provider' });
+    }
+    const bp = BUILTIN_PROVIDERS[providerKey];
+    return json(res, 200, {
+      provider: providerKey,
+      name: bp.name,
+      baseUrl: bp.baseUrl,
+      format: bp.format,
+      defaultModel: bp.defaultModel,
+      models: (bp.models || []).map(m => ({ ...m, isBuiltin: true }))
+    });
+  }
+
+  // PUT /api/settings — 保存配置（支持 providers / pipeline 浅合并）
   if (p === '/api/settings' && req.method === 'PUT') {
     let body = '';
     req.on('data', c => body += c);
     req.on('end', () => {
       try {
-        const { provider, apiKey, model, customBaseUrl, wikiLang } = JSON.parse(body);
+        const parsed = JSON.parse(body);
+        const { provider, apiKey, model, customBaseUrl, wikiLang, providers, pipeline } = parsed;
         const config = loadConfig();
         if (provider) config.provider = provider;
         if (typeof model === 'string') config.model = model;
         if (typeof customBaseUrl === 'string') config.customBaseUrl = customBaseUrl;
         if (typeof wikiLang === 'string') config.wikiLang = wikiLang;
+        if (providers && typeof providers === 'object') {
+          config.providers = { ...(config.providers || {}), ...providers };
+        }
+        if (pipeline && typeof pipeline === 'object') {
+          const merged = { ...(config.pipeline || {}), ...pipeline };
+          if (pipeline.stages && typeof pipeline.stages === 'object') {
+            merged.stages = { ...((config.pipeline && config.pipeline.stages) || {}), ...pipeline.stages };
+          }
+          // 如果只传了 preset 没传 stages，按 preset 重新解析
+          if (pipeline.preset && !pipeline.stages) {
+            merged.stages = resolvePresetForProvider(pipeline.preset, config.provider, config);
+          }
+          config.pipeline = merged;
+        }
         saveConfig(config);
         // apiKey 单独存储到 .api-key 文件
         if (typeof apiKey === 'string' && apiKey.trim()) saveApiKey(apiKey.trim());
@@ -2700,16 +3337,30 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // POST /api/settings/test — 测试连接
+  // POST /api/settings/test — 测试连接（可接受 {provider, model, thinking}）
   if (p === '/api/settings/test' && req.method === 'POST') {
-    (async () => {
-      try {
-        const answer = await callLLM('你是一个测试助手。', '请回复"连接成功"四个字。');
-        return json(res, 200, { ok: true, message: answer.trim().slice(0, 100) });
-      } catch (e) {
-        return json(res, 200, { ok: false, message: e.message.slice(0, 300) });
-      }
-    })();
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      (async () => {
+        let overrides = {};
+        let opts = {};
+        try {
+          if (body && body.trim()) {
+            const parsed = JSON.parse(body);
+            if (parsed.provider) overrides.provider = parsed.provider;
+            if (parsed.model) overrides.model = parsed.model;
+            if (typeof parsed.thinking === 'boolean') opts.thinking = parsed.thinking;
+          }
+        } catch {}
+        try {
+          const answer = await callLLM('你是一个测试助手。', '请回复"连接成功"四个字。', overrides, opts);
+          return json(res, 200, { ok: true, message: (answer || '').trim().slice(0, 100) });
+        } catch (e) {
+          return json(res, 200, { ok: false, message: e.message.slice(0, 300) });
+        }
+      })();
+    });
     return;
   }
 
@@ -2829,6 +3480,160 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // POST /api/autotask/parse-nl — parse natural-language task description into config
+    if (subPath === '/parse-nl' && req.method === 'POST') {
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', async () => {
+        try {
+          const data = JSON.parse(body || '{}');
+          const { nl, current, instruction } = data;
+          if (!nl && !(current && instruction)) {
+            return json(res, 400, { error: '缺少描述' });
+          }
+
+          // Collect available topics from wiki dir
+          let topics = [];
+          try {
+            for (const d of (fs.existsSync(WIKI) ? fs.readdirSync(WIKI, { withFileTypes: true }) : [])) {
+              if (d.isDirectory() && !d.name.startsWith('.')) topics.push(d.name);
+            }
+          } catch {}
+          const topicListStr = topics.length ? topics.join(', ') : '(暂无)';
+
+          const systemPrompt = `你是任务配置解析器。把用户的中文自然语言转成严格 JSON。
+
+输出 schema:
+{
+  "name": string,
+  "sourceType": "rss" | "webpage" | "api",
+  "sourceConfig": { "url": string, "maxItems": number 1-50 },
+  "schedule": "daily" | "hourly" | "manual",
+  "scheduleTime": "HH:MM",
+  "topic": string,
+  "filters": { "keywords": string[], "excludeKeywords": string[] },
+  "_warnings": string[]
+}
+
+强制要求:
+1. 只输出 JSON。不带 \`\`\` 围栏，不带任何解释。
+2. 不确定的字段填默认值，并在 _warnings 里说明。
+3. 若 input 含 current 配置，只修改用户明确要改的字段，其他保持。
+
+已知数据源（首选 RSS）:
+- Hacker News -> https://hnrss.org/frontpage (rss)
+- arXiv cs.AI -> https://export.arxiv.org/rss/cs.AI (rss)
+- Hugging Face Papers -> https://huggingface.co/papers (webpage)
+- 36氪 -> https://36kr.com/feed (rss)
+- 少数派 -> https://sspai.com/feed (rss)
+- 阮一峰科技周刊 -> https://www.ruanyifeng.com/blog/atom.xml (rss)
+
+可用主题列表（topic 字段必须从这里挑，否则用 'auto'）:
+${topicListStr}`;
+
+          const userParts = [];
+          if (nl) userParts.push(`# 自然语言描述\n${nl}`);
+          if (current) userParts.push(`# 当前配置\n${JSON.stringify(current, null, 2)}`);
+          if (instruction) userParts.push(`# 修改指令\n${instruction}`);
+          const userPrompt = userParts.join('\n\n');
+
+          // Call LLM with 30s timeout, force global config (no user-supplied model)
+          let raw;
+          try {
+            raw = await Promise.race([
+              callLLM(systemPrompt, userPrompt, null, { temperature: 0, maxTokens: 1024 }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('LLM 超时')), 30000))
+            ]);
+          } catch (e) {
+            if (/超时|timeout/i.test(e.message)) return json(res, 504, { error: 'AI 解析超时', detail: e.message });
+            return json(res, 502, { error: 'LLM 调用失败', detail: e.message });
+          }
+
+          // Strip ```json fences if present
+          let cleaned = String(raw || '').trim();
+          cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+          let parsed;
+          try { parsed = JSON.parse(cleaned); }
+          catch {
+            return json(res, 502, { error: 'AI 解析失败', raw: String(raw || '').slice(0, 500) });
+          }
+
+          // Local validator
+          const warnings = Array.isArray(parsed._warnings) ? parsed._warnings.slice() : [];
+          const validSourceTypes = ['rss', 'webpage', 'api'];
+          const validSchedules = ['daily', 'hourly', 'manual'];
+
+          let sourceType = parsed.sourceType;
+          if (!validSourceTypes.includes(sourceType)) {
+            warnings.push(`sourceType 无效 (${sourceType})，回退到 rss`);
+            sourceType = 'rss';
+          }
+
+          let schedule = parsed.schedule;
+          if (!validSchedules.includes(schedule)) {
+            warnings.push(`schedule 无效 (${schedule})，回退到 daily`);
+            schedule = 'daily';
+          }
+
+          let scheduleTime = parsed.scheduleTime;
+          if (typeof scheduleTime !== 'string' || !/^\d{2}:\d{2}$/.test(scheduleTime)) {
+            warnings.push(`scheduleTime 无效 (${scheduleTime})，回退到 08:00`);
+            scheduleTime = '08:00';
+          }
+
+          const sc = parsed.sourceConfig && typeof parsed.sourceConfig === 'object' ? parsed.sourceConfig : {};
+          let maxItems = Number(sc.maxItems);
+          if (!Number.isFinite(maxItems) || maxItems < 1 || maxItems > 50) {
+            warnings.push(`maxItems 无效 (${sc.maxItems})，回退到 5`);
+            maxItems = 5;
+          } else {
+            maxItems = Math.floor(maxItems);
+          }
+
+          let url = typeof sc.url === 'string' ? sc.url : '';
+          if (url && !/^https?:\/\//i.test(url)) {
+            warnings.push(`url 不以 http(s) 开头：${url}`);
+          }
+
+          const filtersIn = parsed.filters && typeof parsed.filters === 'object' ? parsed.filters : {};
+          let keywords = Array.isArray(filtersIn.keywords) ? filtersIn.keywords.filter(x => typeof x === 'string') : [];
+          if (!Array.isArray(filtersIn.keywords)) {
+            if (filtersIn.keywords !== undefined) warnings.push('keywords 非数组，已重置');
+            keywords = [];
+          }
+          let excludeKeywords = Array.isArray(filtersIn.excludeKeywords) ? filtersIn.excludeKeywords.filter(x => typeof x === 'string') : [];
+          if (!Array.isArray(filtersIn.excludeKeywords)) {
+            if (filtersIn.excludeKeywords !== undefined) warnings.push('excludeKeywords 非数组，已重置');
+            excludeKeywords = [];
+          }
+
+          let topic = typeof parsed.topic === 'string' ? parsed.topic : 'auto';
+          if (topic !== 'auto' && !topics.includes(topic)) {
+            warnings.push(`topic '${topic}' 不在可用列表，回退到 auto`);
+            topic = 'auto';
+          }
+
+          const name = typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name.trim() : '未命名任务';
+
+          const config = {
+            name,
+            sourceType,
+            sourceConfig: { url, maxItems },
+            schedule,
+            scheduleTime,
+            topic,
+            filters: { keywords, excludeKeywords }
+          };
+
+          return json(res, 200, { ok: true, config, warnings });
+        } catch (e) {
+          return json(res, 400, { error: e.message });
+        }
+      });
+      return;
+    }
+
     // POST /api/autotask/:id/run — manual trigger
     const runMatch = subPath.match(/^\/([^/]+)\/run$/);
     if (runMatch && req.method === 'POST') {
@@ -2873,6 +3678,11 @@ const server = http.createServer(async (req, res) => {
               keywords: (data.filters && data.filters.keywords) || [],
               excludeKeywords: (data.filters && data.filters.excludeKeywords) || []
             },
+            model: typeof data.model === 'string' && data.model ? data.model : null,
+            provider: typeof data.provider === 'string' && data.provider ? data.provider : null,
+            nlSummary: typeof data.nlSummary === 'string' ? data.nlSummary : null,
+            templateId: typeof data.templateId === 'string' ? data.templateId : null,
+            version: 2,
             createdAt: new Date().toISOString(),
             lastRunAt: null,
             lastRunStatus: null
@@ -2907,6 +3717,11 @@ const server = http.createServer(async (req, res) => {
           if (data.topic !== undefined) t.topic = data.topic;
           if (data.enabled !== undefined) t.enabled = data.enabled;
           if (data.filters !== undefined) t.filters = data.filters;
+          if (data.model !== undefined) t.model = data.model || null;
+          if (data.provider !== undefined) t.provider = data.provider || null;
+          if (data.nlSummary !== undefined) t.nlSummary = data.nlSummary || null;
+          if (data.templateId !== undefined) t.templateId = data.templateId || null;
+          t.version = 2;
           saveAutotasks(tasks);
           return json(res, 200, t);
         } catch (e) { return json(res, 400, { error: e.message }); }

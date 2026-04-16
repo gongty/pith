@@ -1,26 +1,65 @@
-import { $, api, put, post, toast } from './utils.js';
+import { $, h, api, put, post, toast } from './utils.js';
 import state from './state.js';
 import { renderMemory } from './memory.js';
+
+/* ── tab switching ── */
 
 export function openSettings() { $('settingsModal').classList.add('open'); loadSett(); }
 export function closeSettings() { $('settingsModal').classList.remove('open'); }
 
 export function switchSettingsTab(tab) {
   document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-  $('settingsTabGeneral').style.display = tab === 'general' ? '' : 'none';
+  $('settingsTabGeneral').style.display  = tab === 'general'  ? '' : 'none';
   $('settingsTabProvider').style.display = tab === 'provider' ? '' : 'none';
-  $('settingsTabMemory').style.display = tab === 'memory' ? '' : 'none';
+  $('settingsTabMemory').style.display   = tab === 'memory'   ? '' : 'none';
+  const pipe = $('settingsTabPipeline'); if (pipe) pipe.style.display = tab === 'pipeline' ? '' : 'none';
   if (tab === 'memory') renderMemory($('settingsTabMemory'));
+  if (tab === 'pipeline') loadPipeline();
 }
+
+/* ── helpers: normalize model list across old/new schemas ── */
+
+// Old schema: prov.models = ['id1','id2']
+// New schema: prov.models = [{id,label,use,thinkingCapable,defaultThinking,isBuiltin}, ...]
+function normalizeModels(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map(m => {
+    if (typeof m === 'string') return { id: m, label: m, use: 'main', thinkingCapable: false, defaultThinking: false, isBuiltin: true };
+    return {
+      id: m.id || '',
+      label: m.label || m.id || '',
+      use: m.use || 'main',
+      thinkingCapable: !!m.thinkingCapable,
+      defaultThinking: !!m.defaultThinking,
+      isBuiltin: m.isBuiltin !== false,
+    };
+  });
+}
+
+function currentProvKey() { return $('sProv') ? $('sProv').value : (state.sCache && state.sCache.provider) || 'local'; }
+
+function getWorkingModels(provKey) {
+  // state.sModels is the editable working copy keyed by provider
+  if (!state.sModels) state.sModels = {};
+  if (!state.sModels[provKey]) {
+    const p = state.sCache && state.sCache.providers && state.sCache.providers[provKey];
+    state.sModels[provKey] = normalizeModels(p && p.models);
+  }
+  return state.sModels[provKey];
+}
+
+/* ── load ── */
 
 async function loadSett() {
   try {
     const s = await api('/api/settings'); state.sCache = s;
+    state.sModels = {}; // reset working copy on each load
     const prov = $('sProv'); prov.innerHTML = '';
     if (s.providers) for (const [k, v] of Object.entries(s.providers)) { const o = document.createElement('option'); o.value = k; o.textContent = v.name; prov.appendChild(o); }
     prov.value = s.provider || 'local'; $('sKey').value = ''; $('sKey').placeholder = s.hasKey ? '已配置 (输入覆盖)' : '输入 API Key...';
     $('sLang').value = s.wikiLang || 'zh';
     onProvChange();
+    wireProviderSection();
   } catch {}
   // Load profile
   try {
@@ -29,16 +68,138 @@ async function loadSett() {
   } catch { $('sNickname').value = ''; }
 }
 
+/* ── provider change: refresh main-model dropdown + model-list table ── */
+
 export function onProvChange() {
-  const p = $('sProv').value; const ms = $('sModel'); ms.innerHTML = '';
-  if (state.sCache && state.sCache.providers && state.sCache.providers[p]) state.sCache.providers[p].models.forEach(m => { const o = document.createElement('option'); o.value = m; o.textContent = m; ms.appendChild(o); });
+  const p = currentProvKey();
+  const models = getWorkingModels(p);
+  const ms = $('sModel'); ms.innerHTML = '';
+  models.forEach(m => {
+    const o = document.createElement('option');
+    o.value = m.id;
+    o.textContent = (m.label || m.id) + ' · ' + m.use;
+    ms.appendChild(o);
+  });
   if (state.sCache && state.sCache.model) ms.value = state.sCache.model;
+  renderModelList();
 }
 
-export async function saveSett() {
-  const b = { provider: $('sProv').value, model: $('sModel').value, wikiLang: $('sLang').value }; const k = $('sKey').value; if (k) b.apiKey = k;
+function renderModelList() {
+  const tbl = $('modelListTable'); if (!tbl) return;
+  const p = currentProvKey();
+  const models = getWorkingModels(p);
+  if (!models.length) {
+    tbl.innerHTML = '<div class="model-list-empty">暂无模型，点击“添加模型”新增。</div>';
+    return;
+  }
+  tbl.innerHTML = models.map((m, i) => `
+    <div class="model-row" data-idx="${i}">
+      <input class="mr-id" data-f="id" value="${h(m.id)}" placeholder="model id" ${m.isBuiltin ? 'readonly' : ''}>
+      <input class="mr-label" data-f="label" value="${h(m.label)}" placeholder="显示名">
+      <select class="mr-use" data-f="use">
+        <option value="strong" ${m.use==='strong'?'selected':''}>strong</option>
+        <option value="main"   ${m.use==='main'?'selected':''}>main</option>
+        <option value="fast"   ${m.use==='fast'?'selected':''}>fast</option>
+      </select>
+      <label class="mr-thinking" title="思考能力"><input type="checkbox" data-f="thinkingCapable" ${m.thinkingCapable?'checked':''}> 思考</label>
+      <button class="mr-delete" type="button" data-action="del" ${m.isBuiltin?'hidden':''} title="删除">🗑</button>
+    </div>
+  `).join('');
+  // wire input/select/checkbox changes
+  tbl.querySelectorAll('.model-row').forEach(row => {
+    const idx = parseInt(row.dataset.idx, 10);
+    row.querySelectorAll('[data-f]').forEach(el => {
+      el.addEventListener('change', () => updateModelField(idx, el.dataset.f, el.type === 'checkbox' ? el.checked : el.value));
+      if (el.tagName === 'INPUT' && el.type !== 'checkbox') {
+        el.addEventListener('input', () => updateModelField(idx, el.dataset.f, el.value));
+      }
+    });
+    const del = row.querySelector('[data-action="del"]');
+    if (del) del.addEventListener('click', () => { deleteModel(idx); });
+  });
+}
+
+function updateModelField(idx, field, value) {
+  const models = getWorkingModels(currentProvKey());
+  if (!models[idx]) return;
+  models[idx][field] = value;
+  // If id/label/use changed, the main-model dropdown labels may need refresh
+  if (field === 'id' || field === 'label' || field === 'use') {
+    const ms = $('sModel'); if (ms) {
+      const prev = ms.value;
+      ms.innerHTML = '';
+      models.forEach(m => { const o = document.createElement('option'); o.value = m.id; o.textContent = (m.label || m.id) + ' · ' + m.use; ms.appendChild(o); });
+      ms.value = prev || (models[0] && models[0].id) || '';
+    }
+  }
+}
+
+function deleteModel(idx) {
+  const p = currentProvKey();
+  const models = getWorkingModels(p);
+  if (!models[idx]) return;
+  if (models[idx].isBuiltin) { toast('内建模型不可删除'); return; }
+  models.splice(idx, 1);
+  renderModelList();
+  // refresh main-model select
+  onProvChange.refreshOnly = true; // no-op flag; just re-run
+  const ms = $('sModel'); if (ms) {
+    const prev = ms.value;
+    ms.innerHTML = '';
+    models.forEach(m => { const o = document.createElement('option'); o.value = m.id; o.textContent = (m.label || m.id) + ' · ' + m.use; ms.appendChild(o); });
+    if (models.find(m => m.id === prev)) ms.value = prev;
+  }
+}
+
+function addModel() {
+  const p = currentProvKey();
+  const models = getWorkingModels(p);
+  models.push({ id: '', label: '', use: 'main', thinkingCapable: false, defaultThinking: false, isBuiltin: false });
+  renderModelList();
+}
+
+async function restoreDefaults() {
+  const p = currentProvKey();
   try {
-    await put('/api/settings', b); state.sCache = null;
+    const resp = await api('/api/models/defaults?provider=' + encodeURIComponent(p));
+    // Tolerate either a bare array OR {models:[...]} wrapping
+    const list = Array.isArray(resp) ? resp : (resp && Array.isArray(resp.models) ? resp.models : []);
+    state.sModels[p] = normalizeModels(list);
+    renderModelList();
+    onProvChange();
+    toast('已恢复内建默认');
+  } catch (e) {
+    // fallback: re-read from cache
+    const pc = state.sCache && state.sCache.providers && state.sCache.providers[p];
+    state.sModels[p] = normalizeModels(pc && pc.models);
+    renderModelList();
+    onProvChange();
+    toast('已恢复（使用缓存默认）');
+  }
+}
+
+function wireProviderSection() {
+  const addBtn = $('addModelBtn');
+  const restoreBtn = $('restoreDefaultsBtn');
+  if (addBtn && !addBtn.__wired) { addBtn.addEventListener('click', addModel); addBtn.__wired = true; }
+  if (restoreBtn && !restoreBtn.__wired) { restoreBtn.addEventListener('click', restoreDefaults); restoreBtn.__wired = true; }
+}
+
+/* ── save ── */
+
+export async function saveSett() {
+  const prov = $('sProv').value;
+  const body = { provider: prov, model: $('sModel').value, wikiLang: $('sLang').value };
+  const k = $('sKey').value; if (k) body.apiKey = k;
+  // include edited model lists (if user touched any provider's list)
+  if (state.sModels && Object.keys(state.sModels).length) {
+    body.providers = {};
+    for (const [pk, models] of Object.entries(state.sModels)) {
+      body.providers[pk] = { models };
+    }
+  }
+  try {
+    await put('/api/settings', body); state.sCache = null;
     // Save nickname via profile API (preserve existing bio)
     const nickname = $('sNickname').value.trim();
     let existingBio = '';
@@ -65,4 +226,250 @@ export async function initSidebarTitle() {
     const p = await api('/api/profile');
     if (p && p.nickname) updateSidebarTitle(p.nickname);
   } catch {}
+}
+
+/* ──────────────────────────────────────────────────────────────────── */
+/* Pipeline tab                                                         */
+/* ──────────────────────────────────────────────────────────────────── */
+
+const DEFAULT_PIPELINE = {
+  preset: 'balanced',
+  stages: {
+    title:    { source: 'code' },
+    topic:    { source: 'user' },
+    filename: { source: 'code' },
+    content:  { model: '', thinking: false, stream: true, retryModel: '', maxTokens: 16384 },
+    summary:  { source: 'llm', model: '', maxLength: 30 },
+    seealso:  { source: 'code_plus_llm', model: '', topK: 5 },
+  },
+};
+
+// Preset recipes using placeholder tokens <fast>/<main>/<strong>
+const PRESET_RECIPES = {
+  fast: {
+    content: { model: '<fast>',   thinking: false, stream: true, retryModel: '<main>',   maxTokens: 16384 },
+    summary: { source: 'inline' },
+    seealso: { source: 'code', topK: 3 },
+  },
+  balanced: {
+    content: { model: '<main>',   thinking: false, stream: true, retryModel: '<fast>',   maxTokens: 16384 },
+    summary: { source: 'llm', model: '<fast>', maxLength: 30 },
+    seealso: { source: 'code_plus_llm', model: '<fast>', topK: 5 },
+  },
+  quality: {
+    content: { model: '<strong>', thinking: false, stream: true, retryModel: '<main>',   maxTokens: 16384 },
+    summary: { source: 'llm', model: '<main>', maxLength: 30 },
+    seealso: { source: 'code_plus_llm', model: '<main>', topK: 5 },
+  },
+};
+
+function resolveModelRef(ref, models, defaultModel) {
+  if (!ref) return defaultModel || (models[0] && models[0].id) || '';
+  if (ref === '<fast>' || ref === '<main>' || ref === '<strong>') {
+    const use = ref.slice(1, -1);
+    const hit = models.find(m => m.use === use);
+    if (hit) return hit.id;
+    return defaultModel || (models[0] && models[0].id) || '';
+  }
+  return ref; // concrete id
+}
+
+function resolvePreset(key) {
+  const p = currentProvKey();
+  const models = getWorkingModels(p);
+  const defaultModel = (state.sCache && state.sCache.providers && state.sCache.providers[p] && state.sCache.providers[p].defaultModel) || '';
+  const recipe = PRESET_RECIPES[key];
+  if (!recipe) return null;
+  // Deep clone with placeholder resolution
+  const stages = {
+    title:    { source: 'code' },
+    topic:    { source: 'user' },
+    filename: { source: 'code' },
+    content: {
+      ...recipe.content,
+      model:      resolveModelRef(recipe.content.model,      models, defaultModel),
+      retryModel: resolveModelRef(recipe.content.retryModel, models, defaultModel),
+    },
+    summary:  { ...recipe.summary },
+    seealso:  { ...recipe.seealso },
+  };
+  if (stages.summary.model) stages.summary.model = resolveModelRef(stages.summary.model, models, defaultModel);
+  if (stages.seealso.model) stages.seealso.model = resolveModelRef(stages.seealso.model, models, defaultModel);
+  return stages;
+}
+
+async function loadPipeline() {
+  // Initialize state.pipeline from server cache or defaults
+  const cached = state.sCache && state.sCache.pipeline;
+  if (cached && cached.stages) {
+    state.pipeline = JSON.parse(JSON.stringify(cached));
+  } else if (!state.pipeline) {
+    state.pipeline = { preset: 'balanced', stages: resolvePreset('balanced') || DEFAULT_PIPELINE.stages };
+  }
+  renderPipeline();
+  wirePipelineControls();
+}
+
+function modelOptions(selectedId) {
+  const p = currentProvKey();
+  const models = getWorkingModels(p);
+  return models.map(m => `<option value="${h(m.id)}" ${m.id===selectedId?'selected':''}>${h(m.label || m.id)} · ${h(m.use)}</option>`).join('');
+}
+
+function renderPipeline() {
+  const host = $('pipelineStages'); if (!host) return;
+  const pl = state.pipeline; if (!pl || !pl.stages) return;
+  const s = pl.stages;
+
+  // Update preset buttons
+  document.querySelectorAll('#pipelinePresetRow .preset-btn').forEach(b => b.classList.toggle('active', b.dataset.preset === pl.preset));
+  const badge = $('presetCustomBadge'); if (badge) badge.hidden = pl.preset !== 'custom';
+
+  host.innerHTML = `
+    <div class="stage-card">
+      <div class="stage-card-head">① 标题提取</div>
+      <div class="stage-card-body">
+        <label class="radio-line"><input type="radio" name="pl-title" value="code"  ${s.title.source==='code'?'checked':''}> 代码</label>
+        <label class="radio-line"><input type="radio" name="pl-title" value="llm"   ${s.title.source==='llm'?'checked':''}> LLM</label>
+        <select class="field-select stage-model" data-stage="title" ${s.title.source==='llm'?'':'disabled'}>${modelOptions(s.title.model || '')}</select>
+      </div>
+    </div>
+    <div class="stage-card">
+      <div class="stage-card-head">② 主题归类</div>
+      <div class="stage-card-body">
+        <label class="radio-line"><input type="radio" name="pl-topic" value="user" ${s.topic.source==='user'?'checked':''}> 用户选择</label>
+        <label class="radio-line"><input type="radio" name="pl-topic" value="llm"  ${s.topic.source==='llm'?'checked':''}> LLM 自动</label>
+        <select class="field-select stage-model" data-stage="topic" ${s.topic.source==='llm'?'':'disabled'}>${modelOptions(s.topic.model || '')}</select>
+      </div>
+    </div>
+    <div class="stage-card stage-readonly">
+      <div class="stage-card-head">③ 文件名 (代码 slugify)</div>
+      <div class="stage-card-body"><span class="stage-readonly-note">由代码自动生成，不可配置。</span></div>
+    </div>
+    <div class="stage-card">
+      <div class="stage-card-head">④ 正文编译</div>
+      <div class="stage-card-body">
+        <div class="stage-field"><label>模型</label><select class="field-select" id="plContentModel">${modelOptions(s.content.model || '')}</select></div>
+        <div class="stage-field"><label><input type="checkbox" id="plContentThinking" ${s.content.thinking?'checked':''}> 开启推理 (仅 thinking 模型)</label></div>
+        <div class="stage-field"><label><input type="checkbox" id="plContentStream"   ${s.content.stream?'checked':''}> 流式输出</label></div>
+        <div class="stage-field"><label>max_tokens</label><input class="field-input" type="number" id="plContentMaxTokens" value="${s.content.maxTokens||16384}" min="512" max="131072"></div>
+        <div class="stage-field"><label>重试模型</label><select class="field-select" id="plContentRetry">${modelOptions(s.content.retryModel || '')}</select></div>
+      </div>
+    </div>
+    <div class="stage-card">
+      <div class="stage-card-head">⑤ 摘要生成</div>
+      <div class="stage-card-body">
+        <label class="radio-line"><input type="radio" name="pl-summary" value="llm"    ${s.summary.source==='llm'?'checked':''}> LLM 独立</label>
+        <label class="radio-line"><input type="radio" name="pl-summary" value="inline" ${s.summary.source==='inline'?'checked':''}> 合并在正文</label>
+        <label class="radio-line"><input type="radio" name="pl-summary" value="skip"   ${s.summary.source==='skip'?'checked':''}> 跳过</label>
+        <div class="stage-field"><label>模型</label><select class="field-select" id="plSummaryModel" ${s.summary.source==='llm'?'':'disabled'}>${modelOptions(s.summary.model || '')}</select></div>
+        <div class="stage-field"><label>字数上限</label><input class="field-input" type="number" id="plSummaryMax" value="${s.summary.maxLength||30}" min="10" max="200"></div>
+      </div>
+    </div>
+    <div class="stage-card">
+      <div class="stage-card-head">⑥ See Also</div>
+      <div class="stage-card-body">
+        <label class="radio-line"><input type="radio" name="pl-seealso" value="code_plus_llm" ${s.seealso.source==='code_plus_llm'?'checked':''}> 代码 + LLM 精选</label>
+        <label class="radio-line"><input type="radio" name="pl-seealso" value="code"          ${s.seealso.source==='code'?'checked':''}> 纯代码</label>
+        <label class="radio-line"><input type="radio" name="pl-seealso" value="skip"          ${s.seealso.source==='skip'?'checked':''}> 跳过</label>
+        <div class="stage-field"><label>候选数 (topK)</label><input class="field-input" type="number" id="plSeeK" value="${s.seealso.topK||5}" min="1" max="20"></div>
+        <div class="stage-field"><label>精选模型</label><select class="field-select" id="plSeeModel" ${s.seealso.source==='code_plus_llm'?'':'disabled'}>${modelOptions(s.seealso.model || '')}</select></div>
+      </div>
+    </div>
+  `;
+  wireStageInputs();
+}
+
+function markCustom() {
+  if (!state.pipeline) return;
+  state.pipeline.preset = 'custom';
+  document.querySelectorAll('#pipelinePresetRow .preset-btn').forEach(b => b.classList.remove('active'));
+  const badge = $('presetCustomBadge'); if (badge) badge.hidden = false;
+}
+
+function wireStageInputs() {
+  const s = state.pipeline.stages;
+  // Title
+  document.querySelectorAll('input[name="pl-title"]').forEach(r => r.addEventListener('change', e => {
+    s.title.source = e.target.value;
+    const sel = document.querySelector('.stage-model[data-stage="title"]'); if (sel) sel.disabled = s.title.source !== 'llm';
+    markCustom();
+  }));
+  // Topic
+  document.querySelectorAll('input[name="pl-topic"]').forEach(r => r.addEventListener('change', e => {
+    s.topic.source = e.target.value;
+    const sel = document.querySelector('.stage-model[data-stage="topic"]'); if (sel) sel.disabled = s.topic.source !== 'llm';
+    markCustom();
+  }));
+  document.querySelectorAll('.stage-model').forEach(sel => sel.addEventListener('change', e => {
+    const stage = e.target.dataset.stage;
+    s[stage].model = e.target.value;
+    markCustom();
+  }));
+  // Content
+  const wire = (id, stageKey, field, type) => {
+    const el = $(id); if (!el) return;
+    el.addEventListener('change', () => {
+      let v = type === 'checkbox' ? el.checked : (type === 'number' ? parseInt(el.value, 10) : el.value);
+      s[stageKey][field] = v;
+      markCustom();
+    });
+  };
+  wire('plContentModel',     'content', 'model',      'text');
+  wire('plContentThinking',  'content', 'thinking',   'checkbox');
+  wire('plContentStream',    'content', 'stream',     'checkbox');
+  wire('plContentMaxTokens', 'content', 'maxTokens',  'number');
+  wire('plContentRetry',     'content', 'retryModel', 'text');
+  // Summary
+  document.querySelectorAll('input[name="pl-summary"]').forEach(r => r.addEventListener('change', e => {
+    s.summary.source = e.target.value;
+    const m = $('plSummaryModel'); if (m) m.disabled = s.summary.source !== 'llm';
+    markCustom();
+  }));
+  wire('plSummaryModel', 'summary', 'model',     'text');
+  wire('plSummaryMax',   'summary', 'maxLength', 'number');
+  // See also
+  document.querySelectorAll('input[name="pl-seealso"]').forEach(r => r.addEventListener('change', e => {
+    s.seealso.source = e.target.value;
+    const m = $('plSeeModel'); if (m) m.disabled = s.seealso.source !== 'code_plus_llm';
+    markCustom();
+  }));
+  wire('plSeeK',     'seealso', 'topK',  'number');
+  wire('plSeeModel', 'seealso', 'model', 'text');
+}
+
+function applyPreset(key) {
+  const stages = resolvePreset(key);
+  if (!stages) return;
+  state.pipeline = { preset: key, stages };
+  renderPipeline();
+}
+
+async function savePipeline() {
+  if (!state.pipeline) return;
+  try {
+    await put('/api/settings', { pipeline: state.pipeline });
+    state.sCache = null;
+    toast('流水线已保存');
+  } catch (e) {
+    toast('保存失败: ' + e.message);
+  }
+}
+
+function wirePipelineControls() {
+  document.querySelectorAll('#pipelinePresetRow .preset-btn').forEach(b => {
+    if (b.__wired) return;
+    b.addEventListener('click', () => applyPreset(b.dataset.preset));
+    b.__wired = true;
+  });
+  const saveBtn = $('pipelineSaveBtn');
+  const resetBtn = $('pipelineResetBtn');
+  if (saveBtn && !saveBtn.__wired) { saveBtn.addEventListener('click', savePipeline); saveBtn.__wired = true; }
+  if (resetBtn && !resetBtn.__wired) {
+    resetBtn.addEventListener('click', () => {
+      const cur = state.pipeline && state.pipeline.preset;
+      applyPreset(cur && cur !== 'custom' ? cur : 'balanced');
+    });
+    resetBtn.__wired = true;
+  }
 }

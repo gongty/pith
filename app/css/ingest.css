@@ -92,7 +92,7 @@
 /* ── Global ingest progress toast ── */
 .ingest-toast{
   position:fixed;bottom:24px;right:24px;z-index:300;
-  width:280px;padding:14px 16px;
+  width:320px;padding:14px 16px;
   background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);
   box-shadow:0 4px 20px rgba(0,0,0,0.1);
   display:none;
@@ -100,7 +100,12 @@
 .ingest-toast.show{display:block}
 .ingest-toast.done{border-color:var(--green)}
 .ingest-toast.error{border-color:var(--red)}
+/* legacy single-row layout still supported */
 .ingest-toast-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+/* new header layout with expand button */
+.ingest-toast-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.ingest-toast-header .ingest-toast-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ingest-toast-header .ingest-toast-detail{flex-shrink:0}
 .ingest-toast-title{font-size:13px;font-weight:500;color:var(--fg)}
 .ingest-toast.done .ingest-toast-title{color:var(--green)}
 .ingest-toast.error .ingest-toast-title{color:var(--red)}
@@ -109,6 +114,29 @@
 .ingest-toast-fill{height:100%;background:var(--accent);border-radius:2px;transition:width 500ms ease;width:0}
 .ingest-toast.done .ingest-toast-fill{background:var(--green)}
 .ingest-toast.error .ingest-toast-fill{background:var(--red)}
+.it-expand-btn{
+  width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;
+  border:none;background:transparent;color:var(--fg-tertiary);cursor:pointer;font-size:11px;
+  border-radius:var(--radius);transition:background var(--t),color var(--t);flex-shrink:0;
+}
+.it-expand-btn:hover{background:var(--bg-hover);color:var(--fg)}
+.ingest-toast-stages{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:2px;max-height:260px;overflow-y:auto;overflow-x:hidden}
+.ingest-toast-stages[hidden]{display:none}
+.stage-row{
+  display:grid;grid-template-columns:20px 1fr auto;grid-template-rows:auto auto;gap:2px 6px;
+  align-items:center;padding:4px 2px;font-size:12px;
+}
+.stage-row .stage-icon{grid-row:1 / span 2;grid-column:1;width:20px;text-align:center;color:var(--fg-tertiary);font-size:13px;line-height:1}
+.stage-row .stage-label{grid-row:1;grid-column:2;color:var(--fg);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stage-row .stage-meta{grid-row:1;grid-column:3;color:var(--fg-tertiary);font-size:11px;white-space:nowrap;flex-shrink:0}
+.stage-row .stage-detail{grid-row:2;grid-column:2 / span 2;color:var(--fg-tertiary);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stage-row .stage-detail:empty{display:none}
+.stage-row[data-status="done"]    .stage-icon{color:var(--green)}
+.stage-row[data-status="error"]   .stage-icon{color:var(--red)}
+.stage-row[data-status="running"] .stage-icon{color:var(--accent);animation:stage-pulse 1s ease-in-out infinite}
+.stage-row[data-status="skipped"] .stage-icon{color:var(--fg-tertiary);opacity:0.6}
+.stage-row[data-status="pending"] .stage-label{color:var(--fg-tertiary)}
+@keyframes stage-pulse{0%,100%{opacity:1}50%{opacity:0.4}}
 [data-theme="dark"] .ingest-toast{box-shadow:0 4px 20px rgba(0,0,0,0.3)}
 @media(max-width:768px){
   .ingest-toast{bottom:72px;right:12px;left:12px;width:auto}
