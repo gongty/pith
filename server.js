@@ -215,59 +215,40 @@ function saveProfile(profile) {
 function loadMemory() {
   try {
     if (fs.existsSync(MEMORY_PATH)) {
-      return JSON.parse(fs.readFileSync(MEMORY_PATH, 'utf-8'));
+      const data = JSON.parse(fs.readFileSync(MEMORY_PATH, 'utf-8'));
+      // 兼容旧格式：items 数组 → 纯文本
+      if (data.items && !data.text) {
+        const lines = data.items.filter(m => m.active !== false).map(m => m.label + '：' + m.content);
+        data.text = lines.join('\n');
+        delete data.items;
+        saveMemory(data);
+      }
+      return data;
     }
   } catch {}
-  return { items: [] };
+  return { text: '' };
 }
 
 function saveMemory(memory) {
   fs.writeFileSync(MEMORY_PATH, JSON.stringify(memory, null, 2), 'utf-8');
 }
 
-function genMemoryId() {
-  return `mem_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-}
-
 function buildMemoryContext() {
   const memory = loadMemory();
-  const active = memory.items.filter(m => m.active);
-  if (active.length === 0) return null;
-  const categoryLabels = { personal: '个人信息', expertise: '专业领域', preference: '偏好设置', context: '背景上下文' };
-  const grouped = {};
-  for (const item of active) {
-    const cat = item.category || 'personal';
-    if (!grouped[cat]) grouped[cat] = [];
-    grouped[cat].push(item);
-  }
-  let text = '## 用户背景';
-  for (const cat of ['personal', 'expertise', 'preference', 'context']) {
-    if (!grouped[cat]) continue;
-    for (const item of grouped[cat]) {
-      text += `\n【${categoryLabels[cat] || cat}】${item.label}：${item.content}`;
-    }
-  }
-  return text;
+  const text = (memory.text || '').trim();
+  if (!text) return null;
+  return '## 用户背景\n' + text;
 }
 
 // Migration: create memory.json from profile.bio if it doesn't exist
 function migrateMemory() {
   if (fs.existsSync(MEMORY_PATH)) return;
   const profile = loadProfile();
-  const now = new Date().toISOString();
-  const items = [];
   if (profile && profile.bio) {
-    items.push({
-      id: genMemoryId(),
-      category: 'personal',
-      label: '职业角色',
-      content: profile.bio,
-      active: true,
-      createdAt: now,
-      updatedAt: now
-    });
+    saveMemory({ text: '职业角色：' + profile.bio });
+  } else {
+    saveMemory({ text: '' });
   }
-  saveMemory({ items });
 }
 
 // ── LLM 调用层 ──
@@ -2296,64 +2277,23 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // GET /api/memory — 获取所有记忆
+  // GET /api/memory — 获取记忆文本
   if (p === '/api/memory' && req.method === 'GET') {
     return json(res, 200, loadMemory());
   }
 
-  // POST /api/memory — 新增记忆
-  if (p === '/api/memory' && req.method === 'POST') {
+  // PUT /api/memory — 保存记忆文本
+  if (p === '/api/memory' && req.method === 'PUT') {
     let body = '';
     req.on('data', c => body += c);
     req.on('end', () => {
       try {
-        const { category, label, content } = JSON.parse(body);
-        if (!label || !content) return json(res, 400, { error: '标签和内容不能为空' });
-        const now = new Date().toISOString();
-        const item = { id: genMemoryId(), category: category || 'personal', label: label.trim(), content: content.trim(), active: true, createdAt: now, updatedAt: now };
-        const memory = loadMemory();
-        memory.items.push(item);
-        saveMemory(memory);
-        return json(res, 200, item);
+        const { text } = JSON.parse(body);
+        saveMemory({ text: typeof text === 'string' ? text : '' });
+        return json(res, 200, { ok: true });
       } catch (e) { return json(res, 400, { error: e.message }); }
     });
     return;
-  }
-
-  // PUT /api/memory/:id — 更新记忆
-  const memPutMatch = p.match(/^\/api\/memory\/(.+)$/);
-  if (memPutMatch && req.method === 'PUT') {
-    const memId = memPutMatch[1];
-    let body = '';
-    req.on('data', c => body += c);
-    req.on('end', () => {
-      try {
-        const updates = JSON.parse(body);
-        const memory = loadMemory();
-        const item = memory.items.find(m => m.id === memId);
-        if (!item) return json(res, 404, { error: '记忆项不存在' });
-        if (typeof updates.label === 'string') item.label = updates.label.trim();
-        if (typeof updates.content === 'string') item.content = updates.content.trim();
-        if (typeof updates.category === 'string') item.category = updates.category;
-        if (typeof updates.active === 'boolean') item.active = updates.active;
-        item.updatedAt = new Date().toISOString();
-        saveMemory(memory);
-        return json(res, 200, item);
-      } catch (e) { return json(res, 400, { error: e.message }); }
-    });
-    return;
-  }
-
-  // DELETE /api/memory/:id — 删除记忆
-  const memDelMatch = p.match(/^\/api\/memory\/(.+)$/);
-  if (memDelMatch && req.method === 'DELETE') {
-    const memId = memDelMatch[1];
-    const memory = loadMemory();
-    const idx = memory.items.findIndex(m => m.id === memId);
-    if (idx < 0) return json(res, 404, { error: '记忆项不存在' });
-    memory.items.splice(idx, 1);
-    saveMemory(memory);
-    return json(res, 200, { ok: true });
   }
 
   // 静态文件
