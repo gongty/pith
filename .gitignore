@@ -1,3 +1,5 @@
 config.json
-.api-key
 profile.json
+.api-key
+data/
+node_modules/

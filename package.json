@@ -1,0 +1,27 @@
+{
+  "name": "wiki-app",
+  "version": "1.0.0",
+  "description": "受 [Andrej Karpathy](https://x.com/karpathy) 启发：让 LLM 写和维护 wiki，人来读和提问。wiki 是一个持续复利的知识资产。",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gongty/wiki-app.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/gongty/wiki-app/issues"
+  },
+  "homepage": "https://github.com/gongty/wiki-app#readme",
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "jsdom": "^29.0.2",
+    "pdf-parse": "^2.4.5"
+  }
+}
