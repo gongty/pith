@@ -1,0 +1,112 @@
+import { h } from './utils.js';
+
+/* ── Markdown Renderer ── */
+export function renderMd(md, ap) {
+  const lines = md.split('\n'); let html = '', inCode = false, cLines = [];
+  let inList = false, lt = '', inBq = false, bqL = [], inTbl = false, tRows = [];
+  const aDir = ap ? ap.split('/').slice(0, -1).join('/') : '';
+  function resLink(href) {
+    if (/^https?:\/\//.test(href)) return href;
+    if (!href.endsWith('.md')) return href;
+    let r = href;
+    if (href.startsWith('../') || href.startsWith('./')) {
+      const b = aDir ? aDir.split('/') : []; const p = href.split('/'); const c = [...b];
+      for (const x of p) { if (x === '..') c.pop(); else if (x !== '.') c.push(x); }
+      r = c.join('/');
+    } else if (aDir && !href.includes('/')) r = aDir + '/' + href;
+    if (r.includes('raw/')) return href;
+    return '#/article/' + r;
+  }
+  function inl(t) {
+    t = t.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
+    t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, l, u) => { const r = resLink(u); const ext = /^https?:/.test(r); return '<a href="' + h(r) + '"' + (ext ? ' target="_blank"' : '') + '>' + h(l) + '</a>'; });
+    t = t.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+    t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    t = t.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
+    t = t.replace(/`([^`]+)`/g, '<code>$1</code>');
+    return t;
+  }
+  function fBq() { if (bqL.length) { html += '<blockquote>' + bqL.map(l => '<p>' + inl(l) + '</p>').join('') + '</blockquote>'; bqL = []; } inBq = false; }
+  function fTbl() { if (tRows.length >= 2) { html += '<div class="table-wrap"><table><thead><tr>' + tRows[0].map(c => '<th>' + inl(c.trim()) + '</th>').join('') + '</tr></thead><tbody>'; for (let i = 2; i < tRows.length; i++) html += '<tr>' + tRows[i].map(c => '<td>' + inl(c.trim()) + '</td>').join('') + '</tr>'; html += '</tbody></table></div>'; } tRows = []; inTbl = false; }
+  function fList() { if (inList) { html += lt === 'ol' ? '</ol>' : '</ul>'; inList = false; } }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trimStart().startsWith('```')) {
+      if (inCode) { html += '<pre><code>' + h(cLines.join('\n')) + '</code></pre>'; inCode = false; cLines = []; continue; }
+      else { fBq(); fTbl(); fList(); inCode = true; continue; }
+    }
+    if (inCode) { cLines.push(line); continue; }
+    if (/^\|(.+)\|$/.test(line.trim())) { fBq(); fList(); tRows.push(line.trim().slice(1, -1).split('|')); inTbl = true; continue; }
+    else if (inTbl) fTbl();
+    if (/^>\s?/.test(line)) { fList(); fTbl(); bqL.push(line.replace(/^>\s?/, '')); inBq = true; continue; }
+    else if (inBq) fBq();
+    const hm = line.match(/^(#{1,4})\s+(.+)/);
+    if (hm) { fList(); fTbl(); fBq(); html += '<h' + hm[1].length + '>' + inl(hm[2].trim()) + '</h' + hm[1].length + '>'; continue; }
+    if (/^---+$/.test(line.trim())) { fList(); fTbl(); fBq(); html += '<hr>'; continue; }
+    if (/^\s*[-*+]\s+/.test(line)) { fTbl(); fBq(); if (!inList || lt !== 'ul') { fList(); html += '<ul>'; inList = true; lt = 'ul'; } html += '<li>' + inl(line.replace(/^\s*[-*+]\s+/, '')) + '</li>'; continue; }
+    if (/^\s*\d+\.\s+/.test(line)) { fTbl(); fBq(); if (!inList || lt !== 'ol') { fList(); html += '<ol>'; inList = true; lt = 'ol'; } html += '<li>' + inl(line.replace(/^\s*\d+\.\s+/, '')) + '</li>'; continue; }
+    if (inList && !line.trim()) fList();
+    if (!line.trim()) continue;
+    fList(); fTbl(); fBq();
+    html += '<p>' + inl(line) + '</p>';
+  }
+  if (inCode) html += '<pre><code>' + h(cLines.join('\n')) + '</code></pre>';
+  fList(); fTbl(); fBq();
+  return html;
+}
+
+/* ── Chat message formatter ── */
+export function fmtChat(t) {
+  if (!t) return '';
+  let s = t;
+  s = s.replace(/```[\s\S]*?```/g, m => { const c = m.replace(/```\w*\n?/, '').replace(/\n?```$/, ''); return '<pre><code>' + h(c) + '</code></pre>'; });
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, l, u) => {
+    if (/^https?:/.test(u)) return '<a href="' + h(u) + '" target="_blank">' + h(l) + '</a>';
+    if (u.endsWith('.md')) { const p = u.replace(/^(\.\.\/)+/, ''); return '<a href="#/article/' + h(p) + '">' + h(l) + '</a>'; }
+    return '<a href="' + h(u) + '">' + h(l) + '</a>';
+  });
+  s = s.replace(/\n/g, '<br>');
+  return s;
+}
+
+/* ── HTML to Markdown ── */
+export function html2md(html) { const div = document.createElement('div'); div.innerHTML = html; return node2md(div).trim(); }
+
+function node2md(node) {
+  let md = '';
+  for (const child of node.childNodes) {
+    if (child.nodeType === 3) { md += child.textContent; continue; }
+    if (child.nodeType !== 1) continue;
+    const tag = child.tagName;
+    if (tag === 'BR') { md += '\n'; continue; }
+    if (tag === 'P') { md += '\n\n' + node2md(child); continue; }
+    if (tag === 'DIV') { md += '\n' + node2md(child); continue; }
+    if (/^H[1-6]$/.test(tag)) { const lvl = tag[1]; md += '\n\n' + '#'.repeat(+lvl) + ' ' + child.innerText; continue; }
+    if (tag === 'STRONG' || tag === 'B') { md += '**' + node2md(child) + '**'; continue; }
+    if (tag === 'EM' || tag === 'I') { md += '*' + node2md(child) + '*'; continue; }
+    if (tag === 'CODE') { if (child.parentElement && child.parentElement.tagName === 'PRE') continue; md += '`' + child.textContent + '`'; continue; }
+    if (tag === 'PRE') { const code = child.querySelector('code'); md += '\n\n```\n' + (code ? code.textContent : child.textContent) + '\n```'; continue; }
+    if (tag === 'A') { const href = child.getAttribute('href') || ''; md += '[' + child.innerText + '](' + href + ')'; continue; }
+    if (tag === 'IMG') { md += '![' + child.alt + '](' + child.src + ')'; continue; }
+    if (tag === 'BLOCKQUOTE') { const lines = node2md(child).split('\n'); md += '\n\n' + lines.map(l => '> ' + l).join('\n'); continue; }
+    if (tag === 'UL') { for (const li of child.children) { if (li.tagName === 'LI') md += '\n- ' + node2md(li); } md += '\n'; continue; }
+    if (tag === 'OL') { let n = 1; for (const li of child.children) { if (li.tagName === 'LI') { md += '\n' + n + '. ' + node2md(li); n++; } } md += '\n'; continue; }
+    if (tag === 'HR') { md += '\n\n---'; continue; }
+    if (tag === 'TABLE') { md += '\n\n' + table2md(child); continue; }
+    md += node2md(child);
+  }
+  return md;
+}
+
+function table2md(table) {
+  const rows = []; table.querySelectorAll('tr').forEach(tr => {
+    const cells = []; tr.querySelectorAll('th,td').forEach(c => cells.push(c.innerText.trim())); rows.push(cells);
+  });
+  if (!rows.length) return '';
+  let md = '| ' + rows[0].join(' | ') + ' |\n| ' + rows[0].map(() => '---').join(' | ') + ' |';
+  for (let i = 1; i < rows.length; i++) md += '\n| ' + rows[i].join(' | ') + ' |';
+  return md;
+}

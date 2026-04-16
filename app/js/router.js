@@ -1,0 +1,63 @@
+import { $, h, go } from './utils.js';
+import state from './state.js';
+import { updSidebarPages, updSidebarChats } from './sidebar.js';
+import { hideFormatToolbar } from './pages/article.js';
+import { cancelGA } from './pages/graph.js';
+import { rDash } from './pages/dashboard.js';
+import { rChat } from './pages/chat.js';
+import { rGraph } from './pages/graph.js';
+import { rBrowse } from './pages/browse.js';
+import { rArticle } from './pages/article.js';
+
+export function route() {
+  const hash = location.hash || '#/';
+  if (hash === '#/' || hash === '#/dashboard') return { v: 'dashboard' };
+  if (hash === '#/chat') return { v: 'chat', id: null };
+  if (hash.startsWith('#/chat/')) return { v: 'chat', id: hash.slice(7) };
+  if (hash === '#/graph') return { v: 'graph' };
+  if (hash === '#/browse') return { v: 'browse' };
+  if (hash.startsWith('#/article/')) return { v: 'article', p: hash.slice(10) };
+  return { v: 'dashboard' };
+}
+
+function updNav(v) {
+  document.querySelectorAll('.sidebar-item[data-view]').forEach(el => {
+    el.classList.toggle('active', el.dataset.view === v || (v === 'article' && el.dataset.view === 'browse'));
+  });
+  document.querySelectorAll('.mobile-nav-item[data-view]').forEach(el => {
+    el.classList.toggle('active', el.dataset.view === v || (v === 'article' && el.dataset.view === 'browse'));
+  });
+}
+
+function updBC(r) {
+  const bc = $('breadcrumb');
+  if (r.v === 'dashboard') bc.innerHTML = '';
+  else if (r.v === 'chat') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>对话';
+  else if (r.v === 'graph') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>知识图谱';
+  else if (r.v === 'browse') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>全部文章';
+  else if (r.v === 'article' && r.p) {
+    const pts = r.p.split('/'), topic = pts.length > 1 ? pts[0] : '', f = pts[pts.length - 1].replace('.md', '');
+    const topicColors = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
+    const tci = topic ? Math.abs([...topic].reduce((a, c) => a + c.charCodeAt(0), 0)) % topicColors.length : 0;
+    let s = '<a href="#/">知识库</a>';
+    if (topic) s += '<span class="sep">/</span><span class="topic-dot" style="background:' + topicColors[tci] + '"></span><a href="#/browse">' + h(topic) + '</a>';
+    const ft = f.length > 20 ? f.slice(0, 20) + '…' : f;
+    s += '<span class="sep">/</span>' + h(ft); bc.innerHTML = s;
+  }
+}
+
+export async function render() {
+  const r = route(); state.cv = r.v; updNav(r.v); updBC(r); cancelGA(); hideFormatToolbar();
+  const delBtn = document.getElementById('topbarDel'); if (delBtn && r.v !== 'article') delBtn.remove();
+  updSidebarPages(); updSidebarChats();
+  const c = $('content'); c.scrollTop = 0;
+  if (r.v === 'dashboard') await rDash(c);
+  else if (r.v === 'chat') await rChat(c, r.id);
+  else if (r.v === 'graph') await rGraph(c);
+  else if (r.v === 'browse') await rBrowse(c);
+  else if (r.v === 'article') await rArticle(c, r.p);
+  updSidebarPages();
+}
+
+// Make render available globally for other modules
+window.render = render;

@@ -1,0 +1,74 @@
+/* ── Warm Ink tokens ── */
+:root {
+  --fg: #1C1C1C;
+  --fg-secondary: rgba(28,28,28,0.58);
+  --fg-tertiary: rgba(28,28,28,0.38);
+  --bg: #FAFAF8;
+  --bg-sidebar: #F5F5F0;
+  --bg-hover: rgba(0,0,0,0.035);
+  --bg-active: rgba(0,0,0,0.06);
+  --border: rgba(0,0,0,0.06);
+  --accent: #5B5BD6;
+  --accent-hover: #4F4FC8;
+  --accent-bg: rgba(91,91,214,0.07);
+  --accent-border: rgba(91,91,214,0.15);
+  --accent-ring: rgba(91,91,214,0.12);
+  --radius: 8px;
+  --radius-lg: 12px;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", "Noto Sans SC", "PingFang SC", sans-serif;
+  --font-mono: "SF Mono", ui-monospace, "Cascadia Code", "Fira Code", Menlo, Consolas, monospace;
+  --sidebar-w: 270px;
+  --content-w: 720px;
+  --green: #3D9A6D;
+  --red: #E5484D;
+  --orange: #D97706;
+  --yellow: #CA8A04;
+  --blue: #5B5BD6;
+  --purple: #8E6EC5;
+  --pink: #C14C8A;
+  --brown: #6F5B4B;
+  --t: 150ms ease;
+}
+[data-theme="dark"] {
+  --fg: rgba(255,255,255,0.90);
+  --fg-secondary: rgba(255,255,255,0.55);
+  --fg-tertiary: rgba(255,255,255,0.35);
+  --bg: #1A1A18;
+  --bg-sidebar: #1F1F1C;
+  --bg-hover: rgba(255,255,255,0.05);
+  --bg-active: rgba(255,255,255,0.09);
+  --border: rgba(255,255,255,0.08);
+  --accent: #8B8BF5;
+  --accent-hover: #7C7CE8;
+  --accent-bg: rgba(139,139,245,0.10);
+  --accent-border: rgba(139,139,245,0.18);
+  --accent-ring: rgba(139,139,245,0.15);
+  --green: #4DAB9A;
+  --red: #FF7369;
+  --orange: #FFA344;
+}
+
+/* ── Reset ── */
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{font-size:16px;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+body{font-family:var(--font);color:var(--fg);background:var(--bg);line-height:1.5;overflow:hidden;height:100vh}
+a{color:inherit;text-decoration:none;cursor:pointer}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;font-size:inherit}
+input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);background:var(--bg);outline:none;border:none}
+::-webkit-scrollbar{width:8px}
+::-webkit-scrollbar-thumb{background:transparent;border-radius:20px}
+::-webkit-scrollbar-thumb:hover{background:var(--fg-tertiary)}
+*:hover>::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.15)}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0.01ms!important;transition-duration:0.01ms!important}}
+
+/* ── Skeleton ── */
+@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
+.skel{border-radius:var(--radius);background:linear-gradient(90deg,var(--bg-hover) 25%,var(--bg-active) 50%,var(--bg-hover) 75%);background-size:800px 100%;animation:shimmer 1.5s infinite}
+.skel-line{height:14px;margin-bottom:10px;border-radius:3px}
+.skel-title{height:28px;width:40%;margin-bottom:16px}
+.skel-block{height:80px;margin-bottom:16px}
+.skel-circle{width:24px;height:24px;border-radius:50%}
+
+/* ── Animations ── */
+@keyframes fadeIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}

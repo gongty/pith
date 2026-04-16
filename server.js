@@ -3,6 +3,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
+const os = require('os');
 
 const ROOT = __dirname;  // wiki-app/ is the project root
 const WIKI = path.join(ROOT, 'data', 'wiki');
@@ -862,6 +863,8 @@ function parseLogEntries() {
 
 // ── Ingest 状态 ──
 let taskQueue = [];
+let batchProgress = null;
+// Shape: { id, total, completed, failed, currentFile, status, startedAt, files: [{name, status, error?}] }
 
 function latestTask() {
   return taskQueue.length ? taskQueue[taskQueue.length - 1] : null;
@@ -1376,6 +1379,43 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, searchWiki(q));
   }
 
+  if (p === '/api/ingest/extract-zip' && req.method === 'POST') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const { data } = JSON.parse(body); // base64 encoded zip
+        const tmpDir = path.join(os.tmpdir(), 'wiki-zip-' + Date.now());
+        const zipPath = tmpDir + '.zip';
+        fs.mkdirSync(tmpDir, { recursive: true });
+        fs.writeFileSync(zipPath, Buffer.from(data, 'base64'));
+        try { execSync(`unzip -o "${zipPath}" -d "${tmpDir}"`, { stdio: 'pipe' }); } catch (e) {
+          fs.unlinkSync(zipPath);
+          fs.rmSync(tmpDir, { recursive: true, force: true });
+          return json(res, 400, { error: 'ZIP 解压失败: ' + (e.stderr ? e.stderr.toString().slice(0, 200) : e.message) });
+        }
+        const files = [];
+        function walkDir(dir) {
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (entry.name.startsWith('.') || entry.name === '__MACOSX') continue;
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) { walkDir(full); continue; }
+            if (/\.(md|txt|html|json|csv|xml)$/i.test(entry.name)) {
+              const content = fs.readFileSync(full, 'utf-8');
+              files.push({ name: entry.name, content });
+            }
+          }
+        }
+        walkDir(tmpDir);
+        // Cleanup
+        fs.unlinkSync(zipPath);
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+        return json(res, 200, { files });
+      } catch (e) { return json(res, 400, { error: e.message }); }
+    });
+    return;
+  }
+
   if (p === '/api/ingest' && req.method === 'POST') {
     const running = taskQueue.find(t => t.status === 'compiling');
     if (running) return json(res, 409, { error: '已有编译任务进行中' });
@@ -1386,10 +1426,31 @@ const server = http.createServer(async (req, res) => {
         const parsed = JSON.parse(body);
         const items = parsed.items || [{ type: parsed.type, content: parsed.content, topic: parsed.topic }];
         const modelOverrides = (parsed.provider && parsed.model) ? { provider: parsed.provider, model: parsed.model } : null;
+        const isBatch = items.length > 1;
+
+        if (isBatch) {
+          batchProgress = {
+            id: Date.now().toString(36),
+            total: items.length,
+            completed: 0,
+            failed: 0,
+            currentFile: items[0].name || items[0].content.slice(0, 40),
+            status: 'processing',
+            startedAt: new Date().toISOString(),
+            files: items.map(it => ({ name: it.name || it.content.slice(0, 40), status: 'pending' }))
+          };
+        }
 
         async function processItem(idx) {
-          if (idx >= items.length) return;
-          const { type, content, topic } = items[idx];
+          if (idx >= items.length) {
+            if (isBatch) batchProgress.status = 'done';
+            return;
+          }
+          const { type, content, topic, name } = items[idx];
+          if (isBatch) {
+            batchProgress.currentFile = name || content.slice(0, 40);
+            batchProgress.files[idx].status = 'processing';
+          }
           const topicDir = topic && topic !== 'auto' ? topic : 'general';
           const dir = path.join(RAW, topicDir);
           fs.mkdirSync(dir, { recursive: true });
@@ -1409,14 +1470,27 @@ const server = http.createServer(async (req, res) => {
           fs.writeFileSync(filePath, rawContent, 'utf-8');
 
           const task = pushTask(type);
-          await compileArticle(topicDir, filename, filePath, task, modelOverrides);
+          try {
+            await compileArticle(topicDir, filename, filePath, task, modelOverrides);
+            if (isBatch) {
+              batchProgress.files[idx].status = 'done';
+              batchProgress.completed++;
+            }
+          } catch (e) {
+            if (isBatch) {
+              batchProgress.files[idx].status = 'error';
+              batchProgress.files[idx].error = e.message;
+              batchProgress.failed++;
+              batchProgress.completed++;
+            }
+          }
           await processItem(idx + 1);
         }
 
         processItem(0);
 
         const firstTask = latestTask();
-        json(res, 200, { taskId: firstTask ? firstTask.id : 'unknown', batch: items.length > 1 });
+        json(res, 200, { taskId: firstTask ? firstTask.id : 'unknown', batch: isBatch, batchId: isBatch ? batchProgress.id : null });
       } catch (e) { json(res, 400, { error: e.message }); }
     });
     return;
@@ -1428,6 +1502,14 @@ const server = http.createServer(async (req, res) => {
     const resp = { id: task.id, status: task.status, message: task.message };
     if (task.created) resp.created = task.created;
     return json(res, 200, resp);
+  }
+
+  if (p === '/api/ingest/batch/status') {
+    if (!batchProgress) return json(res, 200, { status: 'idle' });
+    const elapsed = Date.now() - new Date(batchProgress.startedAt).getTime();
+    const avgPerFile = batchProgress.completed > 0 ? elapsed / batchProgress.completed : 0;
+    const remaining = batchProgress.completed > 0 ? Math.round(avgPerFile * (batchProgress.total - batchProgress.completed) / 1000) : null;
+    return json(res, 200, { ...batchProgress, estimatedRemaining: remaining });
   }
 
   if (p === '/api/tasks') {
