@@ -5,1704 +5,1099 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>知识库</title>
 <style>
-/* ── Design Tokens (Knowledge Base palette) ── */
+/* ── Notion-inspired tokens ── */
 :root {
-  --fg: #1E293B;
-  --fg-secondary: #475569;
-  --fg-tertiary: #94A3B8;
+  --fg: #37352F;
+  --fg-secondary: rgba(55,53,47,0.65);
+  --fg-tertiary: rgba(55,53,47,0.45);
   --bg: #FFFFFF;
-  --bg-secondary: #F8FAFC;
-  --bg-hover: #F1F5F9;
-  --bg-active: #E2E8F0;
-  --border: #E2E8F0;
-  --accent: #2563EB;
-  --accent-light: rgba(37,99,235,0.08);
-  --accent-hover: #1D4ED8;
-  --radius: 8px;
-  --radius-lg: 12px;
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
-  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.08);
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
-  --font-mono: "SFMono-Regular", Menlo, Consolas, monospace;
-  --content-width: 720px;
-  --header-h: 52px;
-  --nav-w: 52px;
-  --green: #16a34a;
-  --red: #DC2626;
-  --orange: #EA580C;
-  --transition: 200ms ease;
+  --bg-sidebar: #FBFBFA;
+  --bg-hover: rgba(55,53,47,0.04);
+  --bg-active: rgba(55,53,47,0.08);
+  --border: rgba(55,53,47,0.09);
+  --accent: #2383E2;
+  --accent-bg: rgba(35,131,226,0.08);
+  --radius: 4px;
+  --font: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --sidebar-w: 240px;
+  --content-w: 720px;
+  --green: #448361;
+  --red: #EB5757;
+  --orange: #D9730D;
+  --yellow: #DFAB01;
+  --blue: #2383E2;
+  --purple: #9065B0;
+  --pink: #C14C8A;
+  --brown: #64473A;
+  --t: 150ms ease;
 }
 [data-theme="dark"] {
-  --fg: #F1F5F9;
-  --fg-secondary: #94A3B8;
-  --fg-tertiary: #64748B;
-  --bg: #0F172A;
-  --bg-secondary: #1E293B;
-  --bg-hover: #334155;
-  --bg-active: #475569;
-  --border: #334155;
-  --accent: #60A5FA;
-  --accent-light: rgba(96,165,250,0.1);
-  --accent-hover: #3B82F6;
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
-  --shadow: 0 1px 3px rgba(0,0,0,0.3);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.3);
-  --green: #4ade80;
-  --red: #f87171;
-  --orange: #fb923c;
+  --fg: rgba(255,255,255,0.9);
+  --fg-secondary: rgba(255,255,255,0.55);
+  --fg-tertiary: rgba(255,255,255,0.35);
+  --bg: #191919;
+  --bg-sidebar: #202020;
+  --bg-hover: rgba(255,255,255,0.04);
+  --bg-active: rgba(255,255,255,0.08);
+  --border: rgba(255,255,255,0.08);
+  --accent: #529CDB;
+  --accent-bg: rgba(82,156,219,0.12);
+  --green: #4DAB9A;
+  --red: #FF7369;
+  --orange: #FFA344;
 }
 
 /* ── Reset ── */
-*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-html { font-size: 16px; -webkit-font-smoothing: antialiased; }
-body { font-family: var(--font); color: var(--fg); background: var(--bg); line-height: 1.6; overflow: hidden; height: 100vh; }
-a { color: inherit; text-decoration: none; cursor: pointer; }
-button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; font-size: inherit; }
-input, textarea, select { font-family: inherit; font-size: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); outline: none; transition: border-color var(--transition), box-shadow var(--transition); }
-input:focus, textarea:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--fg-tertiary); }
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{font-size:16px;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+body{font-family:var(--font);color:var(--fg);background:var(--bg);line-height:1.5;overflow:hidden;height:100vh}
+a{color:inherit;text-decoration:none;cursor:pointer}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;font-size:inherit}
+input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);background:var(--bg);outline:none;border:none}
+::-webkit-scrollbar{width:8px}
+::-webkit-scrollbar-thumb{background:transparent;border-radius:20px}
+::-webkit-scrollbar-thumb:hover{background:var(--fg-tertiary)}
+*:hover>::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.15)}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0.01ms!important;transition-duration:0.01ms!important}}
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
-}
+/* ── Layout ── */
+.app{display:flex;height:100vh}
 
-/* ── App Layout ── */
-.app { display: flex; height: 100vh; }
-
-/* ── Side Nav ── */
-.side-nav {
-  width: var(--nav-w); background: var(--bg-secondary); border-right: 1px solid var(--border);
-  display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 4px;
-  flex-shrink: 0;
+/* ── Sidebar ── */
+.sidebar{
+  width:var(--sidebar-w);background:var(--bg-sidebar);
+  display:flex;flex-direction:column;flex-shrink:0;
+  border-right:1px solid var(--border);overflow:hidden;
+  transition:width var(--t);
 }
-.nav-top { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.nav-bottom { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-bottom: 8px; }
-.side-nav-item {
-  width: 36px; height: 36px; border-radius: var(--radius); display: flex; align-items: center;
-  justify-content: center; color: var(--fg-tertiary); transition: background var(--transition), color var(--transition);
-  position: relative;
+.sidebar-header{
+  display:flex;align-items:center;gap:8px;padding:10px 12px 6px;
+  font-size:14px;font-weight:600;letter-spacing:-0.01em;
 }
-.side-nav-item:hover { background: var(--bg-hover); color: var(--fg-secondary); }
-.side-nav-item.active { background: var(--accent-light); color: var(--accent); }
-.side-nav-item .nav-tooltip {
-  position: absolute; left: calc(100% + 8px); top: 50%; transform: translateY(-50%);
-  background: var(--fg); color: var(--bg); font-size: 12px; padding: 4px 8px;
-  border-radius: 4px; white-space: nowrap; pointer-events: none; opacity: 0;
-  transition: opacity 150ms;
+.sidebar-header svg{flex-shrink:0;color:var(--fg-secondary)}
+.sidebar-nav{padding:2px 8px}
+.sidebar-item{
+  display:flex;align-items:center;gap:8px;padding:5px 8px;
+  border-radius:var(--radius);font-size:14px;color:var(--fg-secondary);
+  cursor:pointer;transition:background var(--t);user-select:none;
 }
-.side-nav-item:hover .nav-tooltip { opacity: 1; }
+.sidebar-item:hover{background:var(--bg-hover)}
+.sidebar-item.active{background:var(--bg-active);color:var(--fg)}
+.sidebar-item svg{width:18px;height:18px;flex-shrink:0;opacity:0.7}
+.sidebar-item.active svg{opacity:1}
+.sidebar-section{
+  font-size:11px;font-weight:600;color:var(--fg-tertiary);
+  padding:16px 16px 4px;text-transform:uppercase;letter-spacing:0.04em;
+}
+.sidebar-pages{flex:1;overflow-y:auto;padding:2px 8px 16px}
+.sidebar-page{
+  display:flex;align-items:center;gap:6px;padding:4px 8px 4px 12px;
+  border-radius:var(--radius);font-size:13px;color:var(--fg-secondary);
+  cursor:pointer;transition:background var(--t);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.sidebar-page:hover{background:var(--bg-hover)}
+.sidebar-page.active{background:var(--bg-active);color:var(--fg)}
+.sidebar-page svg{width:16px;height:16px;flex-shrink:0;opacity:0.5}
+.sidebar-topic{padding:8px 16px 2px;font-size:12px;font-weight:500;color:var(--fg-tertiary)}
+.sidebar-bottom{
+  padding:8px;border-top:1px solid var(--border);
+  display:flex;gap:2px;
+}
+.sidebar-bottom-btn{
+  flex:1;display:flex;align-items:center;justify-content:center;gap:4px;
+  padding:5px;border-radius:var(--radius);font-size:12px;color:var(--fg-tertiary);
+  transition:background var(--t);
+}
+.sidebar-bottom-btn:hover{background:var(--bg-hover);color:var(--fg-secondary)}
+.sidebar-bottom-btn svg{width:15px;height:15px}
 
 /* ── Main ── */
-.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
 
-/* ── Header ── */
-.header {
-  height: var(--header-h); min-height: var(--header-h); display: flex; align-items: center;
-  padding: 0 20px; border-bottom: 1px solid var(--border); gap: 12px;
+/* ── Topbar ── */
+.topbar{
+  height:44px;min-height:44px;display:flex;align-items:center;
+  padding:0 12px;gap:8px;font-size:13px;color:var(--fg-secondary);
 }
-.header-title { font-size: 14px; font-weight: 600; flex-shrink: 0; }
-.header-breadcrumb { font-size: 13px; color: var(--fg-secondary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.header-breadcrumb a { color: var(--fg-tertiary); transition: color var(--transition); }
-.header-breadcrumb a:hover { color: var(--fg); }
-.header-breadcrumb .sep { margin: 0 6px; color: var(--fg-tertiary); }
-.header-actions { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
-
-.icon-btn {
-  width: 32px; height: 32px; border-radius: var(--radius); display: flex;
-  align-items: center; justify-content: center; color: var(--fg-secondary);
-  transition: background var(--transition), color var(--transition);
+.topbar-breadcrumb{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topbar-breadcrumb a{color:var(--fg-tertiary);transition:color var(--t)}
+.topbar-breadcrumb a:hover{color:var(--fg)}
+.topbar-breadcrumb .sep{margin:0 4px;color:var(--fg-tertiary)}
+.topbar-actions{display:flex;gap:2px;align-items:center}
+.topbar-btn{
+  height:28px;padding:0 8px;border-radius:var(--radius);font-size:13px;
+  color:var(--fg-secondary);display:flex;align-items:center;gap:4px;
+  transition:background var(--t);
 }
-.icon-btn:hover { background: var(--bg-hover); color: var(--fg); }
-
-.btn-primary {
-  padding: 6px 14px; border-radius: var(--radius); background: var(--accent);
-  color: #fff; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px;
-  transition: background var(--transition);
-}
-.btn-primary:hover { background: var(--accent-hover); }
+.topbar-btn:hover{background:var(--bg-hover)}
+.topbar-btn svg{width:15px;height:15px}
+.topbar-btn-accent{color:var(--accent)}
+.topbar-btn-accent:hover{background:var(--accent-bg)}
 
 /* ── Content ── */
-.content { flex: 1; overflow-y: auto; }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.content{flex:1;overflow-y:auto}
 
-/* ── Dashboard ── */
-.dashboard { max-width: 900px; margin: 0 auto; padding: 32px 40px 80px; animation: fadeIn 200ms ease; }
+/* ── Page: Dashboard ── */
+.page-dashboard{max-width:var(--content-w);margin:0 auto;padding:40px 48px 120px;animation:fadeIn 150ms ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
 
-/* Chat Area */
-.chat-area { margin-bottom: 40px; }
-.chat-welcome { text-align: center; padding: 48px 0 32px; }
-.chat-welcome h2 { font-size: 22px; font-weight: 600; margin-bottom: 8px; }
-.chat-welcome p { font-size: 14px; color: var(--fg-secondary); }
-.chat-suggestions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 24px; }
-.chat-suggestion {
-  padding: 8px 16px; border: 1px solid var(--border); border-radius: 20px;
-  font-size: 13px; color: var(--fg-secondary); cursor: pointer;
-  transition: all var(--transition); background: var(--bg);
+/* Chat */
+.chat-area{margin-bottom:48px}
+.chat-greeting{font-size:28px;font-weight:700;letter-spacing:-0.02em;margin-bottom:4px;text-align:center;padding-top:24px}
+.chat-sub{font-size:14px;color:var(--fg-secondary);text-align:center;margin-bottom:24px}
+.chat-pills{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:20px}
+.chat-pill{
+  padding:6px 14px;border-radius:20px;font-size:13px;
+  color:var(--fg-secondary);background:var(--bg-hover);
+  cursor:pointer;transition:background var(--t),color var(--t);
 }
-.chat-suggestion:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+.chat-pill:hover{background:var(--bg-active);color:var(--fg)}
 
-.chat-input-wrap {
-  display: flex; align-items: flex-end; gap: 8px; background: var(--bg);
-  border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 8px 12px;
-  transition: border-color var(--transition), box-shadow var(--transition);
+.chat-composer{
+  display:flex;align-items:flex-end;gap:0;
+  background:var(--bg);border:1px solid var(--border);
+  border-radius:8px;padding:10px 14px;box-shadow:0 1px 6px rgba(0,0,0,0.04);
+  transition:border-color var(--t),box-shadow var(--t);
 }
-.chat-input-wrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
-.chat-input {
-  flex: 1; border: none; resize: none; font-size: 14px; line-height: 1.5;
-  max-height: 120px; min-height: 20px; background: transparent; padding: 4px 0;
+.chat-composer:focus-within{border-color:rgba(55,53,47,0.2);box-shadow:0 1px 10px rgba(0,0,0,0.06)}
+[data-theme="dark"] .chat-composer:focus-within{border-color:rgba(255,255,255,0.15)}
+.chat-textarea{
+  flex:1;resize:none;font-size:15px;line-height:1.5;
+  max-height:140px;min-height:22px;padding:0;border:none;background:transparent;
 }
-.chat-input:focus { box-shadow: none; border: none; }
-.chat-input::placeholder { color: var(--fg-tertiary); }
-.chat-send {
-  width: 32px; height: 32px; border-radius: var(--radius); background: var(--accent);
-  color: #fff; display: flex; align-items: center; justify-content: center;
-  transition: background var(--transition), opacity var(--transition); flex-shrink: 0;
+.chat-textarea:focus{box-shadow:none}
+.chat-textarea::placeholder{color:var(--fg-tertiary)}
+.chat-send-btn{
+  width:28px;height:28px;border-radius:50%;background:var(--fg);color:var(--bg);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  transition:opacity var(--t);margin-left:8px;
 }
-.chat-send:hover { background: var(--accent-hover); }
-.chat-send:disabled { opacity: 0.4; cursor: not-allowed; }
+.chat-send-btn:disabled{opacity:0.2;cursor:default}
+.chat-send-btn:not(:disabled):hover{opacity:0.8}
+.chat-model-tag{
+  font-size:11px;color:var(--fg-tertiary);padding:2px 8px;
+  border-radius:3px;background:var(--bg-hover);cursor:pointer;
+  flex-shrink:0;margin-right:6px;transition:background var(--t);
+}
+.chat-model-tag:hover{background:var(--bg-active)}
+.chat-model-dropdown{
+  position:absolute;bottom:100%;left:0;margin-bottom:4px;
+  background:var(--bg);border:1px solid var(--border);border-radius:6px;
+  box-shadow:0 4px 16px rgba(0,0,0,0.1);min-width:200px;max-height:240px;
+  overflow-y:auto;z-index:50;display:none;padding:4px;
+}
+.chat-model-dropdown.open{display:block}
+.chat-model-opt{
+  padding:6px 10px;border-radius:var(--radius);font-size:13px;
+  color:var(--fg-secondary);cursor:pointer;transition:background var(--t);
+}
+.chat-model-opt:hover{background:var(--bg-hover)}
+.chat-model-opt.active{background:var(--accent-bg);color:var(--accent)}
+.chat-composer-wrap{position:relative}
 
-.chat-model-select {
-  font-size: 11px; color: var(--fg-tertiary); padding: 2px 6px; border: 1px solid var(--border);
-  border-radius: 4px; background: var(--bg-secondary); cursor: pointer; flex-shrink: 0;
+/* Chat messages */
+.chat-msgs{display:flex;flex-direction:column;gap:20px;margin-bottom:24px;max-height:480px;overflow-y:auto}
+.chat-msg{display:flex;gap:12px;animation:fadeIn 150ms ease}
+.chat-msg-avatar{
+  width:24px;height:24px;border-radius:50%;flex-shrink:0;margin-top:2px;
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;
+  background:var(--bg-active);color:var(--fg-secondary);
 }
+.chat-msg.assistant .chat-msg-avatar{background:var(--accent-bg);color:var(--accent)}
+.chat-msg-body{flex:1;min-width:0;font-size:15px;line-height:1.7;color:var(--fg)}
+.chat-msg-body p{margin:0.3em 0}
+.chat-msg-body a{color:var(--accent);text-decoration:underline;text-decoration-color:rgba(35,131,226,0.3);text-underline-offset:2px}
+.chat-msg-body code{font-family:var(--font-mono);font-size:0.85em;background:var(--bg-active);padding:1px 4px;border-radius:3px}
+.chat-msg-body pre{background:var(--bg-sidebar);border-radius:4px;padding:12px 16px;margin:8px 0;overflow-x:auto;font-size:13px}
+.chat-msg-body pre code{background:none;padding:0}
+.chat-msg-body strong{font-weight:600}
+.chat-typing-dots{display:flex;gap:4px;padding:4px 0}
+.chat-typing-dots span{width:5px;height:5px;border-radius:50%;background:var(--fg-tertiary);animation:dotPulse 1.4s infinite}
+.chat-typing-dots span:nth-child(2){animation-delay:.2s}
+.chat-typing-dots span:nth-child(3){animation-delay:.4s}
+@keyframes dotPulse{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
 
-/* Chat Messages */
-.chat-messages { display: flex; flex-direction: column; gap: 16px; margin-bottom: 20px; max-height: 500px; overflow-y: auto; padding: 4px 0; }
-.chat-msg { display: flex; gap: 10px; max-width: 85%; animation: fadeIn 200ms ease; }
-.chat-msg.user { align-self: flex-end; flex-direction: row-reverse; }
-.chat-msg-bubble {
-  padding: 10px 14px; border-radius: var(--radius-lg); font-size: 14px; line-height: 1.6;
-  word-break: break-word;
-}
-.chat-msg.user .chat-msg-bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
-.chat-msg.assistant .chat-msg-bubble { background: var(--bg-secondary); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
-.chat-msg.assistant .chat-msg-bubble a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
-.chat-msg-avatar {
-  width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center;
-  justify-content: center; font-size: 12px; flex-shrink: 0; background: var(--bg-secondary);
-  border: 1px solid var(--border); color: var(--fg-secondary);
-}
-.chat-msg.user .chat-msg-avatar { background: var(--accent-light); color: var(--accent); }
-.chat-typing { display: flex; gap: 4px; padding: 12px 14px; }
-.chat-typing span {
-  width: 6px; height: 6px; border-radius: 50%; background: var(--fg-tertiary);
-  animation: typingDot 1.4s infinite;
-}
-.chat-typing span:nth-child(2) { animation-delay: 0.2s; }
-.chat-typing span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes typingDot { 0%, 60%, 100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-4px); } }
-.chat-history-toggle {
-  display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-tertiary);
-  cursor: pointer; margin-bottom: 12px; transition: color var(--transition);
-}
-.chat-history-toggle:hover { color: var(--fg-secondary); }
-.chat-history-toggle svg { transition: transform var(--transition); }
-.chat-history-toggle.open svg { transform: rotate(90deg); }
-.chat-history-list {
-  display: none; margin-bottom: 12px; border: 1px solid var(--border); border-radius: var(--radius);
-  overflow: hidden; max-height: 200px; overflow-y: auto;
-}
-.chat-history-list.open { display: block; }
-.chat-history-item {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 12px; font-size: 13px; cursor: pointer; border-bottom: 1px solid var(--border);
-  transition: background var(--transition);
-}
-.chat-history-item:last-child { border-bottom: none; }
-.chat-history-item:hover { background: var(--bg-hover); }
-.chat-history-item.active { background: var(--accent-light); color: var(--accent); }
-.chat-history-item .chat-h-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chat-history-item .chat-h-delete { color: var(--fg-tertiary); opacity: 0; transition: opacity var(--transition); }
-.chat-history-item:hover .chat-h-delete { opacity: 1; }
-.chat-new-btn {
-  font-size: 12px; color: var(--accent); cursor: pointer; display: flex; align-items: center; gap: 4px;
-  padding: 6px 0; transition: opacity var(--transition);
-}
-.chat-new-btn:hover { opacity: 0.8; }
+.chat-history-row{display:flex;align-items:center;gap:6px;margin-bottom:12px;font-size:12px;color:var(--fg-tertiary)}
+.chat-history-row a{transition:color var(--t)}
+.chat-history-row a:hover{color:var(--fg-secondary)}
 
-/* Section title */
-.section-title {
-  font-size: 13px; font-weight: 600; color: var(--fg-secondary); margin-bottom: 12px;
-  display: flex; align-items: center; justify-content: space-between;
-}
-.section-title a { font-size: 12px; font-weight: 400; color: var(--fg-tertiary); transition: color var(--transition); }
-.section-title a:hover { color: var(--accent); }
+/* Section headers */
+.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;margin-top:8px}
+.section-label{font-size:12px;font-weight:600;color:var(--fg-tertiary);text-transform:uppercase;letter-spacing:0.04em}
+.section-link{font-size:12px;color:var(--fg-tertiary);transition:color var(--t)}
+.section-link:hover{color:var(--accent)}
 
 /* Graph */
-.graph-wrap {
-  border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-secondary);
-  overflow: hidden; margin-bottom: 32px;
-}
-.graph-wrap canvas { display: block; width: 100%; height: 240px; cursor: grab; }
-.graph-wrap canvas:active { cursor: grabbing; }
-.graph-legend {
-  display: flex; flex-wrap: wrap; gap: 12px; padding: 8px 14px; border-top: 1px solid var(--border);
-  font-size: 12px; color: var(--fg-secondary);
-}
-.graph-legend-item { display: flex; align-items: center; gap: 4px; }
-.graph-legend-dot { width: 8px; height: 8px; border-radius: 50%; }
-.graph-empty {
-  height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  color: var(--fg-tertiary); font-size: 13px; gap: 8px;
-}
+.graph-card{border-radius:6px;background:var(--bg-sidebar);overflow:hidden;margin-bottom:32px}
+.graph-card canvas{display:block;width:100%;height:220px;cursor:grab}
+.graph-card canvas:active{cursor:grabbing}
+.graph-footer{display:flex;gap:12px;padding:6px 12px;font-size:11px;color:var(--fg-tertiary)}
+.graph-footer-item{display:flex;align-items:center;gap:4px}
+.graph-footer-dot{width:6px;height:6px;border-radius:50%}
+.graph-empty-msg{height:220px;display:flex;align-items:center;justify-content:center;color:var(--fg-tertiary);font-size:13px}
 
 /* Activity */
-.activity-list {
-  border: 1px solid var(--border); border-radius: var(--radius);
-  overflow: hidden; margin-bottom: 32px;
-}
-.activity-item {
-  display: flex; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--border);
-  font-size: 13px; align-items: center; cursor: pointer; transition: background var(--transition);
-}
-.activity-item:last-child { border-bottom: none; }
-.activity-item:hover { background: var(--bg-hover); }
-.activity-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.activity-dot.ingest { background: var(--green); }
-.activity-dot.query { background: var(--accent); }
-.activity-dot.lint { background: var(--orange); }
-.activity-date { flex-shrink: 0; font-size: 12px; color: var(--fg-tertiary); font-family: var(--font-mono); min-width: 46px; }
-.activity-type { flex-shrink: 0; font-size: 11px; color: var(--fg-tertiary); min-width: 46px; }
-.activity-title-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-secondary); }
-.activity-empty { padding: 20px; text-align: center; color: var(--fg-tertiary); font-size: 13px; }
+.activity-card{margin-bottom:32px}
+.activity-row{display:flex;gap:10px;padding:6px 0;font-size:13px;align-items:center}
+.activity-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.activity-date{font-size:12px;color:var(--fg-tertiary);min-width:42px;font-family:var(--font-mono)}
+.activity-label{color:var(--fg-secondary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.activity-none{color:var(--fg-tertiary);font-size:13px;padding:8px 0}
 
-/* Stats bar */
-.stats-bar {
-  display: flex; gap: 16px; align-items: center; font-size: 12px; color: var(--fg-tertiary);
-  padding: 12px 0; border-top: 1px solid var(--border);
-}
-.stats-bar span { display: flex; align-items: center; gap: 4px; }
+/* Stats */
+.stats-row{display:flex;gap:20px;font-size:12px;color:var(--fg-tertiary);padding-top:8px;border-top:1px solid var(--border)}
 
-/* ── Article View ── */
-.article-view { animation: fadeIn 200ms ease; padding: 32px 40px 80px; }
-.article-container { max-width: var(--content-width); margin: 0 auto; }
-.article-toolbar {
-  display: flex; align-items: center; gap: 8px; margin-bottom: 16px; padding-bottom: 12px;
-  border-bottom: 1px solid var(--border);
-}
-.article-toolbar-left { display: flex; gap: 4px; }
-.tab-btn {
-  padding: 5px 12px; border-radius: var(--radius); font-size: 13px; color: var(--fg-secondary);
-  transition: all var(--transition);
-}
-.tab-btn:hover { background: var(--bg-hover); }
-.tab-btn.active { background: var(--accent-light); color: var(--accent); font-weight: 500; }
-.article-toolbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.save-status { font-size: 12px; color: var(--fg-tertiary); transition: color var(--transition); }
-.save-status.saving { color: var(--orange); }
-.save-status.saved { color: var(--green); }
-.btn-danger {
-  padding: 5px 10px; border-radius: var(--radius); font-size: 12px; color: var(--red);
-  border: 1px solid transparent; transition: all var(--transition);
-}
-.btn-danger:hover { background: rgba(220,38,38,0.08); border-color: var(--red); }
+/* ── Page: Article (Notion-style inline edit) ── */
+.page-article{animation:fadeIn 150ms ease}
+.page-article-inner{max-width:var(--content-w);margin:0 auto;padding:12px 48px 120px}
 
-.editor-area {
-  width: 100%; min-height: 500px; padding: 16px; font-family: var(--font-mono);
-  font-size: 14px; line-height: 1.7; border: 1px solid var(--border); border-radius: var(--radius);
-  resize: vertical; background: var(--bg-secondary); transition: border-color var(--transition);
+.article-title{
+  font-size:2.25em;font-weight:700;line-height:1.2;letter-spacing:-0.02em;
+  margin-bottom:2px;outline:none;word-break:break-word;
 }
-.editor-area:focus { border-color: var(--accent); background: var(--bg); }
+.article-title:empty::before{content:"无标题";color:var(--fg-tertiary)}
+.article-meta-line{font-size:13px;color:var(--fg-tertiary);margin-bottom:24px;display:flex;align-items:center;gap:8px}
+.article-meta-line a{color:var(--fg-tertiary);text-decoration:underline;text-decoration-color:var(--border);text-underline-offset:2px}
 
-.article-main { max-width: var(--content-width); margin: 0 auto; }
-.article h1 { font-size: 1.875em; font-weight: 700; margin: 0 0 4px; line-height: 1.25; }
-.article-meta { font-size: 13px; color: var(--fg-tertiary); margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
-.article h2 { font-size: 1.375em; font-weight: 600; margin: 1.5em 0 0.4em; line-height: 1.3; }
-.article h3 { font-size: 1.125em; font-weight: 600; margin: 1.2em 0 0.3em; line-height: 1.3; }
-.article h4 { font-size: 1em; font-weight: 600; margin: 1em 0 0.2em; }
-.article p { margin: 0.5em 0; line-height: 1.7; }
-.article strong { font-weight: 600; }
-.article em { font-style: italic; }
-.article a { color: var(--accent); text-decoration: underline; text-decoration-color: var(--accent-light); text-underline-offset: 2px; }
-.article a:hover { text-decoration-color: var(--accent); }
-.article img { max-width: 100%; border-radius: var(--radius); margin: 8px 0; }
-.article hr { border: none; border-top: 1px solid var(--border); margin: 1.5em 0; }
-.article blockquote { border-left: 3px solid var(--accent); padding: 2px 0 2px 14px; margin: 8px 0; color: var(--fg-secondary); }
-.article ul, .article ol { padding-left: 1.5em; margin: 0.4em 0; }
-.article li { line-height: 1.7; margin: 2px 0; }
-.article li > ul, .article li > ol { margin: 0; }
-.article code { font-family: var(--font-mono); font-size: 0.875em; background: var(--bg-active); padding: 2px 5px; border-radius: 3px; }
-.article pre { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 18px; margin: 8px 0; overflow-x: auto; font-size: 14px; line-height: 1.5; position: relative; }
-.article pre code { background: none; padding: 0; font-size: inherit; }
-.article .table-wrap { overflow-x: auto; margin: 8px 0; }
-.article table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.article th { font-weight: 600; text-align: left; }
-.article th, .article td { padding: 7px 10px; border: 1px solid var(--border); }
-.article thead { background: var(--bg-secondary); }
-.article tbody tr:hover { background: var(--bg-hover); }
-.article .task-item { list-style: none; margin-left: -1.5em; }
-.article .task-item input { margin-right: 6px; }
+.article-body{
+  outline:none;font-size:16px;line-height:1.7;min-height:300px;
+  word-break:break-word;
+}
+.article-body:focus{caret-color:var(--accent)}
 
-.code-copy-btn {
-  position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 4px;
-  padding: 4px 8px; border-radius: 4px; font-size: 11px; color: var(--fg-tertiary);
-  background: var(--bg); border: 1px solid var(--border); opacity: 0; cursor: pointer;
-  transition: opacity var(--transition), background var(--transition);
+/* Article rendered styles */
+.article-body h1{font-size:1.875em;font-weight:700;margin:1em 0 0.2em;line-height:1.25}
+.article-body h2{font-size:1.5em;font-weight:600;margin:1.4em 0 0.2em;line-height:1.3}
+.article-body h3{font-size:1.25em;font-weight:600;margin:1.2em 0 0.2em;line-height:1.35}
+.article-body p{margin:0.4em 0;line-height:1.7}
+.article-body a{color:var(--fg);text-decoration:underline;text-decoration-color:rgba(55,53,47,0.3);text-underline-offset:3px;transition:text-decoration-color var(--t)}
+.article-body a:hover{text-decoration-color:var(--fg)}
+.article-body strong{font-weight:600}
+.article-body em{font-style:italic}
+.article-body blockquote{
+  border-left:3px solid var(--fg);padding:2px 0 2px 16px;margin:6px 0;
+  color:var(--fg-secondary);
 }
-.article pre:hover .code-copy-btn { opacity: 1; }
-.code-copy-btn:hover { background: var(--bg-hover); color: var(--fg); }
-.code-copy-btn.copied { color: var(--green); border-color: var(--green); opacity: 1; }
+.article-body ul,.article-body ol{padding-left:1.6em;margin:0.3em 0}
+.article-body li{line-height:1.7;margin:1px 0}
+.article-body code{
+  font-family:var(--font-mono);font-size:0.85em;
+  background:rgba(135,131,120,0.15);padding:2px 5px;border-radius:3px;
+  color:#EB5757;
+}
+.article-body pre{
+  background:var(--bg-sidebar);border-radius:4px;padding:16px 20px;
+  margin:8px 0;overflow-x:auto;font-size:14px;line-height:1.55;
+}
+.article-body pre code{background:none;padding:0;color:var(--fg)}
+.article-body hr{border:none;border-top:1px solid var(--border);margin:1.5em 0}
+.article-body img{max-width:100%;border-radius:4px;margin:8px 0}
+.article-body .table-wrap{overflow-x:auto;margin:6px 0}
+.article-body table{width:100%;border-collapse:collapse;font-size:14px}
+.article-body th{font-weight:600;text-align:left;background:var(--bg-sidebar)}
+.article-body th,.article-body td{padding:6px 10px;border:1px solid var(--border)}
 
-/* ── Full Graph View ── */
-.graph-view { animation: fadeIn 200ms ease; height: 100%; display: flex; flex-direction: column; padding: 16px 20px; }
-.graph-controls {
-  display: flex; gap: 8px; align-items: center; padding: 0 0 12px; flex-wrap: wrap;
+.article-save-indicator{
+  position:fixed;bottom:20px;right:20px;font-size:12px;color:var(--fg-tertiary);
+  background:var(--bg);padding:4px 10px;border-radius:var(--radius);
+  box-shadow:0 1px 4px rgba(0,0,0,0.08);opacity:0;transition:opacity var(--t);z-index:10;
 }
-.graph-controls .icon-btn { border: 1px solid var(--border); }
-.graph-node-count { font-size: 12px; color: var(--fg-tertiary); margin-left: auto; }
-.graph-filter-wrap { display: flex; gap: 8px; flex-wrap: wrap; }
-.graph-filter-item {
-  display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--fg-secondary); cursor: pointer;
-}
-.graph-filter-item input { cursor: pointer; }
-.graph-full-canvas-wrap {
-  flex: 1; border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--bg-secondary); overflow: hidden;
-}
-.graph-full-canvas-wrap canvas { display: block; width: 100%; height: 100%; cursor: grab; }
-.graph-full-canvas-wrap canvas:active { cursor: grabbing; }
+.article-save-indicator.show{opacity:1}
 
-/* ── Browse View ── */
-.browse-view { max-width: 800px; margin: 0 auto; padding: 32px 40px 80px; animation: fadeIn 200ms ease; }
-.browse-topic { margin-bottom: 8px; }
-.browse-topic-head {
-  display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--radius);
-  cursor: pointer; font-weight: 600; font-size: 14px; transition: background var(--transition);
+/* Article action bar (delete etc) */
+.article-actions{display:flex;gap:4px;margin-bottom:8px}
+.article-action-btn{
+  padding:3px 8px;border-radius:var(--radius);font-size:12px;
+  color:var(--fg-tertiary);transition:background var(--t),color var(--t);
 }
-.browse-topic-head:hover { background: var(--bg-hover); }
-.browse-topic-head .arrow { transition: transform var(--transition); display: inline-block; font-size: 11px; color: var(--fg-tertiary); }
-.browse-topic.collapsed .arrow { transform: rotate(-90deg); }
-.browse-topic.collapsed .browse-topic-list { display: none; }
-.browse-topic-count { font-size: 12px; color: var(--fg-tertiary); font-weight: 400; }
-.browse-topic-list { list-style: none; padding: 0 0 8px; }
-.browse-topic-list li a {
-  display: block; padding: 6px 12px 6px 36px; border-radius: var(--radius); font-size: 13px;
-  color: var(--fg-secondary); transition: background var(--transition);
+.article-action-btn:hover{background:var(--bg-hover);color:var(--fg-secondary)}
+.article-action-btn.danger:hover{color:var(--red);background:rgba(235,87,87,0.06)}
+
+/* ── Full Graph ── */
+.page-graph{height:100%;display:flex;flex-direction:column;padding:12px 16px;animation:fadeIn 150ms ease}
+.graph-toolbar{display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.graph-toolbar-btn{
+  height:28px;padding:0 8px;border-radius:var(--radius);font-size:12px;
+  color:var(--fg-secondary);border:1px solid var(--border);display:flex;align-items:center;gap:4px;
+  transition:background var(--t);
 }
-.browse-topic-list li a:hover { background: var(--bg-hover); color: var(--fg); }
+.graph-toolbar-btn:hover{background:var(--bg-hover)}
+.graph-toolbar-btn svg{width:14px;height:14px}
+.graph-filter-label{display:flex;align-items:center;gap:3px;font-size:12px;color:var(--fg-secondary);cursor:pointer}
+.graph-filter-label input{cursor:pointer;accent-color:var(--accent)}
+.graph-count{font-size:12px;color:var(--fg-tertiary);margin-left:auto}
+.graph-canvas-wrap{flex:1;border-radius:6px;background:var(--bg-sidebar);overflow:hidden}
+.graph-canvas-wrap canvas{display:block;width:100%;height:100%;cursor:grab}
+
+/* ── Browse ── */
+.page-browse{max-width:800px;margin:0 auto;padding:32px 48px 120px;animation:fadeIn 150ms ease}
+.browse-heading{font-size:22px;font-weight:700;letter-spacing:-0.02em;margin-bottom:20px}
+.browse-group{margin-bottom:6px}
+.browse-group-head{
+  display:flex;align-items:center;gap:6px;padding:5px 8px;
+  border-radius:var(--radius);cursor:pointer;font-size:14px;font-weight:500;
+  transition:background var(--t);
+}
+.browse-group-head:hover{background:var(--bg-hover)}
+.browse-group-head .arr{font-size:10px;color:var(--fg-tertiary);transition:transform var(--t)}
+.browse-group.closed .arr{transform:rotate(-90deg)}
+.browse-group.closed .browse-group-list{display:none}
+.browse-group-count{font-size:12px;color:var(--fg-tertiary);font-weight:400;margin-left:auto}
+.browse-group-list{list-style:none;padding:0 0 4px}
+.browse-group-list a{
+  display:flex;align-items:center;gap:6px;padding:4px 8px 4px 28px;
+  border-radius:var(--radius);font-size:14px;color:var(--fg-secondary);
+  transition:background var(--t);
+}
+.browse-group-list a:hover{background:var(--bg-hover);color:var(--fg)}
+.browse-group-list a svg{width:16px;height:16px;opacity:0.4;flex-shrink:0}
 
 /* ── Search Overlay ── */
-.search-overlay {
-  position: fixed; inset: 0; z-index: 200; display: none;
-  background: rgba(0,0,0,0.25); justify-content: center; padding-top: 14vh;
+.search-overlay{position:fixed;inset:0;z-index:200;display:none;background:rgba(15,15,15,0.6);justify-content:center;padding-top:12vh}
+.search-overlay.open{display:flex}
+.search-box{
+  width:540px;max-width:92vw;background:var(--bg);border-radius:8px;
+  box-shadow:0 8px 40px rgba(0,0,0,0.2);max-height:440px;display:flex;flex-direction:column;overflow:hidden;
 }
-.search-overlay.open { display: flex; }
-[data-theme="dark"] .search-overlay { background: rgba(0,0,0,0.5); }
-.search-box {
-  width: 520px; max-width: 92vw; background: var(--bg); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg), 0 0 0 1px var(--border); overflow: hidden; max-height: 420px;
-  display: flex; flex-direction: column;
-}
-.search-input-wrap {
-  display: flex; align-items: center; gap: 8px; padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-}
-.search-input-wrap svg { flex-shrink: 0; color: var(--fg-tertiary); }
-.search-input {
-  flex: 1; border: none; font-size: 15px; background: transparent; outline: none;
-}
-.search-input:focus { box-shadow: none; }
-.search-input::placeholder { color: var(--fg-tertiary); }
-.search-kbd { font-family: var(--font-mono); font-size: 11px; color: var(--fg-tertiary); padding: 2px 6px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px; }
-.search-results { overflow-y: auto; flex: 1; }
-.search-result-item {
-  padding: 10px 16px; cursor: pointer; border-bottom: 1px solid var(--border);
-  transition: background 150ms;
-}
-.search-result-item:hover, .search-result-item.selected { background: var(--bg-hover); }
-.search-result-title { font-weight: 500; font-size: 14px; margin-bottom: 2px; }
-.search-result-path { font-size: 12px; color: var(--fg-tertiary); }
-.search-result-context { font-size: 12px; color: var(--fg-secondary); margin-top: 4px; line-height: 1.5; }
-.search-result-context mark { background: var(--accent-light); color: var(--accent); border-radius: 2px; padding: 0 2px; }
-.search-empty { padding: 32px; text-align: center; color: var(--fg-tertiary); font-size: 13px; }
+.search-input-row{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border)}
+.search-input-row svg{flex-shrink:0;color:var(--fg-tertiary);width:16px;height:16px}
+.search-field{flex:1;font-size:16px;background:transparent}
+.search-field::placeholder{color:var(--fg-tertiary)}
+.search-hint{font-family:var(--font-mono);font-size:11px;color:var(--fg-tertiary);padding:2px 5px;background:var(--bg-hover);border-radius:3px}
+.search-results{overflow-y:auto;flex:1}
+.search-result{padding:10px 16px;cursor:pointer;transition:background 100ms;border-bottom:1px solid var(--border)}
+.search-result:hover{background:var(--bg-hover)}
+.search-result-title{font-size:14px;font-weight:500;margin-bottom:1px}
+.search-result-path{font-size:12px;color:var(--fg-tertiary)}
+.search-result-ctx{font-size:12px;color:var(--fg-secondary);margin-top:3px}
+.search-result-ctx mark{background:var(--accent-bg);color:var(--accent);border-radius:2px;padding:0 2px}
+.search-empty-msg{padding:32px;text-align:center;color:var(--fg-tertiary);font-size:13px}
 
-/* ── Ingest Panel ── */
-.ingest-overlay { position: fixed; inset: 0; z-index: 200; display: none; background: rgba(0,0,0,0.25); }
-.ingest-overlay.open { display: block; }
-[data-theme="dark"] .ingest-overlay { background: rgba(0,0,0,0.5); }
-.ingest-panel {
-  position: fixed; top: 0; right: -420px; width: 400px; max-width: 90vw; height: 100vh;
-  background: var(--bg); border-left: 1px solid var(--border); box-shadow: -4px 0 16px rgba(0,0,0,0.08);
-  display: flex; flex-direction: column; z-index: 201; transition: right 250ms ease;
+/* ── Ingest ── */
+.ingest-overlay{position:fixed;inset:0;z-index:200;display:none;background:rgba(15,15,15,0.4)}
+.ingest-overlay.open{display:block}
+.ingest-panel{
+  position:fixed;top:0;right:-420px;width:400px;max-width:90vw;height:100vh;
+  background:var(--bg);border-left:1px solid var(--border);
+  display:flex;flex-direction:column;z-index:201;transition:right 200ms ease;
+  box-shadow:-2px 0 12px rgba(0,0,0,0.06);
 }
-.ingest-overlay.open .ingest-panel { right: 0; }
-.ingest-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 20px; border-bottom: 1px solid var(--border);
+.ingest-overlay.open .ingest-panel{right:0}
+.ingest-head{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border)}
+.ingest-head h3{font-size:15px;font-weight:600}
+.ingest-tabs{display:flex;border-bottom:1px solid var(--border)}
+.ingest-tab{flex:1;padding:9px 16px;text-align:center;font-size:13px;color:var(--fg-secondary);border-bottom:2px solid transparent;transition:color var(--t)}
+.ingest-tab:hover{color:var(--fg)}
+.ingest-tab.active{color:var(--fg);border-bottom-color:var(--fg)}
+.ingest-form{flex:1;padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:16px}
+.field-label{font-size:12px;font-weight:500;color:var(--fg-secondary);margin-bottom:4px;display:block}
+.field-textarea{
+  width:100%;min-height:160px;resize:vertical;padding:10px 12px;
+  font-size:14px;line-height:1.6;border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--bg);transition:border-color var(--t);
 }
-.ingest-header h3 { font-size: 15px; font-weight: 600; }
-.ingest-tabs { display: flex; border-bottom: 1px solid var(--border); }
-.ingest-tab {
-  flex: 1; padding: 10px 16px; text-align: center; font-size: 13px;
-  color: var(--fg-secondary); border-bottom: 2px solid transparent;
-  transition: color var(--transition), border-color var(--transition);
+.field-textarea:focus{border-color:rgba(55,53,47,0.3)}
+.field-input{
+  width:100%;padding:8px 12px;font-size:14px;
+  border:1px solid var(--border);border-radius:var(--radius);
+  transition:border-color var(--t);
 }
-.ingest-tab:hover { color: var(--fg); }
-.ingest-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-.ingest-body { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
-.ingest-body label { font-size: 13px; font-weight: 500; color: var(--fg-secondary); display: block; margin-bottom: 6px; }
-.ingest-body textarea { width: 100%; min-height: 180px; resize: vertical; padding: 10px 12px; font-size: 14px; line-height: 1.6; }
-.ingest-body input[type="text"] { width: 100%; padding: 8px 12px; font-size: 14px; }
-.ingest-body select { width: 100%; padding: 8px 12px; font-size: 14px; border-radius: var(--radius); }
-.ingest-submit {
-  padding: 10px 20px; border-radius: var(--radius); background: var(--accent);
-  color: #fff; font-size: 14px; font-weight: 500; transition: background var(--transition); width: 100%;
+.field-input:focus{border-color:rgba(55,53,47,0.3)}
+.field-select{
+  width:100%;padding:8px 12px;font-size:14px;
+  border:1px solid var(--border);border-radius:var(--radius);
+  appearance:none;-webkit-appearance:none;
+  background:var(--bg) url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2337352F' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 12px center;
+  cursor:pointer;transition:border-color var(--t);
 }
-.ingest-submit:hover { background: var(--accent-hover); }
-.ingest-submit:disabled { opacity: 0.4; cursor: not-allowed; }
-.ingest-status { font-size: 13px; padding: 10px 12px; border-radius: var(--radius); text-align: center; }
-.ingest-status.compiling { background: var(--accent-light); color: var(--accent); }
-.ingest-status.done { background: rgba(22,163,74,0.08); color: var(--green); }
-.ingest-status.error { background: rgba(220,38,38,0.08); color: var(--red); }
+[data-theme="dark"] .field-select{
+  background-image:url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23ffffff' stroke-width='1.5' stroke-linecap='round' opacity='0.5'/%3E%3C/svg%3E");
+}
+.field-select:focus{border-color:rgba(55,53,47,0.3)}
+.btn-fill{
+  padding:8px 16px;border-radius:var(--radius);background:var(--fg);
+  color:var(--bg);font-size:14px;font-weight:500;width:100%;
+  transition:opacity var(--t);
+}
+.btn-fill:hover{opacity:0.85}
+.btn-fill:disabled{opacity:0.3;cursor:not-allowed}
+.ingest-status-msg{font-size:13px;padding:8px 12px;border-radius:var(--radius);text-align:center}
+.ingest-status-msg.compiling{background:var(--accent-bg);color:var(--accent)}
+.ingest-status-msg.done{background:rgba(68,131,97,0.08);color:var(--green)}
+.ingest-status-msg.error{background:rgba(235,87,87,0.08);color:var(--red)}
 
-/* ── Settings Modal ── */
-.modal-overlay { position: fixed; inset: 0; z-index: 300; display: none; background: rgba(0,0,0,0.4); justify-content: center; align-items: center; }
-.modal-overlay.open { display: flex; }
-.modal-box {
-  width: 440px; max-width: 92vw; background: var(--bg); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg); overflow: hidden;
-}
-.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
-.modal-header h3 { font-size: 15px; font-weight: 600; }
-.modal-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
-.modal-body label { font-size: 13px; font-weight: 500; color: var(--fg-secondary); display: block; margin-bottom: 4px; }
-.modal-body select, .modal-body input { width: 100%; padding: 8px 12px; font-size: 14px; }
-.modal-footer { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 20px; border-top: 1px solid var(--border); }
+/* ── Settings ── */
+.modal-bg{position:fixed;inset:0;z-index:300;display:none;background:rgba(15,15,15,0.6);justify-content:center;align-items:center}
+.modal-bg.open{display:flex}
+.modal-card{width:420px;max-width:92vw;background:var(--bg);border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,0.2);overflow:hidden}
+.modal-top{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border)}
+.modal-top h3{font-size:15px;font-weight:600}
+.modal-top button{width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius);color:var(--fg-tertiary);transition:background var(--t)}
+.modal-top button:hover{background:var(--bg-hover)}
+.modal-form{padding:20px;display:flex;flex-direction:column;gap:14px}
+.modal-foot{display:flex;gap:8px;justify-content:flex-end;padding:12px 20px;border-top:1px solid var(--border)}
+.btn-outline{padding:6px 14px;border-radius:var(--radius);font-size:13px;border:1px solid var(--border);color:var(--fg-secondary);transition:background var(--t)}
+.btn-outline:hover{background:var(--bg-hover)}
+.btn-sm-fill{padding:6px 14px;border-radius:var(--radius);font-size:13px;background:var(--fg);color:var(--bg);transition:opacity var(--t)}
+.btn-sm-fill:hover{opacity:0.85}
 
-/* ── Delete Confirm ── */
-.confirm-overlay { position: fixed; inset: 0; z-index: 400; display: none; background: rgba(0,0,0,0.4); justify-content: center; align-items: center; }
-.confirm-overlay.open { display: flex; }
-.confirm-box { width: 360px; max-width: 90vw; background: var(--bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); padding: 24px; text-align: center; }
-.confirm-box h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
-.confirm-box p { font-size: 14px; color: var(--fg-secondary); margin-bottom: 20px; }
-.confirm-actions { display: flex; gap: 8px; justify-content: center; }
-.confirm-actions .btn-cancel { padding: 8px 20px; border-radius: var(--radius); border: 1px solid var(--border); font-size: 14px; transition: background var(--transition); }
-.confirm-actions .btn-cancel:hover { background: var(--bg-hover); }
-.confirm-actions .btn-confirm-delete { padding: 8px 20px; border-radius: var(--radius); background: var(--red); color: #fff; font-size: 14px; font-weight: 500; transition: background var(--transition); }
-.confirm-actions .btn-confirm-delete:hover { background: #b91c1c; }
+/* ── Delete confirm ── */
+.confirm-bg{position:fixed;inset:0;z-index:400;display:none;background:rgba(15,15,15,0.6);justify-content:center;align-items:center}
+.confirm-bg.open{display:flex}
+.confirm-card{width:340px;max-width:90vw;background:var(--bg);border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,0.2);padding:24px;text-align:center}
+.confirm-card h3{font-size:15px;font-weight:600;margin-bottom:6px}
+.confirm-card p{font-size:14px;color:var(--fg-secondary);margin-bottom:20px}
+.confirm-btns{display:flex;gap:8px;justify-content:center}
+.btn-cancel{padding:7px 20px;border-radius:var(--radius);border:1px solid var(--border);font-size:13px;color:var(--fg-secondary);transition:background var(--t)}
+.btn-cancel:hover{background:var(--bg-hover)}
+.btn-delete{padding:7px 20px;border-radius:var(--radius);background:var(--red);color:#fff;font-size:13px;font-weight:500;transition:opacity var(--t)}
+.btn-delete:hover{opacity:0.85}
 
-/* ── Notification ── */
-.notification {
-  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(60px);
-  padding: 10px 20px; border-radius: var(--radius); background: var(--fg);
-  color: var(--bg); font-size: 13px; z-index: 500; opacity: 0;
-  transition: transform 250ms ease, opacity 250ms ease;
+/* ── Toast ── */
+.toast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(50px);
+  padding:8px 16px;border-radius:6px;background:var(--fg);color:var(--bg);
+  font-size:13px;z-index:500;opacity:0;transition:transform 200ms ease,opacity 200ms ease;
 }
-.notification.show { transform: translateX(-50%) translateY(0); opacity: 1; }
-
-/* ── Loading / Empty ── */
-.loading { display: flex; align-items: center; justify-content: center; padding: 60px 20px; color: var(--fg-tertiary); font-size: 13px; gap: 8px; }
-.spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.empty-state { text-align: center; padding: 80px 20px; }
-.empty-state h2 { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
-.empty-state p { font-size: 14px; color: var(--fg-secondary); margin-bottom: 24px; }
-
-/* ── Bottom Nav (mobile) ── */
-.bottom-nav {
-  display: none; position: fixed; bottom: 0; left: 0; right: 0;
-  background: var(--bg); border-top: 1px solid var(--border); z-index: 100;
-  padding: 4px 0 env(safe-area-inset-bottom, 4px);
-}
-.bottom-nav-inner { display: flex; justify-content: space-around; }
-.bottom-nav-item {
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  font-size: 10px; color: var(--fg-tertiary); padding: 6px 12px;
-  transition: color var(--transition);
-}
-.bottom-nav-item.active { color: var(--accent); }
-.bottom-nav-item svg { width: 20px; height: 20px; }
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
 
 /* ── Responsive ── */
-@media (max-width: 768px) {
-  .side-nav { display: none; }
-  .bottom-nav { display: block; }
-  .content { padding-bottom: 60px; }
-  .dashboard { padding: 20px 16px 80px; }
-  .article-view { padding: 20px 16px 80px; }
-  .browse-view { padding: 20px 16px 80px; }
-  .chat-msg { max-width: 92%; }
-  .header .header-title { display: none; }
+@media(max-width:768px){
+  .sidebar{display:none}
+  .page-dashboard{padding:20px 16px 120px}
+  .page-article-inner{padding:12px 16px 120px}
+  .page-browse{padding:20px 16px 120px}
 }
 </style>
 </head>
 <body>
-
 <div class="app">
-  <!-- Side Nav -->
-  <nav class="side-nav">
-    <div class="nav-top">
-      <a class="side-nav-item active" href="#/" data-view="dashboard">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        <span class="nav-tooltip">对话</span>
-      </a>
-      <a class="side-nav-item" href="#/graph" data-view="graph">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><line x1="8.5" y1="7.5" x2="15.5" y2="16.5"/><line x1="15.5" y1="7.5" x2="8.5" y2="16.5"/></svg>
-        <span class="nav-tooltip">图谱</span>
-      </a>
-      <a class="side-nav-item" href="#/browse" data-view="browse">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
-        <span class="nav-tooltip">文章</span>
-      </a>
+
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+    知识库
+  </div>
+  <nav class="sidebar-nav">
+    <div class="sidebar-item active" data-view="dashboard" onclick="go('#/')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      对话
     </div>
-    <div class="nav-bottom">
-      <a class="side-nav-item" href="javascript:void(0)" onclick="openSettings()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-        <span class="nav-tooltip">设置</span>
-      </a>
-      <a class="side-nav-item" href="javascript:void(0)" onclick="toggleTheme()">
-        <svg id="themeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-        <span class="nav-tooltip">主题</span>
-      </a>
+    <div class="sidebar-item" data-view="graph" onclick="go('#/graph')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><line x1="8.5" y1="7.5" x2="15.5" y2="16.5"/><line x1="15.5" y1="7.5" x2="8.5" y2="16.5"/></svg>
+      知识图谱
+    </div>
+    <div class="sidebar-item" data-view="browse" onclick="go('#/browse')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      全部文章
     </div>
   </nav>
-
-  <!-- Main -->
-  <div class="main">
-    <header class="header" id="header">
-      <div class="header-title">知识库</div>
-      <div class="header-breadcrumb" id="breadcrumb"></div>
-      <div class="header-actions">
-        <button class="icon-btn" onclick="openSearch()" title="搜索 (Cmd+K)">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        </button>
-        <button class="btn-primary" onclick="openIngest()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          投喂
-        </button>
-      </div>
-    </header>
-    <div class="content" id="content"></div>
+  <div class="sidebar-section">文章</div>
+  <div class="sidebar-pages" id="sidebarPages"></div>
+  <div class="sidebar-bottom">
+    <button class="sidebar-bottom-btn" onclick="openSettings()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      设置
+    </button>
+    <button class="sidebar-bottom-btn" onclick="toggleTheme()">
+      <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      主题
+    </button>
   </div>
+</aside>
+
+<!-- Main -->
+<div class="main">
+  <div class="topbar" id="topbar">
+    <div class="topbar-breadcrumb" id="breadcrumb"></div>
+    <div class="topbar-actions">
+      <button class="topbar-btn" onclick="openSearch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>搜索</button>
+      <button class="topbar-btn topbar-btn-accent" onclick="openIngest()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>投喂</button>
+    </div>
+  </div>
+  <div class="content" id="content"></div>
+</div>
 </div>
 
-<!-- Bottom Nav (mobile) -->
-<div class="bottom-nav" id="bottomNav">
-  <div class="bottom-nav-inner">
-    <a class="bottom-nav-item active" href="#/" data-view="dashboard">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-      对话
-    </a>
-    <a class="bottom-nav-item" href="#/graph" data-view="graph">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><line x1="8.5" y1="7.5" x2="15.5" y2="16.5"/></svg>
-      图谱
-    </a>
-    <a class="bottom-nav-item" href="#/browse" data-view="browse">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
-      文章
-    </a>
-  </div>
-</div>
-
-<!-- Search Overlay -->
+<!-- Search -->
 <div class="search-overlay" id="searchOverlay" onclick="if(event.target===this)closeSearch()">
   <div class="search-box">
-    <div class="search-input-wrap">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input class="search-input" id="searchInput" type="text" placeholder="搜索知识库..." autocomplete="off">
-      <span class="search-kbd">ESC</span>
+    <div class="search-input-row">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input class="search-field" id="searchInput" placeholder="搜索..." autocomplete="off">
+      <span class="search-hint">ESC</span>
     </div>
-    <div class="search-results" id="searchResults">
-      <div class="search-empty">输入关键词开始搜索</div>
-    </div>
+    <div class="search-results" id="searchResults"><div class="search-empty-msg">输入关键词搜索</div></div>
   </div>
 </div>
 
-<!-- Ingest Panel -->
+<!-- Ingest -->
 <div class="ingest-overlay" id="ingestOverlay" onclick="if(event.target===this)closeIngest()">
   <div class="ingest-panel">
-    <div class="ingest-header">
-      <h3>投喂知识</h3>
-      <button class="icon-btn" onclick="closeIngest()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
+    <div class="ingest-head"><h3>投喂知识</h3><button class="topbar-btn" onclick="closeIngest()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
     <div class="ingest-tabs">
-      <button class="ingest-tab active" data-tab="text" onclick="switchIngestTab('text')">文本</button>
-      <button class="ingest-tab" data-tab="url" onclick="switchIngestTab('url')">链接</button>
+      <button class="ingest-tab active" data-tab="text" onclick="switchTab('text')">文本</button>
+      <button class="ingest-tab" data-tab="url" onclick="switchTab('url')">链接</button>
     </div>
-    <div class="ingest-body">
-      <div id="ingestTextTab">
-        <label>粘贴内容</label>
-        <textarea id="ingestText" placeholder="粘贴需要编译进知识库的文本内容..."></textarea>
-      </div>
-      <div id="ingestUrlTab" style="display:none">
-        <label>链接地址</label>
-        <input type="text" id="ingestUrl" placeholder="https://...">
-      </div>
-      <div>
-        <label>主题分类</label>
-        <select id="ingestTopic"><option value="auto">自动分类</option></select>
-      </div>
-      <div>
-        <label>编译模型</label>
-        <select id="ingestModel"></select>
-      </div>
-      <button class="ingest-submit" id="ingestSubmit" onclick="submitIngest()">开始编译</button>
-      <div class="ingest-status" id="ingestStatus" style="display:none"></div>
+    <div class="ingest-form">
+      <div id="tabText"><label class="field-label">粘贴内容</label><textarea class="field-textarea" id="ingestText" placeholder="粘贴文本内容..."></textarea></div>
+      <div id="tabUrl" style="display:none"><label class="field-label">链接地址</label><input class="field-input" id="ingestUrl" placeholder="https://..."></div>
+      <div><label class="field-label">主题</label><select class="field-select" id="ingestTopic"><option value="auto">自动分类</option></select></div>
+      <div><label class="field-label">模型</label><select class="field-select" id="ingestModel"></select></div>
+      <button class="btn-fill" id="ingestBtn" onclick="submitIngest()">开始编译</button>
+      <div class="ingest-status-msg" id="ingestStatus" style="display:none"></div>
     </div>
   </div>
 </div>
 
-<!-- Settings Modal -->
-<div class="modal-overlay" id="settingsModal" onclick="if(event.target===this)closeSettings()">
-  <div class="modal-box">
-    <div class="modal-header">
-      <h3>设置</h3>
-      <button class="icon-btn" onclick="closeSettings()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
+<!-- Settings -->
+<div class="modal-bg" id="settingsModal" onclick="if(event.target===this)closeSettings()">
+  <div class="modal-card">
+    <div class="modal-top"><h3>设置</h3><button onclick="closeSettings()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+    <div class="modal-form">
+      <div><label class="field-label">提供商</label><select class="field-select" id="sProv" onchange="onProvChange()"></select></div>
+      <div><label class="field-label">API Key</label><input class="field-input" type="password" id="sKey" placeholder="输入 API Key..."></div>
+      <div><label class="field-label">模型</label><select class="field-select" id="sModel"></select></div>
     </div>
-    <div class="modal-body">
-      <div>
-        <label>模型提供商</label>
-        <select id="settingsProvider" onchange="onProviderChange()"></select>
-      </div>
-      <div>
-        <label>API Key</label>
-        <input type="password" id="settingsApiKey" placeholder="输入 API Key...">
-      </div>
-      <div>
-        <label>模型</label>
-        <select id="settingsModel"></select>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn-primary" onclick="testConnection()" id="settingsTestBtn">测试连接</button>
-      <button class="btn-primary" onclick="saveSettings()">保存</button>
+    <div class="modal-foot">
+      <button class="btn-outline" onclick="testConn()">测试连接</button>
+      <button class="btn-sm-fill" onclick="saveSett()">保存</button>
     </div>
   </div>
 </div>
 
-<!-- Delete Confirm -->
-<div class="confirm-overlay" id="deleteConfirm" onclick="if(event.target===this)closeDeleteConfirm()">
-  <div class="confirm-box">
-    <h3>确认删除</h3>
-    <p>删除后无法恢复，确定要删除这篇文章吗？</p>
-    <div class="confirm-actions">
-      <button class="btn-cancel" onclick="closeDeleteConfirm()">取消</button>
-      <button class="btn-confirm-delete" onclick="confirmDelete()">删除</button>
-    </div>
+<!-- Delete confirm -->
+<div class="confirm-bg" id="delConfirm" onclick="if(event.target===this)closeDel()">
+  <div class="confirm-card">
+    <h3>确认删除</h3><p>删除后无法恢复</p>
+    <div class="confirm-btns"><button class="btn-cancel" onclick="closeDel()">取消</button><button class="btn-delete" onclick="doDel()">删除</button></div>
   </div>
 </div>
 
-<!-- Notification -->
-<div class="notification" id="notification"></div>
+<div class="toast" id="toast"></div>
 
 <script>
-/* ============================================================
-   Knowledge Base SPA — v2
-   ============================================================ */
+/* ── State ── */
+let gd=null,td=null,sd=null,cv='',gaf=null,st=null,ipt=null;
+let convId=null,msgs=[],chatBusy=false;
+let artPath='',artMd='',saveT=null;
+let sCache=null;
 
-// ── State ──
-let graphData = null;
-let treeData = null;
-let statsData = null;
-let currentView = '';
-let graphAnimFrame = null;
-let searchTimer = null;
-let ingestPollTimer = null;
+/* ── Helpers ── */
+const $=id=>document.getElementById(id);
+const h=s=>s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):'';
+const hRe=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+async function api(p,o){const r=await fetch(p,o);if(!r.ok)throw new Error(''+r.status);return r.json()}
+async function post(p,b){return api(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})}
+async function put(p,b){return api(p,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})}
+async function del(p){return api(p,{method:'DELETE'})}
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500)}
+function go(hash){location.hash=hash}
 
-// Chat state
-let chatConvId = null;
-let chatMessages = [];
-let chatLoading = false;
-let chatHistoryOpen = false;
-
-// Article state
-let articleEditMode = true;
-let articleContent = '';
-let articlePath = '';
-let saveTimer = null;
-
-// Settings cache
-let settingsCache = null;
-
-// ── Theme ──
-function initTheme() {
-  const saved = localStorage.getItem('kb-theme');
-  if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
-  updateThemeIcon();
+/* ── Theme ── */
+function initTheme(){if(localStorage.getItem('kb-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');updThemeIcon()}
+function toggleTheme(){
+  const d=document.documentElement.getAttribute('data-theme')==='dark';
+  if(d){document.documentElement.removeAttribute('data-theme');localStorage.setItem('kb-theme','light')}
+  else{document.documentElement.setAttribute('data-theme','dark');localStorage.setItem('kb-theme','dark')}
+  updThemeIcon();if(cv==='dashboard'||cv==='graph')render();
 }
-function toggleTheme() {
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  if (isDark) { document.documentElement.removeAttribute('data-theme'); localStorage.setItem('kb-theme', 'light'); }
-  else { document.documentElement.setAttribute('data-theme', 'dark'); localStorage.setItem('kb-theme', 'dark'); }
-  updateThemeIcon();
-  if (currentView === 'dashboard' || currentView === 'graph') renderCurrentView();
-}
-function updateThemeIcon() {
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  const el = document.getElementById('themeIcon');
-  if (el) el.innerHTML = isDark
-    ? '<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>'
-    : '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+function updThemeIcon(){
+  const d=document.documentElement.getAttribute('data-theme')==='dark';
+  $('themeIcon').innerHTML=d?'<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>':'<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
 }
 
-// ── API ──
-async function api(path, opts) {
-  const res = await fetch(path, opts);
-  if (!res.ok) throw new Error(`API ${res.status}`);
-  return res.json();
+/* ── Router ── */
+function route(){
+  const hash=location.hash||'#/';
+  if(hash==='#/'||hash==='#/dashboard')return{v:'dashboard'};
+  if(hash==='#/graph')return{v:'graph'};
+  if(hash==='#/browse')return{v:'browse'};
+  if(hash.startsWith('#/article/'))return{v:'article',p:hash.slice(10)};
+  return{v:'dashboard'};
 }
-async function apiPost(path, body) {
-  return api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-}
-async function apiPut(path, body) {
-  return api(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-}
-async function apiDelete(path) {
-  return api(path, { method: 'DELETE' });
-}
-
-// ── Notification ──
-function notify(msg) {
-  const el = document.getElementById('notification');
-  el.textContent = msg; el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 2500);
-}
-
-// ── Router ──
-function getRoute() {
-  const hash = location.hash || '#/';
-  if (hash === '#/' || hash === '#/dashboard') return { view: 'dashboard' };
-  if (hash === '#/graph') return { view: 'graph' };
-  if (hash === '#/browse') return { view: 'browse' };
-  if (hash.startsWith('#/article/')) return { view: 'article', path: hash.slice(10) };
-  return { view: 'dashboard' };
-}
-function navigate(hash) { location.hash = hash; }
-function updateNav(view) {
-  document.querySelectorAll('.side-nav-item[data-view]').forEach(el => {
-    el.classList.toggle('active', el.dataset.view === view || (view === 'article' && el.dataset.view === 'browse'));
-  });
-  document.querySelectorAll('.bottom-nav-item').forEach(el => {
-    el.classList.toggle('active', el.dataset.view === view || (view === 'article' && el.dataset.view === 'browse'));
+function updNav(v){
+  document.querySelectorAll('.sidebar-item[data-view]').forEach(el=>{
+    el.classList.toggle('active',el.dataset.view===v||(v==='article'&&el.dataset.view==='browse'));
   });
 }
-function updateBreadcrumb(route) {
-  const bc = document.getElementById('breadcrumb');
-  if (route.view === 'dashboard') bc.innerHTML = '';
-  else if (route.view === 'graph') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>知识图谱';
-  else if (route.view === 'browse') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>全部文章';
-  else if (route.view === 'article' && route.path) {
-    const parts = route.path.split('/');
-    const topic = parts.length > 1 ? parts[0] : '';
-    const file = parts[parts.length - 1].replace('.md', '');
-    let h = '<a href="#/">知识库</a>';
-    if (topic) h += '<span class="sep">/</span><a href="#/browse">' + esc(topic) + '</a>';
-    h += '<span class="sep">/</span>' + esc(file);
-    bc.innerHTML = h;
+function updBC(r){
+  const bc=$('breadcrumb');
+  if(r.v==='dashboard')bc.innerHTML='';
+  else if(r.v==='graph')bc.innerHTML='<a href="#/">知识库</a><span class="sep">/</span>知识图谱';
+  else if(r.v==='browse')bc.innerHTML='<a href="#/">知识库</a><span class="sep">/</span>全部文章';
+  else if(r.v==='article'&&r.p){
+    const pts=r.p.split('/'),topic=pts.length>1?pts[0]:'',f=pts[pts.length-1].replace('.md','');
+    let s='<a href="#/">知识库</a>';
+    if(topic)s+='<span class="sep">/</span><a href="#/browse">'+h(topic)+'</a>';
+    s+='<span class="sep">/</span>'+h(f);bc.innerHTML=s;
   }
 }
-function cancelGraphAnim() { if (graphAnimFrame) { cancelAnimationFrame(graphAnimFrame); graphAnimFrame = null; } }
-async function renderCurrentView() {
-  const route = getRoute();
-  currentView = route.view;
-  updateNav(route.view); updateBreadcrumb(route); cancelGraphAnim();
-  const content = document.getElementById('content');
-  content.scrollTop = 0;
-  switch (route.view) {
-    case 'dashboard': await renderDashboard(content); break;
-    case 'graph': await renderGraphView(content); break;
-    case 'browse': await renderBrowse(content); break;
-    case 'article': await renderArticle(content, route.path); break;
-  }
+function cancelGA(){if(gaf){cancelAnimationFrame(gaf);gaf=null}}
+async function render(){
+  const r=route();cv=r.v;updNav(r.v);updBC(r);cancelGA();
+  const c=$('content');c.scrollTop=0;
+  if(r.v==='dashboard')await rDash(c);
+  else if(r.v==='graph')await rGraph(c);
+  else if(r.v==='browse')await rBrowse(c);
+  else if(r.v==='article')await rArticle(c,r.p);
+  updSidebarPages();
 }
-window.addEventListener('hashchange', renderCurrentView);
+window.addEventListener('hashchange',render);
 
-// ── Dashboard ──
-async function renderDashboard(container) {
-  container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-  try {
-    const [stats, graph, recent] = await Promise.all([
-      api('/api/wiki/stats'), api('/api/wiki/graph'), api('/api/wiki/recent')
-    ]);
-    statsData = stats; graphData = graph;
-    let h = '<div class="dashboard">';
+/* ── Sidebar pages ── */
+async function updSidebarPages(){
+  const sp=$('sidebarPages');if(!sp)return;
+  try{
+    const tree=td||await api('/api/wiki/tree');td=tree;
+    let s='';
+    (tree||[]).forEach(t=>{
+      s+='<div class="sidebar-topic">'+h(t.name)+'</div>';
+      t.children.forEach(c=>{
+        const active=artPath===c.path?' active':'';
+        s+='<div class="sidebar-page'+active+'" onclick="go(\'#/article/'+h(c.path)+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'+h(c.title||c.file)+'</div>';
+      });
+    });
+    sp.innerHTML=s;
+  }catch{}
+}
 
-    // Chat area
-    h += '<div class="chat-area" id="chatArea">';
-    h += buildChatUI();
-    h += '</div>';
+/* ── Dashboard ── */
+async function rDash(c){
+  c.innerHTML='<div style="display:flex;align-items:center;justify-content:center;padding:60px;color:var(--fg-tertiary)"><div class="spin"></div></div>';
+  try{
+    const[stats,graph,recent]=await Promise.all([api('/api/wiki/stats'),api('/api/wiki/graph'),api('/api/wiki/recent')]);
+    sd=stats;gd=graph;
+    let s='<div class="page-dashboard">';
+
+    // Chat
+    s+='<div class="chat-area" id="chatArea">';
+    s+=buildChat();
+    s+='</div>';
 
     // Graph
-    h += '<div class="section-title"><span>知识图谱</span><a href="#/graph">查看全部 &rarr;</a></div>';
-    h += '<div class="graph-wrap" id="dashGraphWrap">';
-    if (graph.nodes.length < 2) {
-      h += '<div class="graph-empty"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><line x1="8.5" y1="7.5" x2="15.5" y2="16.5"/></svg><div>投喂更多知识，图谱会逐渐生长</div></div>';
-    } else {
-      h += '<canvas id="dashGraphCanvas"></canvas>';
-    }
-    h += '<div class="graph-legend" id="dashGraphLegend"></div></div>';
+    s+='<div class="section-head"><span class="section-label">知识图谱</span><a class="section-link" href="#/graph">查看全部 &rarr;</a></div>';
+    s+='<div class="graph-card" id="dgWrap">';
+    if(graph.nodes.length<2)s+='<div class="graph-empty-msg">投喂更多知识，图谱会生长</div>';
+    else s+='<canvas id="dgCanvas"></canvas>';
+    s+='<div class="graph-footer" id="dgLegend"></div></div>';
 
     // Recent
-    const entries = recent.entries || [];
-    h += '<div class="section-title"><span>最近活动</span></div>';
-    h += '<div class="activity-list">';
-    if (entries.length === 0) {
-      h += '<div class="activity-empty">暂无活动记录</div>';
-    } else {
-      entries.slice(0, 6).forEach(a => {
-        const dotClass = a.type || 'ingest';
-        const shortDate = (a.date || '').slice(5);
-        h += '<div class="activity-item"><span class="activity-dot ' + dotClass + '"></span><span class="activity-date">' + esc(shortDate) + '</span><span class="activity-type">' + esc(a.type) + '</span><span class="activity-title-text">' + esc(a.title) + '</span></div>';
-      });
-    }
-    h += '</div>';
-
-    // Stats bar
-    h += '<div class="stats-bar">';
-    h += '<span>' + stats.articles + ' 篇文章</span>';
-    h += '<span>' + stats.sources + ' 个来源</span>';
-    h += '<span>' + stats.topics + ' 个主题</span>';
-    if (stats.lastUpdate) h += '<span>最近更新 ' + stats.lastUpdate.slice(5) + '</span>';
-    h += '</div>';
-
-    h += '</div>';
-    container.innerHTML = h;
-
-    // Init chat
-    initChatEvents();
-    loadChatHistory();
-
-    // Init graph
-    if (graph.nodes.length >= 2) {
-      requestAnimationFrame(() => {
-        const canvas = document.getElementById('dashGraphCanvas');
-        if (canvas) initForceGraph(canvas, graph, false);
-      });
-    }
-  } catch (e) {
-    container.innerHTML = '<div class="empty-state"><h2>加载失败</h2><p>' + esc(e.message) + '</p></div>';
-  }
-}
-
-// ── Chat ──
-function buildChatUI() {
-  let h = '';
-  // History toggle
-  h += '<div class="chat-history-toggle' + (chatHistoryOpen ? ' open' : '') + '" onclick="toggleChatHistory()">';
-  h += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>';
-  h += '<span>对话历史</span>';
-  h += '<span class="chat-new-btn" onclick="event.stopPropagation();newChat()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 新对话</span>';
-  h += '</div>';
-  h += '<div class="chat-history-list' + (chatHistoryOpen ? ' open' : '') + '" id="chatHistoryList"></div>';
-
-  // Messages
-  h += '<div class="chat-messages" id="chatMessages">';
-  if (chatMessages.length === 0) {
-    h += '<div class="chat-welcome"><h2>基于知识库提问</h2><p>我会从你的知识库中检索相关内容来回答</p></div>';
-    h += '<div class="chat-suggestions" id="chatSuggestions">';
-    h += '<span class="chat-suggestion" onclick="sendSuggestion(this)">知识库里有什么？</span>';
-    h += '<span class="chat-suggestion" onclick="sendSuggestion(this)">总结最近的内容</span>';
-    h += '<span class="chat-suggestion" onclick="sendSuggestion(this)">有哪些主题？</span>';
-    h += '</div>';
-  } else {
-    chatMessages.forEach(m => {
-      h += renderChatMessage(m);
+    const ent=recent.entries||[];
+    s+='<div class="section-head"><span class="section-label">最近活动</span></div>';
+    s+='<div class="activity-card">';
+    if(!ent.length)s+='<div class="activity-none">暂无记录</div>';
+    else ent.slice(0,6).forEach(a=>{
+      const c=a.type==='ingest'?'var(--green)':a.type==='query'?'var(--blue)':'var(--orange)';
+      s+='<div class="activity-row"><span class="activity-dot" style="background:'+c+'"></span><span class="activity-date">'+(a.date||'').slice(5)+'</span><span class="activity-label">'+h(a.title)+'</span></div>';
     });
+    s+='</div>';
+
+    // Stats
+    s+='<div class="stats-row"><span>'+stats.articles+' 篇文章</span><span>'+stats.sources+' 个来源</span><span>'+stats.topics+' 个主题</span>';
+    if(stats.lastUpdate)s+='<span>更新于 '+stats.lastUpdate.slice(5)+'</span>';
+    s+='</div>';
+
+    s+='</div>';
+    c.innerHTML=s;
+    initChat();
+    if(graph.nodes.length>=2)requestAnimationFrame(()=>{const cv=document.getElementById('dgCanvas');if(cv)initFG(cv,graph,false)});
+  }catch(e){c.innerHTML='<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败: '+h(e.message)+'</div>'}
+}
+
+/* ── Chat ── */
+function buildChat(){
+  let s='';
+  s+='<div class="chat-history-row"><a href="javascript:void(0)" onclick="newConv()">+ 新对话</a></div>';
+  if(!msgs.length){
+    s+='<div class="chat-greeting">你好</div>';
+    s+='<div class="chat-sub">基于你的知识库回答问题</div>';
+    s+='<div class="chat-pills"><span class="chat-pill" onclick="askPill(this)">知识库里有什么？</span><span class="chat-pill" onclick="askPill(this)">总结最近内容</span><span class="chat-pill" onclick="askPill(this)">有哪些主题？</span></div>';
+  }else{
+    s+='<div class="chat-msgs" id="chatMsgs">';
+    msgs.forEach(m=>s+=renderMsg(m));
+    s+='</div>';
   }
-  h += '</div>';
-
-  // Input
-  h += '<div class="chat-input-wrap">';
-  h += '<select class="chat-model-select" id="chatModelSelect"></select>';
-  h += '<textarea class="chat-input" id="chatInput" placeholder="问问你的知识库..." rows="1" onkeydown="chatKeydown(event)" oninput="autoGrow(this)"></textarea>';
-  h += '<button class="chat-send" id="chatSendBtn" onclick="sendChat()" disabled>';
-  h += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
-  h += '</button></div>';
-  return h;
+  s+='<div class="chat-composer-wrap"><div class="chat-composer">';
+  s+='<span class="chat-model-tag" id="chatModelTag" onclick="toggleModelDD()">选择模型</span>';
+  s+='<textarea class="chat-textarea" id="chatIn" placeholder="输入问题..." rows="1" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();sendMsg()}" oninput="this.style.height=\'auto\';this.style.height=Math.min(this.scrollHeight,140)+\'px\';$(\'chatSendBtn\').disabled=!this.value.trim()"></textarea>';
+  s+='<button class="chat-send-btn" id="chatSendBtn" onclick="sendMsg()" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>';
+  s+='</div>';
+  s+='<div class="chat-model-dropdown" id="chatModelDD"></div>';
+  s+='</div>';
+  return s;
 }
-
-function renderChatMessage(m) {
-  const cls = m.role === 'user' ? 'user' : 'assistant';
-  const avatar = m.role === 'user' ? 'U' : 'AI';
-  let content = m.role === 'assistant' ? renderInlineMd(m.content) : esc(m.content);
-  return '<div class="chat-msg ' + cls + '"><span class="chat-msg-avatar">' + avatar + '</span><div class="chat-msg-bubble">' + content + '</div></div>';
+function renderMsg(m){
+  const av=m.role==='user'?'你':'AI';
+  const body=m.role==='assistant'?fmtChat(m.content):h(m.content).replace(/\n/g,'<br>');
+  return'<div class="chat-msg '+m.role+'"><div class="chat-msg-avatar">'+av+'</div><div class="chat-msg-body">'+body+'</div></div>';
 }
-
-function renderInlineMd(text) {
-  if (!text) return '';
-  let h = text;
-  h = h.replace(/```[\s\S]*?```/g, m => {
-    const code = m.replace(/```\w*\n?/, '').replace(/\n?```$/, '');
-    return '<pre><code>' + esc(code) + '</code></pre>';
+function fmtChat(t){
+  if(!t)return'';
+  let s=t;
+  s=s.replace(/```[\s\S]*?```/g,m=>{const c=m.replace(/```\w*\n?/,'').replace(/\n?```$/,'');return'<pre><code>'+h(c)+'</code></pre>'});
+  s=s.replace(/`([^`]+)`/g,'<code>$1</code>');
+  s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  s=s.replace(/\[([^\]]+)\]\(([^)]+)\)/g,(m,l,u)=>{
+    if(/^https?:/.test(u))return'<a href="'+h(u)+'" target="_blank">'+h(l)+'</a>';
+    if(u.endsWith('.md'))return'<a href="#/article/'+h(u)+'">'+h(l)+'</a>';
+    return'<a href="'+h(u)+'">'+h(l)+'</a>';
   });
-  h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
-  h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  h = h.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, label, href) => {
-    if (/^https?:/.test(href)) return '<a href="' + esc(href) + '" target="_blank">' + esc(label) + '</a>';
-    if (href.endsWith('.md')) return '<a href="#/article/' + esc(href) + '">' + esc(label) + '</a>';
-    return '<a href="' + esc(href) + '">' + esc(label) + '</a>';
+  s=s.replace(/\n/g,'<br>');
+  return s;
+}
+async function initChat(){
+  await loadModels('chatModelDD','chatModelTag');
+}
+function askPill(el){$('chatIn').value=el.textContent;$('chatSendBtn').disabled=false;sendMsg()}
+async function sendMsg(){
+  const inp=$('chatIn');const t=inp.value.trim();if(!t||chatBusy)return;
+  chatBusy=true;$('chatSendBtn').disabled=true;
+  msgs.push({role:'user',content:t});
+  const mc=$('chatMsgs');const welcome=document.querySelector('.chat-greeting');
+  if(welcome){
+    const area=$('chatArea');
+    // Remove welcome, rebuild with messages
+    area.innerHTML=buildChat();initChat();
+    const mc2=$('chatMsgs');if(mc2)mc2.scrollTop=mc2.scrollHeight;
+  }else{
+    if(mc){mc.innerHTML+=renderMsg({role:'user',content:t});mc.innerHTML+='<div class="chat-msg assistant" id="chatTyp"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body"><div class="chat-typing-dots"><span></span><span></span><span></span></div></div></div>';mc.scrollTop=mc.scrollHeight}
+  }
+  inp.value='';inp.style.height='auto';
+  try{
+    let res;
+    if(!convId){res=await post('/api/chat/new',{firstMessage:t});convId=res.conversation.id;msgs.push(res.message)}
+    else{res=await post('/api/chat/'+convId+'/message',{content:t});msgs.push(res.message)}
+    const typ=document.getElementById('chatTyp');if(typ)typ.remove();
+    const mc3=$('chatMsgs');if(mc3){mc3.innerHTML+=renderMsg(msgs[msgs.length-1]);mc3.scrollTop=mc3.scrollHeight}
+  }catch(e){
+    const typ=document.getElementById('chatTyp');if(typ)typ.remove();
+    const mc3=$('chatMsgs');if(mc3)mc3.innerHTML+='<div class="chat-msg assistant"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body" style="color:var(--red)">错误: '+h(e.message)+'</div></div>';
+  }
+  chatBusy=false;$('chatSendBtn').disabled=false;
+}
+function newConv(){convId=null;msgs=[];if(cv==='dashboard'){const a=$('chatArea');if(a){a.innerHTML=buildChat();initChat()}}}
+async function loadModels(ddId,tagId){
+  try{
+    const s=sCache||await api('/api/settings');sCache=s;
+    const dd=$(ddId);const tag=$(tagId);if(!dd||!tag)return;
+    let html='';
+    if(s.providers){for(const[k,v]of Object.entries(s.providers)){
+      if(k==='custom')continue;
+      v.models.forEach(m=>{const active=(s.provider===k&&s.model===m)?' active':'';html+='<div class="chat-model-opt'+active+'" data-v="'+k+'|'+m+'" onclick="pickModel(this,\''+ddId+'\',\''+tagId+'\')">'+h(m)+'</div>'});
+    }}
+    dd.innerHTML=html;
+    tag.textContent=s.model||'选择模型';
+  }catch{}
+}
+function toggleModelDD(){$('chatModelDD').classList.toggle('open')}
+function pickModel(el,ddId,tagId){
+  $(ddId).querySelectorAll('.chat-model-opt').forEach(o=>o.classList.remove('active'));
+  el.classList.add('active');
+  $(tagId).textContent=el.textContent;
+  $(ddId).classList.remove('open');
+}
+
+/* ── Article (contenteditable) ── */
+async function rArticle(c,p){
+  c.innerHTML='<div style="display:flex;align-items:center;justify-content:center;padding:60px;color:var(--fg-tertiary)"><div class="spin"></div></div>';
+  artPath=p;
+  try{
+    const res=await api('/api/wiki/article?path='+encodeURIComponent(p));
+    artMd=res.content||'';
+    const lines=artMd.split('\n');
+    let title='',bodyStart=0;
+    if(lines[0]&&lines[0].startsWith('#')){title=lines[0].replace(/^#+\s*/,'');bodyStart=1;while(bodyStart<lines.length&&!lines[bodyStart].trim())bodyStart++}
+    const bodyMd=lines.slice(bodyStart).join('\n');
+    const rendered=renderMd(bodyMd,p);
+
+    let s='<div class="page-article"><div class="page-article-inner">';
+    s+='<div class="article-actions"><button class="article-action-btn danger" onclick="showDel()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg> 删除</button></div>';
+    s+='<div class="article-title" contenteditable="true" id="artTitle" oninput="onArtChange()">'+h(title)+'</div>';
+    s+='<div class="article-body" contenteditable="true" id="artBody" oninput="onArtChange()">'+rendered+'</div>';
+    s+='</div></div>';
+    s+='<div class="article-save-indicator" id="saveInd"></div>';
+    c.innerHTML=s;
+    updSidebarPages();
+  }catch(e){c.innerHTML='<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败: '+h(e.message)+'</div>'}
+}
+
+function onArtChange(){
+  clearTimeout(saveT);
+  const ind=$('saveInd');if(ind){ind.textContent='编辑中...';ind.classList.add('show')}
+  saveT=setTimeout(autoSave,1500);
+}
+async function autoSave(){
+  const titleEl=$('artTitle'),bodyEl=$('artBody'),ind=$('saveInd');
+  if(!titleEl||!bodyEl)return;
+  if(ind){ind.textContent='保存中...';ind.classList.add('show')}
+  // Convert contenteditable HTML back to markdown
+  const title=titleEl.innerText.trim();
+  const bodyHtml=bodyEl.innerHTML;
+  const bodyMd=html2md(bodyHtml);
+  const fullMd=(title?'# '+title+'\n\n':'')+bodyMd;
+  try{
+    await put('/api/wiki/article',{path:artPath,content:fullMd});
+    artMd=fullMd;
+    if(ind){ind.textContent='已保存';setTimeout(()=>ind.classList.remove('show'),2000)}
+  }catch{if(ind){ind.textContent='保存失败';ind.style.color='var(--red)'}}
+}
+
+/* ── HTML to Markdown converter ── */
+function html2md(html){
+  const div=document.createElement('div');div.innerHTML=html;
+  return node2md(div).trim();
+}
+function node2md(node){
+  let md='';
+  for(const child of node.childNodes){
+    if(child.nodeType===3){md+=child.textContent;continue}
+    if(child.nodeType!==1)continue;
+    const tag=child.tagName;
+    if(tag==='BR'){md+='\n';continue}
+    if(tag==='P'){md+='\n\n'+node2md(child);continue}
+    if(tag==='DIV'){md+='\n'+node2md(child);continue}
+    if(/^H[1-6]$/.test(tag)){const lvl=tag[1];md+='\n\n'+'#'.repeat(+lvl)+' '+child.innerText;continue}
+    if(tag==='STRONG'||tag==='B'){md+='**'+node2md(child)+'**';continue}
+    if(tag==='EM'||tag==='I'){md+='*'+node2md(child)+'*';continue}
+    if(tag==='CODE'){if(child.parentElement&&child.parentElement.tagName==='PRE')continue;md+='`'+child.textContent+'`';continue}
+    if(tag==='PRE'){const code=child.querySelector('code');md+='\n\n```\n'+(code?code.textContent:child.textContent)+'\n```';continue}
+    if(tag==='A'){const href=child.getAttribute('href')||'';md+='['+child.innerText+']('+href+')';continue}
+    if(tag==='IMG'){md+='!['+child.alt+']('+child.src+')';continue}
+    if(tag==='BLOCKQUOTE'){const lines=node2md(child).split('\n');md+='\n\n'+lines.map(l=>'> '+l).join('\n');continue}
+    if(tag==='UL'){for(const li of child.children){if(li.tagName==='LI')md+='\n- '+node2md(li)}md+='\n';continue}
+    if(tag==='OL'){let n=1;for(const li of child.children){if(li.tagName==='LI'){md+='\n'+n+'. '+node2md(li);n++}}md+='\n';continue}
+    if(tag==='HR'){md+='\n\n---';continue}
+    if(tag==='TABLE'){md+='\n\n'+table2md(child);continue}
+    md+=node2md(child);
+  }
+  return md;
+}
+function table2md(table){
+  const rows=[];table.querySelectorAll('tr').forEach(tr=>{
+    const cells=[];tr.querySelectorAll('th,td').forEach(c=>cells.push(c.innerText.trim()));rows.push(cells);
   });
-  h = h.replace(/\n/g, '<br>');
-  return h;
+  if(!rows.length)return'';
+  let md='| '+rows[0].join(' | ')+' |\n| '+rows[0].map(()=>'---').join(' | ')+' |';
+  for(let i=1;i<rows.length;i++)md+='\n| '+rows[i].join(' | ')+' |';
+  return md;
 }
 
-function initChatEvents() {
-  const input = document.getElementById('chatInput');
-  if (input) {
-    input.addEventListener('input', () => {
-      document.getElementById('chatSendBtn').disabled = !input.value.trim();
+let delPath='';
+function showDel(){delPath=artPath;$('delConfirm').classList.add('open')}
+function closeDel(){$('delConfirm').classList.remove('open')}
+async function doDel(){closeDel();try{await del('/api/wiki/article?path='+encodeURIComponent(delPath));td=null;toast('已删除');go('#/browse')}catch(e){toast('删除失败')}}
+
+/* ── Browse ── */
+async function rBrowse(c){
+  c.innerHTML='<div style="padding:60px;text-align:center;color:var(--fg-tertiary)">...</div>';
+  try{
+    const tree=td||await api('/api/wiki/tree');td=tree;
+    if(!tree||!tree.length){c.innerHTML='<div class="page-browse"><div class="browse-heading">全部文章</div><div style="color:var(--fg-tertiary);font-size:14px">暂无文章，投喂知识后出现</div></div>';return}
+    let s='<div class="page-browse"><div class="browse-heading">全部文章</div>';
+    tree.forEach(t=>{
+      s+='<div class="browse-group"><div class="browse-group-head" onclick="this.parentElement.classList.toggle(\'closed\')"><span class="arr">&#9660;</span> '+h(t.name)+'<span class="browse-group-count">'+t.children.length+'</span></div><ul class="browse-group-list">';
+      t.children.forEach(ch=>{s+='<li><a href="#/article/'+h(ch.path)+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'+h(ch.title||ch.file)+'</a></li>'});
+      s+='</ul></div>';
     });
+    s+='</div>';c.innerHTML=s;
+  }catch(e){c.innerHTML='<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败</div>'}
+}
+
+/* ── Full Graph ── */
+async function rGraph(c){
+  c.innerHTML='<div style="padding:60px;text-align:center;color:var(--fg-tertiary)">...</div>';
+  try{
+    const g=gd||await api('/api/wiki/graph');gd=g;
+    const topics=[...new Set(g.nodes.map(n=>n.topic).filter(Boolean))];
+    let s='<div class="page-graph"><div class="graph-toolbar">';
+    s+='<button class="graph-toolbar-btn" onclick="gZoom(1.2)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>';
+    s+='<button class="graph-toolbar-btn" onclick="gZoom(0.8)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>';
+    topics.forEach(t=>{s+='<label class="graph-filter-label"><input type="checkbox" checked data-topic="'+h(t)+'" onchange="applyGF()">'+h(t)+'</label>'});
+    s+='<span class="graph-count">'+g.nodes.length+' 节点</span></div>';
+    s+='<div class="graph-canvas-wrap" id="fgWrap">';
+    if(g.nodes.length<2)s+='<div class="graph-empty-msg">需要更多内容</div>';
+    else s+='<canvas id="fgCanvas"></canvas>';
+    s+='</div></div>';
+    c.innerHTML=s;
+    if(g.nodes.length>=2)requestAnimationFrame(()=>{const cv=document.getElementById('fgCanvas');if(cv)initFG(cv,g,true)});
+  }catch(e){c.innerHTML='<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败</div>'}
+}
+
+/* ── Markdown Renderer ── */
+function renderMd(md,ap){
+  const lines=md.split('\n');let html='',inCode=false,cLines=[];
+  let inList=false,lt='',inBq=false,bqL=[],inTbl=false,tRows=[];
+  const aDir=ap?ap.split('/').slice(0,-1).join('/'):'';
+  function resLink(href){
+    if(/^https?:\/\//.test(href))return href;
+    if(!href.endsWith('.md'))return href;
+    let r=href;
+    if(href.startsWith('../')||href.startsWith('./')){
+      const b=aDir?aDir.split('/'):[];const p=href.split('/');const c=[...b];
+      for(const x of p){if(x==='..')c.pop();else if(x!=='.')c.push(x)}
+      r=c.join('/');
+    }else if(aDir&&!href.includes('/'))r=aDir+'/'+href;
+    if(r.includes('raw/'))return href;
+    return'#/article/'+r;
   }
-  loadModelSelect('chatModelSelect');
-}
-
-function autoGrow(el) {
-  el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-}
-
-function chatKeydown(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
-}
-
-function sendSuggestion(el) {
-  const input = document.getElementById('chatInput');
-  input.value = el.textContent;
-  document.getElementById('chatSendBtn').disabled = false;
-  sendChat();
-}
-
-async function sendChat() {
-  const input = document.getElementById('chatInput');
-  const text = input.value.trim();
-  if (!text || chatLoading) return;
-
-  chatLoading = true;
-  const sendBtn = document.getElementById('chatSendBtn');
-  sendBtn.disabled = true;
-
-  // Add user message
-  chatMessages.push({ role: 'user', content: text });
-  const msgContainer = document.getElementById('chatMessages');
-  // Clear welcome if first message
-  const welcome = msgContainer.querySelector('.chat-welcome');
-  if (welcome) welcome.remove();
-  const suggestions = msgContainer.querySelector('.chat-suggestions');
-  if (suggestions) suggestions.remove();
-
-  msgContainer.innerHTML += renderChatMessage({ role: 'user', content: text });
-  input.value = '';
-  input.style.height = 'auto';
-
-  // Typing indicator
-  msgContainer.innerHTML += '<div class="chat-msg assistant" id="chatTyping"><span class="chat-msg-avatar">AI</span><div class="chat-msg-bubble"><div class="chat-typing"><span></span><span></span><span></span></div></div></div>';
-  msgContainer.scrollTop = msgContainer.scrollHeight;
-
-  try {
-    let result;
-    const model = document.getElementById('chatModelSelect');
-    const modelVal = model ? model.value : '';
-
-    if (!chatConvId) {
-      result = await apiPost('/api/chat/new', { firstMessage: text, model: modelVal });
-      chatConvId = result.conversation.id;
-      const assistantMsg = result.message;
-      chatMessages.push(assistantMsg);
-    } else {
-      result = await apiPost('/api/chat/' + chatConvId + '/message', { content: text });
-      chatMessages.push(result.message);
-    }
-
-    // Remove typing, add response
-    const typing = document.getElementById('chatTyping');
-    if (typing) typing.remove();
-    msgContainer.innerHTML += renderChatMessage(chatMessages[chatMessages.length - 1]);
-    msgContainer.scrollTop = msgContainer.scrollHeight;
-  } catch (e) {
-    const typing = document.getElementById('chatTyping');
-    if (typing) typing.remove();
-    msgContainer.innerHTML += '<div class="chat-msg assistant"><span class="chat-msg-avatar">AI</span><div class="chat-msg-bubble" style="color:var(--red)">出错了: ' + esc(e.message) + '</div></div>';
+  function inl(t){
+    t=t.replace(/!\[([^\]]*)\]\(([^)]+)\)/g,'<img src="$2" alt="$1">');
+    t=t.replace(/\[([^\]]+)\]\(([^)]+)\)/g,(m,l,u)=>{const r=resLink(u);const ext=/^https?:/.test(r);return'<a href="'+h(r)+'"'+(ext?' target="_blank"':'')+'>'+h(l)+'</a>'});
+    t=t.replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>');
+    t=t.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+    t=t.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g,'<em>$1</em>');
+    t=t.replace(/`([^`]+)`/g,'<code>$1</code>');
+    return t;
   }
+  function fBq(){if(bqL.length){html+='<blockquote>'+bqL.map(l=>'<p>'+inl(l)+'</p>').join('')+'</blockquote>';bqL=[]}inBq=false}
+  function fTbl(){if(tRows.length>=2){html+='<div class="table-wrap"><table><thead><tr>'+tRows[0].map(c=>'<th>'+inl(c.trim())+'</th>').join('')+'</tr></thead><tbody>';for(let i=2;i<tRows.length;i++)html+='<tr>'+tRows[i].map(c=>'<td>'+inl(c.trim())+'</td>').join('')+'</tr>';html+='</tbody></table></div>'}tRows=[];inTbl=false}
+  function fList(){if(inList){html+=lt==='ol'?'</ol>':'</ul>';inList=false}}
 
-  chatLoading = false;
-  sendBtn.disabled = false;
-}
-
-function newChat() {
-  chatConvId = null;
-  chatMessages = [];
-  if (currentView === 'dashboard') {
-    const area = document.getElementById('chatArea');
-    if (area) area.innerHTML = buildChatUI();
-    initChatEvents();
-    loadChatHistory();
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];
+    if(line.trimStart().startsWith('```')){
+      if(inCode){html+='<pre><code>'+h(cLines.join('\n'))+'</code></pre>';inCode=false;cLines=[];continue}
+      else{fBq();fTbl();fList();inCode=true;continue}
+    }
+    if(inCode){cLines.push(line);continue}
+    if(/^\|(.+)\|$/.test(line.trim())){fBq();fList();tRows.push(line.trim().slice(1,-1).split('|'));inTbl=true;continue}
+    else if(inTbl)fTbl();
+    if(/^>\s?/.test(line)){fList();fTbl();bqL.push(line.replace(/^>\s?/,''));inBq=true;continue}
+    else if(inBq)fBq();
+    const hm=line.match(/^(#{1,4})\s+(.+)/);
+    if(hm){fList();fTbl();fBq();html+='<h'+hm[1].length+'>'+inl(hm[2].trim())+'</h'+hm[1].length+'>';continue}
+    if(/^---+$/.test(line.trim())){fList();fTbl();fBq();html+='<hr>';continue}
+    if(/^\s*[-*+]\s+/.test(line)){fTbl();fBq();if(!inList||lt!=='ul'){fList();html+='<ul>';inList=true;lt='ul'}html+='<li>'+inl(line.replace(/^\s*[-*+]\s+/,''))+'</li>';continue}
+    if(/^\s*\d+\.\s+/.test(line)){fTbl();fBq();if(!inList||lt!=='ol'){fList();html+='<ol>';inList=true;lt='ol'}html+='<li>'+inl(line.replace(/^\s*\d+\.\s+/,''))+'</li>';continue}
+    if(inList&&!line.trim())fList();
+    if(!line.trim())continue;
+    fList();fTbl();fBq();
+    html+='<p>'+inl(line)+'</p>';
   }
-}
-
-function toggleChatHistory() {
-  chatHistoryOpen = !chatHistoryOpen;
-  const toggle = document.querySelector('.chat-history-toggle');
-  const list = document.getElementById('chatHistoryList');
-  if (toggle) toggle.classList.toggle('open', chatHistoryOpen);
-  if (list) list.classList.toggle('open', chatHistoryOpen);
-  if (chatHistoryOpen) loadChatHistory();
-}
-
-async function loadChatHistory() {
-  const list = document.getElementById('chatHistoryList');
-  if (!list) return;
-  try {
-    const data = await api('/api/chat/list');
-    const convs = data.conversations || [];
-    if (convs.length === 0) {
-      list.innerHTML = '<div style="padding:12px;text-align:center;font-size:12px;color:var(--fg-tertiary)">暂无对话</div>';
-      return;
-    }
-    list.innerHTML = convs.slice(0, 10).map(c => {
-      const active = c.id === chatConvId ? ' active' : '';
-      return '<div class="chat-history-item' + active + '" onclick="loadConversation(\'' + c.id + '\')">' +
-        '<span class="chat-h-title">' + esc(c.title) + '</span>' +
-        '<button class="chat-h-delete icon-btn" onclick="event.stopPropagation();deleteConversation(\'' + c.id + '\')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>';
-    }).join('');
-  } catch {}
-}
-
-async function loadConversation(id) {
-  try {
-    const conv = await api('/api/chat/' + id);
-    chatConvId = id;
-    chatMessages = conv.messages || [];
-    const area = document.getElementById('chatArea');
-    if (area) area.innerHTML = buildChatUI();
-    initChatEvents();
-    chatHistoryOpen = true;
-    loadChatHistory();
-  } catch (e) { notify('加载对话失败'); }
-}
-
-async function deleteConversation(id) {
-  try {
-    await apiDelete('/api/chat/' + id);
-    if (chatConvId === id) newChat();
-    else loadChatHistory();
-  } catch {}
-}
-
-// ── Article ──
-async function renderArticle(container, path) {
-  container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-  articlePath = path;
-  try {
-    const res = await api('/api/wiki/article?path=' + encodeURIComponent(path));
-    articleContent = res.content || '';
-    articleEditMode = true;
-
-    let h = '<div class="article-view"><div class="article-container">';
-    // Toolbar
-    h += '<div class="article-toolbar">';
-    h += '<div class="article-toolbar-left">';
-    h += '<button class="tab-btn active" id="tabEdit" onclick="switchArticleMode(\'edit\')">编辑</button>';
-    h += '<button class="tab-btn" id="tabPreview" onclick="switchArticleMode(\'preview\')">预览</button>';
-    h += '</div>';
-    h += '<div class="article-toolbar-right">';
-    h += '<span class="save-status" id="saveStatus"></span>';
-    h += '<button class="btn-danger" onclick="showDeleteConfirm()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg> 删除</button>';
-    h += '</div></div>';
-
-    // Editor
-    h += '<div id="articleEditorWrap"><textarea class="editor-area" id="articleEditor" oninput="onArticleEdit()">' + esc(articleContent) + '</textarea></div>';
-    // Preview (hidden)
-    h += '<div id="articlePreviewWrap" style="display:none"><div class="article-main"><div class="article" id="articlePreview"></div></div></div>';
-
-    h += '</div></div>';
-    container.innerHTML = h;
-  } catch (e) {
-    container.innerHTML = '<div class="empty-state"><h2>文章加载失败</h2><p>' + esc(e.message) + '</p></div>';
-  }
-}
-
-function switchArticleMode(mode) {
-  const editWrap = document.getElementById('articleEditorWrap');
-  const previewWrap = document.getElementById('articlePreviewWrap');
-  const tabEdit = document.getElementById('tabEdit');
-  const tabPreview = document.getElementById('tabPreview');
-  if (mode === 'edit') {
-    editWrap.style.display = '';
-    previewWrap.style.display = 'none';
-    tabEdit.classList.add('active');
-    tabPreview.classList.remove('active');
-    articleEditMode = true;
-  } else {
-    // Render preview
-    const editor = document.getElementById('articleEditor');
-    articleContent = editor.value;
-    document.getElementById('articlePreview').innerHTML = renderMarkdown(articleContent, articlePath);
-    // Copy buttons
-    document.querySelectorAll('#articlePreview pre').forEach(pre => {
-      const btn = document.createElement('button');
-      btn.className = 'code-copy-btn'; btn.textContent = '复制';
-      btn.onclick = () => { navigator.clipboard.writeText(pre.textContent).then(() => { btn.textContent = '已复制'; btn.classList.add('copied'); setTimeout(() => { btn.textContent = '复制'; btn.classList.remove('copied'); }, 1500); }); };
-      pre.appendChild(btn);
-    });
-    editWrap.style.display = 'none';
-    previewWrap.style.display = '';
-    tabEdit.classList.remove('active');
-    tabPreview.classList.add('active');
-    articleEditMode = false;
-  }
-}
-
-function onArticleEdit() {
-  clearTimeout(saveTimer);
-  const status = document.getElementById('saveStatus');
-  if (status) { status.textContent = '未保存'; status.className = 'save-status'; }
-  saveTimer = setTimeout(autoSaveArticle, 1500);
-}
-
-async function autoSaveArticle() {
-  const editor = document.getElementById('articleEditor');
-  if (!editor) return;
-  const status = document.getElementById('saveStatus');
-  if (status) { status.textContent = '保存中...'; status.className = 'save-status saving'; }
-  try {
-    await apiPut('/api/wiki/article', { path: articlePath, content: editor.value });
-    articleContent = editor.value;
-    if (status) { status.textContent = '已保存'; status.className = 'save-status saved'; }
-    setTimeout(() => { if (status && status.textContent === '已保存') status.textContent = ''; }, 3000);
-  } catch (e) {
-    if (status) { status.textContent = '保存失败'; status.className = 'save-status'; status.style.color = 'var(--red)'; }
-  }
-}
-
-let pendingDeletePath = '';
-function showDeleteConfirm() {
-  pendingDeletePath = articlePath;
-  document.getElementById('deleteConfirm').classList.add('open');
-}
-function closeDeleteConfirm() { document.getElementById('deleteConfirm').classList.remove('open'); }
-async function confirmDelete() {
-  closeDeleteConfirm();
-  try {
-    await apiDelete('/api/wiki/article?path=' + encodeURIComponent(pendingDeletePath));
-    treeData = null;
-    notify('已删除');
-    navigate('#/browse');
-  } catch (e) { notify('删除失败: ' + e.message); }
-}
-
-// ── Browse ──
-async function renderBrowse(container) {
-  container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-  try {
-    const tree = treeData || await api('/api/wiki/tree');
-    treeData = tree;
-    if (!tree || tree.length === 0) {
-      container.innerHTML = '<div class="browse-view"><div class="empty-state"><h2>暂无文章</h2><p>投喂知识后，文章将出现在这里</p><button class="btn-primary" onclick="openIngest()">投喂新知识</button></div></div>';
-      return;
-    }
-    let h = '<div class="browse-view"><h2 style="font-size:18px;font-weight:600;margin-bottom:16px;">全部文章</h2>';
-    tree.forEach(topic => {
-      h += '<div class="browse-topic">';
-      h += '<div class="browse-topic-head" onclick="this.parentElement.classList.toggle(\'collapsed\')"><span class="arrow">&#9660;</span><span>' + esc(topic.name) + '</span><span class="browse-topic-count">' + topic.children.length + ' 篇</span></div>';
-      h += '<ul class="browse-topic-list">';
-      topic.children.forEach(c => {
-        h += '<li><a href="#/article/' + esc(c.path) + '">' + esc(c.title || c.file) + '</a></li>';
-      });
-      h += '</ul></div>';
-    });
-    h += '</div>';
-    container.innerHTML = h;
-  } catch (e) {
-    container.innerHTML = '<div class="empty-state"><h2>加载失败</h2><p>' + esc(e.message) + '</p></div>';
-  }
-}
-
-// ── Full Graph ──
-async function renderGraphView(container) {
-  container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-  try {
-    const graph = graphData || await api('/api/wiki/graph');
-    graphData = graph;
-    const topics = [...new Set(graph.nodes.map(n => n.topic).filter(Boolean))];
-    let h = '<div class="graph-view">';
-    h += '<div class="graph-controls">';
-    h += '<button class="icon-btn" onclick="graphZoom(1.2)" title="放大"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>';
-    h += '<button class="icon-btn" onclick="graphZoom(0.8)" title="缩小"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>';
-    h += '<div class="graph-filter-wrap" id="graphFilters">';
-    topics.forEach(t => { h += '<label class="graph-filter-item"><input type="checkbox" checked data-topic="' + esc(t) + '" onchange="applyGraphFilter()"> ' + esc(t) + '</label>'; });
-    h += '</div>';
-    h += '<span class="graph-node-count">' + graph.nodes.length + ' 节点</span></div>';
-    h += '<div class="graph-full-canvas-wrap" id="fullGraphWrap">';
-    if (graph.nodes.length < 2) {
-      h += '<div class="graph-empty"><div>投喂更多知识，图谱会逐渐生长</div></div>';
-    } else {
-      h += '<canvas id="fullGraphCanvas"></canvas>';
-    }
-    h += '</div></div>';
-    container.innerHTML = h;
-    if (graph.nodes.length >= 2) {
-      requestAnimationFrame(() => {
-        const canvas = document.getElementById('fullGraphCanvas');
-        if (canvas) initForceGraph(canvas, graph, true);
-      });
-    }
-  } catch (e) {
-    container.innerHTML = '<div class="empty-state"><h2>加载失败</h2><p>' + esc(e.message) + '</p></div>';
-  }
-}
-
-// ── Markdown Renderer ──
-function renderMarkdown(md, artPath) {
-  const lines = md.split('\n');
-  let html = '', inCode = false, codeLang = '', codeLines = [], inList = false, listType = '';
-  let inBlockquote = false, bqLines = [], inTable = false, tableRows = [];
-  const artDir = artPath ? artPath.split('/').slice(0, -1).join('/') : '';
-
-  function resolveLink(href) {
-    if (/^https?:\/\//.test(href)) return href;
-    if (!href.endsWith('.md')) return href;
-    let resolved = href;
-    if (href.startsWith('../') || href.startsWith('./')) {
-      const base = artDir ? artDir.split('/') : [];
-      const parts = href.split('/');
-      const combined = [...base];
-      for (const p of parts) { if (p === '..') combined.pop(); else if (p !== '.') combined.push(p); }
-      resolved = combined.join('/');
-    } else if (artDir && !href.includes('/')) { resolved = artDir + '/' + href; }
-    if (resolved.includes('raw/')) return href;
-    return '#/article/' + resolved;
-  }
-
-  function inl(text) {
-    text = text.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
-    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, label, href) => {
-      const r = resolveLink(href);
-      const ext = /^https?:/.test(r);
-      return '<a href="' + esc(r) + '"' + (ext ? ' target="_blank" rel="noopener"' : '') + '>' + esc(label) + '</a>';
-    });
-    text = text.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
-    text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    text = text.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
-    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
-    return text;
-  }
-
-  function flushBq() { if (bqLines.length) { html += '<blockquote>' + bqLines.map(l => '<p>' + inl(l) + '</p>').join('') + '</blockquote>'; bqLines = []; } inBlockquote = false; }
-  function flushTable() { if (tableRows.length >= 2) { html += '<div class="table-wrap"><table><thead><tr>'; tableRows[0].forEach(c => html += '<th>' + inl(c.trim()) + '</th>'); html += '</tr></thead><tbody>'; for (let i = 2; i < tableRows.length; i++) { html += '<tr>'; tableRows[i].forEach(c => html += '<td>' + inl(c.trim()) + '</td>'); html += '</tr>'; } html += '</tbody></table></div>'; } tableRows = []; inTable = false; }
-  function flushList() { if (inList) { html += listType === 'ol' ? '</ol>' : '</ul>'; inList = false; } }
-
-  // Parse metadata lines
-  let metaHtml = '', metaDone = false;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    if (line.trimStart().startsWith('```')) {
-      if (inCode) { html += '<pre><code>' + esc(codeLines.join('\n')) + '</code></pre>'; inCode = false; codeLines = []; continue; }
-      else { flushBq(); flushTable(); flushList(); codeLang = line.trim().slice(3); inCode = true; continue; }
-    }
-    if (inCode) { codeLines.push(line); continue; }
-
-    // Meta lines at start
-    if (!metaDone && i < 10 && /^>\s*(?:来源|原文|Source|Raw|Updated|Published|Collected|Date)[：:]/.test(line)) {
-      const text = line.replace(/^>\s*/, '');
-      metaHtml += (metaHtml ? '<br>' : '') + inl(text);
-      continue;
-    }
-    if (metaHtml && !(/^>\s*(?:来源|原文|Source|Raw)[：:]/.test(line))) {
-      html += '<div class="article-meta">' + metaHtml + '</div>';
-      metaHtml = ''; metaDone = true;
-    }
-
-    if (/^\|(.+)\|$/.test(line.trim())) {
-      flushBq(); flushList();
-      tableRows.push(line.trim().slice(1, -1).split('|'));
-      inTable = true; continue;
-    } else if (inTable) { flushTable(); }
-
-    if (/^>\s?/.test(line)) { flushList(); flushTable(); bqLines.push(line.replace(/^>\s?/, '')); inBlockquote = true; continue; }
-    else if (inBlockquote) { flushBq(); }
-
-    const hm = line.match(/^(#{1,4})\s+(.+)/);
-    if (hm) {
-      flushList(); flushTable(); flushBq();
-      if (metaHtml) { html += '<div class="article-meta">' + metaHtml + '</div>'; metaHtml = ''; metaDone = true; }
-      const lvl = hm[1].length;
-      html += '<h' + lvl + '>' + inl(hm[2].trim()) + '</h' + lvl + '>';
-      continue;
-    }
-
-    if (/^---+$/.test(line.trim())) { flushList(); flushTable(); flushBq(); html += '<hr>'; continue; }
-
-    if (/^\s*[-*]\s+\[[ xX]\]/.test(line)) {
-      if (!inList || listType !== 'ul') { flushList(); html += '<ul>'; inList = true; listType = 'ul'; }
-      const checked = /\[[xX]\]/.test(line);
-      html += '<li class="task-item"><input type="checkbox" disabled' + (checked ? ' checked' : '') + '>' + inl(line.replace(/^\s*[-*]\s+\[[ xX]\]\s*/, '')) + '</li>';
-      continue;
-    }
-    if (/^\s*[-*+]\s+/.test(line)) {
-      flushTable(); flushBq();
-      if (!inList || listType !== 'ul') { flushList(); html += '<ul>'; inList = true; listType = 'ul'; }
-      html += '<li>' + inl(line.replace(/^\s*[-*+]\s+/, '')) + '</li>'; continue;
-    }
-    if (/^\s*\d+\.\s+/.test(line)) {
-      flushTable(); flushBq();
-      if (!inList || listType !== 'ol') { flushList(); html += '<ol>'; inList = true; listType = 'ol'; }
-      html += '<li>' + inl(line.replace(/^\s*\d+\.\s+/, '')) + '</li>'; continue;
-    }
-    if (inList && line.trim() === '') { flushList(); }
-    if (line.trim() === '') continue;
-    flushList(); flushTable(); flushBq();
-    if (metaHtml) { html += '<div class="article-meta">' + metaHtml + '</div>'; metaHtml = ''; metaDone = true; }
-    html += '<p>' + inl(line) + '</p>';
-  }
-  if (inCode) html += '<pre><code>' + esc(codeLines.join('\n')) + '</code></pre>';
-  if (metaHtml) html += '<div class="article-meta">' + metaHtml + '</div>';
-  flushList(); flushTable(); flushBq();
+  if(inCode)html+='<pre><code>'+h(cLines.join('\n'))+'</code></pre>';
+  fList();fTbl();fBq();
   return html;
 }
 
-// ── Force Graph ──
-const TOPIC_COLORS = ['#3b82f6','#ef4444','#22c55e','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316','#14b8a6','#6366f1'];
-let graphState = null;
-
-function initForceGraph(canvas, data, fullPage) {
-  cancelGraphAnim();
-  const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-  const rect = canvas.parentElement.getBoundingClientRect();
-  canvas.width = rect.width * dpr;
-  canvas.height = (fullPage ? rect.height : 240) * dpr;
-  canvas.style.width = rect.width + 'px';
-  canvas.style.height = (fullPage ? rect.height : 240) + 'px';
-  ctx.scale(dpr, dpr);
-  const W = rect.width, H = fullPage ? rect.height : 240;
-
-  const topics = [...new Set(data.nodes.map(n => n.topic).filter(Boolean))];
-  const tcm = {}; topics.forEach((t, i) => tcm[t] = TOPIC_COLORS[i % TOPIC_COLORS.length]);
-
-  // Legend
-  if (!fullPage) {
-    const leg = document.getElementById('dashGraphLegend');
-    if (leg) leg.innerHTML = topics.map(t => '<span class="graph-legend-item"><span class="graph-legend-dot" style="background:' + tcm[t] + '"></span>' + esc(t) + '</span>').join('');
+/* ── Force Graph ── */
+const TC=['#3b82f6','#ef4444','#22c55e','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316','#14b8a6','#6366f1'];
+let gs=null;
+function initFG(canvas,data,full){
+  cancelGA();const ctx=canvas.getContext('2d');const dpr=window.devicePixelRatio||1;
+  const rect=canvas.parentElement.getBoundingClientRect();
+  canvas.width=rect.width*dpr;canvas.height=(full?rect.height:220)*dpr;
+  canvas.style.width=rect.width+'px';canvas.style.height=(full?rect.height:220)+'px';
+  ctx.scale(dpr,dpr);const W=rect.width,H=full?rect.height:220;
+  const topics=[...new Set(data.nodes.map(n=>n.topic).filter(Boolean))];
+  const tcm={};topics.forEach((t,i)=>tcm[t]=TC[i%TC.length]);
+  if(!full){const lg=document.getElementById('dgLegend');if(lg)lg.innerHTML=topics.map(t=>'<span class="graph-footer-item"><span class="graph-footer-dot" style="background:'+tcm[t]+'"></span>'+h(t)+'</span>').join('')}
+  const cc={};data.nodes.forEach(n=>cc[n.id]=0);data.edges.forEach(e=>{cc[e.source]=(cc[e.source]||0)+1;cc[e.target]=(cc[e.target]||0)+1});
+  const nodes=data.nodes.map((n,i)=>{const a=(i/data.nodes.length)*Math.PI*2;const r=Math.min(W,H)*0.3;return{...n,x:W/2+Math.cos(a)*r*(0.5+Math.random()*0.5),y:H/2+Math.sin(a)*r*(0.5+Math.random()*0.5),vx:0,vy:0,radius:Math.max(4,Math.min(14,4+(cc[n.id]||0)*2)),color:tcm[n.topic]||'#94a3b8'}});
+  const nm={};nodes.forEach(n=>nm[n.id]=n);
+  const edges=data.edges.filter(e=>nm[e.source]&&nm[e.target]).map(e=>({source:nm[e.source],target:nm[e.target]}));
+  let zoom=1,px=0,py=0,hov=null,drag=null,dsx=0,dsy=0,pan=false,psx=0,psy=0,pox=0,poy=0,fc=0,settled=false;
+  gs={zoom,px,py,nodes,edges,canvas,full,data,tcm};
+  function s2w(sx,sy){return{x:(sx-px)/zoom,y:(sy-py)/zoom}}
+  function sim(){
+    if(settled)return;const al=Math.max(0.01,1-fc/250);
+    for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){const a=nodes[i],b=nodes[j];let dx=b.x-a.x,dy=b.y-a.y,d=Math.sqrt(dx*dx+dy*dy)||1;const f=800/(d*d)*al;a.vx-=dx/d*f;a.vy-=dy/d*f;b.vx+=dx/d*f;b.vy+=dy/d*f}
+    for(const e of edges){const dx=e.target.x-e.source.x,dy=e.target.y-e.source.y,d=Math.sqrt(dx*dx+dy*dy)||1;const f=(d-80)*0.02*al;e.source.vx+=dx/d*f;e.source.vy+=dy/d*f;e.target.vx-=dx/d*f;e.target.vy-=dy/d*f}
+    let mv=0;for(const n of nodes){n.vx+=(W/2-n.x)*0.01*al;n.vy+=(H/2-n.y)*0.01*al;if(n===drag)continue;n.vx*=0.85;n.vy*=0.85;n.x+=n.vx;n.y+=n.vy;n.x=Math.max(n.radius+10,Math.min(W-n.radius-10,n.x));n.y=Math.max(n.radius+10,Math.min(H-n.radius-10,n.y));mv+=Math.abs(n.vx)+Math.abs(n.vy)}
+    fc++;if(fc>250||mv<0.1)settled=true;
   }
-
-  const cc = {};
-  data.nodes.forEach(n => cc[n.id] = 0);
-  data.edges.forEach(e => { cc[e.source] = (cc[e.source]||0)+1; cc[e.target] = (cc[e.target]||0)+1; });
-
-  const nodes = data.nodes.map((n, i) => {
-    const a = (i / data.nodes.length) * Math.PI * 2;
-    const r = Math.min(W, H) * 0.3;
-    return { ...n, x: W/2 + Math.cos(a)*r*(0.5+Math.random()*0.5), y: H/2 + Math.sin(a)*r*(0.5+Math.random()*0.5), vx: 0, vy: 0, radius: Math.max(4, Math.min(14, 4 + (cc[n.id]||0)*2)), color: tcm[n.topic] || '#94a3b8' };
-  });
-  const nm = {}; nodes.forEach(n => nm[n.id] = n);
-  const edges = data.edges.filter(e => nm[e.source] && nm[e.target]).map(e => ({ source: nm[e.source], target: nm[e.target], type: e.type }));
-
-  let zoom = 1, panX = 0, panY = 0, hov = null, drag = null, dsx = 0, dsy = 0, isPan = false, psx = 0, psy = 0, posx = 0, posy = 0;
-  let fc = 0; const maxF = 250; let settled = false;
-  graphState = { zoom, panX, panY, nodes, edges, canvas, fullPage, data, tcm };
-
-  function s2w(sx, sy) { return { x: (sx-panX)/zoom, y: (sy-panY)/zoom }; }
-
-  function simulate() {
-    if (settled) return;
-    const alpha = Math.max(0.01, 1-fc/maxF);
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i+1; j < nodes.length; j++) {
-        const a = nodes[i], b = nodes[j];
-        let dx = b.x-a.x, dy = b.y-a.y, d = Math.sqrt(dx*dx+dy*dy)||1;
-        const f = 800/(d*d)*alpha, fx = dx/d*f, fy = dy/d*f;
-        a.vx -= fx; a.vy -= fy; b.vx += fx; b.vy += fy;
-      }
-    }
-    for (const e of edges) {
-      const dx = e.target.x-e.source.x, dy = e.target.y-e.source.y, d = Math.sqrt(dx*dx+dy*dy)||1;
-      const f = (d-80)*0.02*alpha, fx = dx/d*f, fy = dy/d*f;
-      e.source.vx += fx; e.source.vy += fy; e.target.vx -= fx; e.target.vy -= fy;
-    }
-    let mv = 0;
-    for (const n of nodes) {
-      n.vx += (W/2-n.x)*0.01*alpha; n.vy += (H/2-n.y)*0.01*alpha;
-      if (n === drag) continue;
-      n.vx *= 0.85; n.vy *= 0.85; n.x += n.vx; n.y += n.vy;
-      n.x = Math.max(n.radius+10, Math.min(W-n.radius-10, n.x));
-      n.y = Math.max(n.radius+10, Math.min(H-n.radius-10, n.y));
-      mv += Math.abs(n.vx)+Math.abs(n.vy);
-    }
-    fc++;
-    if (fc > maxF || mv < 0.1) settled = true;
-  }
-
-  function draw() {
-    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-    ctx.clearRect(0, 0, W, H);
-    ctx.save(); ctx.translate(panX, panY); ctx.scale(zoom, zoom);
-    for (const e of edges) {
-      ctx.beginPath(); ctx.moveTo(e.source.x, e.source.y); ctx.lineTo(e.target.x, e.target.y);
-      const hl = hov && (e.source === hov || e.target === hov);
-      ctx.strokeStyle = hl ? (dark ? 'rgba(255,255,255,0.35)' : 'rgba(30,41,59,0.25)') : (dark ? 'rgba(255,255,255,0.06)' : 'rgba(30,41,59,0.06)');
-      ctx.lineWidth = hl ? 1.5 : 1; ctx.stroke();
-    }
-    for (const n of nodes) {
-      const isH = n === hov;
-      const isC = hov && edges.some(e => (e.source===hov&&e.target===n)||(e.target===hov&&e.source===n));
-      const dim = hov && !isH && !isC;
-      ctx.beginPath(); ctx.arc(n.x, n.y, n.radius, 0, Math.PI*2);
-      ctx.fillStyle = dim ? (dark ? 'rgba(255,255,255,0.08)' : 'rgba(30,41,59,0.08)') : n.color;
-      ctx.globalAlpha = dim ? 0.3 : 1; ctx.fill(); ctx.globalAlpha = 1;
-      if (isH) { ctx.strokeStyle = dark ? '#fff' : '#1E293B'; ctx.lineWidth = 2; ctx.stroke(); }
-    }
-    if (hov) {
-      const text = hov.name || hov.label || hov.id;
-      ctx.font = '12px ' + getComputedStyle(document.body).fontFamily;
-      const tw = ctx.measureText(text).width;
-      const tx = hov.x-tw/2, ty = hov.y-hov.radius-14;
-      ctx.fillStyle = dark ? 'rgba(0,0,0,0.8)' : 'rgba(0,0,0,0.75)';
-      ctx.beginPath(); ctx.roundRect(tx-4, ty-14, tw+8, 20, 4); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.fillText(text, tx, ty);
-    }
+  function draw(){
+    const dk=document.documentElement.getAttribute('data-theme')==='dark';
+    ctx.clearRect(0,0,W,H);ctx.save();ctx.translate(px,py);ctx.scale(zoom,zoom);
+    for(const e of edges){ctx.beginPath();ctx.moveTo(e.source.x,e.source.y);ctx.lineTo(e.target.x,e.target.y);const hl=hov&&(e.source===hov||e.target===hov);ctx.strokeStyle=hl?(dk?'rgba(255,255,255,0.3)':'rgba(55,53,47,0.2)'):(dk?'rgba(255,255,255,0.05)':'rgba(55,53,47,0.06)');ctx.lineWidth=hl?1.5:1;ctx.stroke()}
+    for(const n of nodes){const isH=n===hov;const isC=hov&&edges.some(e=>(e.source===hov&&e.target===n)||(e.target===hov&&e.source===n));const dim=hov&&!isH&&!isC;ctx.beginPath();ctx.arc(n.x,n.y,n.radius,0,Math.PI*2);ctx.fillStyle=dim?(dk?'rgba(255,255,255,0.06)':'rgba(55,53,47,0.06)'):n.color;ctx.globalAlpha=dim?0.25:1;ctx.fill();ctx.globalAlpha=1;if(isH){ctx.strokeStyle=dk?'#fff':'#37352F';ctx.lineWidth=2;ctx.stroke()}}
+    if(hov){const text=hov.name||hov.label||hov.id;ctx.font='12px '+getComputedStyle(document.body).fontFamily;const tw=ctx.measureText(text).width;const tx=hov.x-tw/2,ty=hov.y-hov.radius-14;ctx.fillStyle=dk?'rgba(0,0,0,0.8)':'rgba(0,0,0,0.75)';ctx.beginPath();ctx.roundRect(tx-4,ty-14,tw+8,20,4);ctx.fill();ctx.fillStyle='#fff';ctx.fillText(text,tx,ty)}
     ctx.restore();
   }
-
-  function loop() { simulate(); draw(); if (!settled || hov || drag) graphAnimFrame = requestAnimationFrame(loop); }
-
-  canvas.addEventListener('mousemove', e => {
-    const r = canvas.getBoundingClientRect(); const mx = e.clientX-r.left, my = e.clientY-r.top;
-    if (drag) { const w = s2w(mx,my); drag.x = w.x; drag.y = w.y; drag.vx = 0; drag.vy = 0; draw(); return; }
-    if (isPan) { panX = posx+(mx-psx); panY = posy+(my-psy); graphState.panX = panX; graphState.panY = panY; draw(); return; }
-    const w = s2w(mx,my); let found = null;
-    for (const n of nodes) { const dx = w.x-n.x, dy = w.y-n.y; if (dx*dx+dy*dy < (n.radius+4)*(n.radius+4)) { found = n; break; } }
-    if (found !== hov) { hov = found; canvas.style.cursor = found ? 'pointer' : 'grab'; if (!settled) return; draw(); if (found && settled) { settled = false; graphAnimFrame = requestAnimationFrame(loop); } }
-  });
-  canvas.addEventListener('mousedown', e => {
-    const r = canvas.getBoundingClientRect(); const mx = e.clientX-r.left, my = e.clientY-r.top;
-    const w = s2w(mx,my);
-    for (const n of nodes) { const dx = w.x-n.x, dy = w.y-n.y; if (dx*dx+dy*dy < (n.radius+4)*(n.radius+4)) { drag = n; dsx = mx; dsy = my; canvas.style.cursor = 'grabbing'; return; } }
-    isPan = true; psx = mx; psy = my; posx = panX; posy = panY;
-  });
-  canvas.addEventListener('mouseup', e => {
-    if (drag) { const r = canvas.getBoundingClientRect(); const mx = e.clientX-r.left, my = e.clientY-r.top; if (Math.sqrt((mx-dsx)**2+(my-dsy)**2) < 4) navigate('#/article/' + drag.id); drag = null; canvas.style.cursor = hov ? 'pointer' : 'grab'; }
-    if (isPan) { isPan = false; canvas.style.cursor = 'grab'; }
-  });
-  canvas.addEventListener('mouseleave', () => { hov = null; drag = null; isPan = false; if (settled) draw(); });
-  canvas.addEventListener('wheel', e => {
-    e.preventDefault(); const r = canvas.getBoundingClientRect(); const mx = e.clientX-r.left, my = e.clientY-r.top;
-    const d = e.deltaY > 0 ? 0.9 : 1.1; const nz = Math.max(0.3, Math.min(5, zoom*d));
-    panX = mx-(mx-panX)*(nz/zoom); panY = my-(my-panY)*(nz/zoom); zoom = nz;
-    graphState.zoom = zoom; graphState.panX = panX; graphState.panY = panY; draw();
-  }, { passive: false });
-
-  graphAnimFrame = requestAnimationFrame(loop);
+  function loop(){sim();draw();if(!settled||hov||drag)gaf=requestAnimationFrame(loop)}
+  canvas.onmousemove=e=>{const r=canvas.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;if(drag){const w=s2w(mx,my);drag.x=w.x;drag.y=w.y;drag.vx=0;drag.vy=0;draw();return}if(pan){px=pox+(mx-psx);py=poy+(my-psy);gs.px=px;gs.py=py;draw();return}const w=s2w(mx,my);let found=null;for(const n of nodes){const dx=w.x-n.x,dy=w.y-n.y;if(dx*dx+dy*dy<(n.radius+4)**2){found=n;break}}if(found!==hov){hov=found;canvas.style.cursor=found?'pointer':'grab';if(!settled)return;draw();if(found&&settled){settled=false;gaf=requestAnimationFrame(loop)}}};
+  canvas.onmousedown=e=>{const r=canvas.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;const w=s2w(mx,my);for(const n of nodes){const dx=w.x-n.x,dy=w.y-n.y;if(dx*dx+dy*dy<(n.radius+4)**2){drag=n;dsx=mx;dsy=my;canvas.style.cursor='grabbing';return}}pan=true;psx=mx;psy=my;pox=px;poy=py};
+  canvas.onmouseup=e=>{if(drag){const r=canvas.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;if(Math.sqrt((mx-dsx)**2+(my-dsy)**2)<4)go('#/article/'+drag.id);drag=null;canvas.style.cursor=hov?'pointer':'grab'}if(pan){pan=false;canvas.style.cursor='grab'}};
+  canvas.onmouseleave=()=>{hov=null;drag=null;pan=false;if(settled)draw()};
+  canvas.onwheel=e=>{e.preventDefault();const r=canvas.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;const d=e.deltaY>0?0.9:1.1;const nz=Math.max(0.3,Math.min(5,zoom*d));px=mx-(mx-px)*(nz/zoom);py=my-(my-py)*(nz/zoom);zoom=nz;gs.zoom=zoom;gs.px=px;gs.py=py;draw()};
+  gaf=requestAnimationFrame(loop);
 }
+function gZoom(f){if(!gs)return;const c=gs.canvas;const r=c.getBoundingClientRect();const cx=r.width/2,cy=r.height/2;const nz=Math.max(0.3,Math.min(5,gs.zoom*f));gs.px=cx-(cx-gs.px)*(nz/gs.zoom);gs.py=cy-(cy-gs.py)*(nz/gs.zoom);gs.zoom=nz;cancelGA();const el=gs.full?document.getElementById('fgCanvas'):document.getElementById('dgCanvas');if(el)initFG(el,gs.data,gs.full)}
+function applyGF(){if(!gs)return;const cbs=document.querySelectorAll('.graph-filter-label input');const en=new Set();cbs.forEach(cb=>{if(cb.checked)en.add(cb.dataset.topic)});const f={nodes:gs.data.nodes.filter(n=>!n.topic||en.has(n.topic)),edges:gs.data.edges.filter(e=>{const s=gs.data.nodes.find(n=>n.id===e.source);const t=gs.data.nodes.find(n=>n.id===e.target);return s&&t&&(!s.topic||en.has(s.topic))&&(!t.topic||en.has(t.topic))})};const ct=document.querySelector('.graph-count');if(ct)ct.textContent=f.nodes.length+' 节点';cancelGA();const cv=document.getElementById('fgCanvas');if(cv)initFG(cv,f,true)}
 
-function graphZoom(factor) {
-  if (!graphState) return;
-  const c = graphState.canvas; const r = c.getBoundingClientRect();
-  const cx = r.width/2, cy = r.height/2;
-  const nz = Math.max(0.3, Math.min(5, graphState.zoom*factor));
-  graphState.panX = cx-(cx-graphState.panX)*(nz/graphState.zoom);
-  graphState.panY = cy-(cy-graphState.panY)*(nz/graphState.zoom);
-  graphState.zoom = nz;
-  cancelGraphAnim();
-  const el = graphState.fullPage ? document.getElementById('fullGraphCanvas') : document.getElementById('dashGraphCanvas');
-  if (el) initForceGraph(el, graphState.data, graphState.fullPage);
-}
-
-function applyGraphFilter() {
-  if (!graphState) return;
-  const cbs = document.querySelectorAll('#graphFilters input[type="checkbox"]');
-  const enabled = new Set(); cbs.forEach(cb => { if (cb.checked) enabled.add(cb.dataset.topic); });
-  const filtered = {
-    nodes: graphState.data.nodes.filter(n => !n.topic || enabled.has(n.topic)),
-    edges: graphState.data.edges.filter(e => {
-      const s = graphState.data.nodes.find(n => n.id === e.source);
-      const t = graphState.data.nodes.find(n => n.id === e.target);
-      return s && t && (!s.topic || enabled.has(s.topic)) && (!t.topic || enabled.has(t.topic));
-    })
-  };
-  const ct = document.getElementById('graphNodeCount');
-  if (ct) ct.textContent = filtered.nodes.length + ' 节点';
-  cancelGraphAnim();
-  const canvas = document.getElementById('fullGraphCanvas');
-  if (canvas) initForceGraph(canvas, filtered, true);
-}
-
-// ── Search ──
-function openSearch() {
-  document.getElementById('searchOverlay').classList.add('open');
-  const input = document.getElementById('searchInput');
-  input.value = ''; input.focus();
-  document.getElementById('searchResults').innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
-}
-function closeSearch() { document.getElementById('searchOverlay').classList.remove('open'); }
-
-document.addEventListener('keydown', e => {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openSearch(); }
-  if (e.key === 'Escape') {
-    if (document.getElementById('searchOverlay').classList.contains('open')) closeSearch();
-    if (document.getElementById('ingestOverlay').classList.contains('open')) closeIngest();
-    if (document.getElementById('settingsModal').classList.contains('open')) closeSettings();
-    if (document.getElementById('deleteConfirm').classList.contains('open')) closeDeleteConfirm();
-  }
+/* ── Search ── */
+function openSearch(){$('searchOverlay').classList.add('open');const i=$('searchInput');i.value='';i.focus();$('searchResults').innerHTML='<div class="search-empty-msg">输入关键词搜索</div>'}
+function closeSearch(){$('searchOverlay').classList.remove('open')}
+document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();openSearch()}
+  if(e.key==='Escape'){closeSearch();closeIngest();closeSettings();closeDel()}
+});
+$('searchInput').addEventListener('input',e=>{
+  clearTimeout(st);const q=e.target.value.trim();
+  if(!q){$('searchResults').innerHTML='<div class="search-empty-msg">输入关键词搜索</div>';return}
+  st=setTimeout(async()=>{
+    try{const r=await api('/api/search?q='+encodeURIComponent(q));const c=$('searchResults');
+      if(!r||!r.length){c.innerHTML='<div class="search-empty-msg">未找到结果</div>';return}
+      c.innerHTML=r.slice(0,8).map(x=>{const ctx=x.matches&&x.matches.length?'<div class="search-result-ctx">'+h(x.matches[0].text).replace(new RegExp(hRe(q),'gi'),'<mark>$&</mark>')+'</div>':'';return'<div class="search-result" onclick="closeSearch();go(\'#/article/'+h(x.path)+'\')"><div class="search-result-title">'+h(x.title)+'</div><div class="search-result-path">'+h(x.path)+'</div>'+ctx+'</div>'}).join('');
+    }catch{$('searchResults').innerHTML='<div class="search-empty-msg">搜索出错</div>'}
+  },200);
 });
 
-document.getElementById('searchInput').addEventListener('input', e => {
-  clearTimeout(searchTimer);
-  const q = e.target.value.trim();
-  if (!q) { document.getElementById('searchResults').innerHTML = '<div class="search-empty">输入关键词开始搜索</div>'; return; }
-  searchTimer = setTimeout(async () => {
-    try {
-      const results = await api('/api/search?q=' + encodeURIComponent(q));
-      const c = document.getElementById('searchResults');
-      if (!results || results.length === 0) { c.innerHTML = '<div class="search-empty">未找到相关结果</div>'; return; }
-      c.innerHTML = results.slice(0, 8).map(r => {
-        const ctx = r.matches && r.matches.length ? '<div class="search-result-context">' + esc(r.matches[0].text).replace(new RegExp(escRe(q), 'gi'), '<mark>$&</mark>') + '</div>' : '';
-        return '<div class="search-result-item" onclick="closeSearch();navigate(\'#/article/' + esc(r.path) + '\')"><div class="search-result-title">' + esc(r.title) + '</div><div class="search-result-path">' + esc(r.path) + '</div>' + ctx + '</div>';
-      }).join('');
-    } catch { document.getElementById('searchResults').innerHTML = '<div class="search-empty">搜索出错</div>'; }
-  }, 200);
-});
-
-// ── Ingest ──
-function openIngest() {
-  document.getElementById('ingestOverlay').classList.add('open');
-  loadTopics(); loadModelSelect('ingestModel');
+/* ── Ingest ── */
+function openIngest(){$('ingestOverlay').classList.add('open');loadTopics();loadModels2('ingestModel')}
+function closeIngest(){$('ingestOverlay').classList.remove('open');if(ipt){clearInterval(ipt);ipt=null}}
+function switchTab(t){document.querySelectorAll('.ingest-tab').forEach(el=>el.classList.toggle('active',el.dataset.tab===t));$('tabText').style.display=t==='text'?'':'none';$('tabUrl').style.display=t==='url'?'':'none'}
+async function loadTopics(){try{const tree=td||await api('/api/wiki/tree');td=tree;const s=$('ingestTopic');const v=s.value;s.innerHTML='<option value="auto">自动分类</option>';if(tree)tree.forEach(t=>{const o=document.createElement('option');o.value=t.name;o.textContent=t.name;s.appendChild(o)});if(v)s.value=v}catch{}}
+async function loadModels2(id){
+  try{const s=sCache||await api('/api/settings');sCache=s;const sel=$(id);if(!sel)return;sel.innerHTML='';
+    if(s.providers)for(const[k,v]of Object.entries(s.providers)){if(k==='custom')continue;v.models.forEach(m=>{const o=document.createElement('option');o.value=k+'|'+m;o.textContent=m;sel.appendChild(o)})}
+    if(s.provider&&s.model)sel.value=s.provider+'|'+s.model;
+  }catch{}
 }
-function closeIngest() { document.getElementById('ingestOverlay').classList.remove('open'); if (ingestPollTimer) { clearInterval(ingestPollTimer); ingestPollTimer = null; } }
-function switchIngestTab(tab) {
-  document.querySelectorAll('.ingest-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-  document.getElementById('ingestTextTab').style.display = tab === 'text' ? '' : 'none';
-  document.getElementById('ingestUrlTab').style.display = tab === 'url' ? '' : 'none';
-}
-async function loadTopics() {
-  try {
-    const tree = treeData || await api('/api/wiki/tree');
-    treeData = tree;
-    const s = document.getElementById('ingestTopic');
-    const cur = s.value;
-    s.innerHTML = '<option value="auto">自动分类</option>';
-    if (tree) tree.forEach(t => { const o = document.createElement('option'); o.value = t.name; o.textContent = t.name; s.appendChild(o); });
-    if (cur) s.value = cur;
-  } catch {}
-}
-async function submitIngest() {
-  const tab = document.querySelector('.ingest-tab.active').dataset.tab;
-  const topic = document.getElementById('ingestTopic').value;
-  const model = document.getElementById('ingestModel');
-  let content = '';
-  if (tab === 'text') { content = document.getElementById('ingestText').value.trim(); if (!content) { notify('请输入内容'); return; } }
-  else { content = document.getElementById('ingestUrl').value.trim(); if (!content) { notify('请输入链接'); return; } }
-
-  const btn = document.getElementById('ingestSubmit');
-  const status = document.getElementById('ingestStatus');
-  btn.disabled = true; status.style.display = ''; status.className = 'ingest-status compiling'; status.textContent = '编译中...';
-
-  try {
-    const body = { type: tab, content, topic };
-    if (model && model.value) { const parts = model.value.split('|'); if (parts.length === 2) { body.provider = parts[0]; body.model = parts[1]; } }
-    await fetch('/api/ingest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    ingestPollTimer = setInterval(async () => {
-      try {
-        const s = await api('/api/ingest/status');
-        if (s.status === 'done') {
-          clearInterval(ingestPollTimer); ingestPollTimer = null;
-          status.className = 'ingest-status done'; status.textContent = '编译完成'; btn.disabled = false;
-          document.getElementById('ingestText').value = ''; document.getElementById('ingestUrl').value = '';
-          graphData = null; treeData = null; statsData = null; notify('知识库已更新');
-          setTimeout(() => { closeIngest(); renderCurrentView(); }, 1000);
-        } else if (s.status === 'error' || s.status === 'failed') {
-          clearInterval(ingestPollTimer); ingestPollTimer = null;
-          status.className = 'ingest-status error'; status.textContent = '编译失败: ' + (s.message || '未知'); btn.disabled = false;
-        }
-      } catch {}
-    }, 2000);
-  } catch (e) { status.className = 'ingest-status error'; status.textContent = '提交失败: ' + e.message; btn.disabled = false; }
+async function submitIngest(){
+  const tab=document.querySelector('.ingest-tab.active').dataset.tab;
+  const topic=$('ingestTopic').value;const model=$('ingestModel');
+  let content='';
+  if(tab==='text'){content=$('ingestText').value.trim();if(!content){toast('请输入内容');return}}
+  else{content=$('ingestUrl').value.trim();if(!content){toast('请输入链接');return}}
+  const btn=$('ingestBtn');const st=$('ingestStatus');btn.disabled=true;st.style.display='';st.className='ingest-status-msg compiling';st.textContent='编译中...';
+  try{
+    const body={type:tab,content,topic};
+    if(model&&model.value){const p=model.value.split('|');if(p.length===2){body.provider=p[0];body.model=p[1]}}
+    await fetch('/api/ingest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    ipt=setInterval(async()=>{try{const s=await api('/api/ingest/status');
+      if(s.status==='done'){clearInterval(ipt);ipt=null;st.className='ingest-status-msg done';st.textContent='编译完成';btn.disabled=false;$('ingestText').value='';$('ingestUrl').value='';gd=null;td=null;sd=null;toast('知识库已更新');setTimeout(()=>{closeIngest();render()},800)}
+      else if(s.status==='error'||s.status==='failed'){clearInterval(ipt);ipt=null;st.className='ingest-status-msg error';st.textContent='失败: '+(s.message||'');btn.disabled=false}
+    }catch{}},2000);
+  }catch(e){st.className='ingest-status-msg error';st.textContent='提交失败';btn.disabled=false}
 }
 
-// ── Settings ──
-function openSettings() { document.getElementById('settingsModal').classList.add('open'); loadSettings(); }
-function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
-
-async function loadSettings() {
-  try {
-    const s = await api('/api/settings');
-    settingsCache = s;
-    const prov = document.getElementById('settingsProvider');
-    prov.innerHTML = '';
-    if (s.providers) {
-      for (const [k, v] of Object.entries(s.providers)) {
-        const o = document.createElement('option'); o.value = k; o.textContent = v.name; prov.appendChild(o);
-      }
-    }
-    prov.value = s.provider || 'local';
-    document.getElementById('settingsApiKey').value = '';
-    document.getElementById('settingsApiKey').placeholder = s.hasKey ? '已配置 (输入新值覆盖)' : '输入 API Key...';
-    onProviderChange();
-  } catch {}
+/* ── Settings ── */
+function openSettings(){$('settingsModal').classList.add('open');loadSett()}
+function closeSettings(){$('settingsModal').classList.remove('open')}
+async function loadSett(){
+  try{const s=await api('/api/settings');sCache=s;
+    const prov=$('sProv');prov.innerHTML='';
+    if(s.providers)for(const[k,v]of Object.entries(s.providers)){const o=document.createElement('option');o.value=k;o.textContent=v.name;prov.appendChild(o)}
+    prov.value=s.provider||'local';$('sKey').value='';$('sKey').placeholder=s.hasKey?'已配置 (输入覆盖)':'输入 API Key...';onProvChange();
+  }catch{}
 }
-
-function onProviderChange() {
-  const prov = document.getElementById('settingsProvider').value;
-  const modelSel = document.getElementById('settingsModel');
-  modelSel.innerHTML = '';
-  if (settingsCache && settingsCache.providers && settingsCache.providers[prov]) {
-    settingsCache.providers[prov].models.forEach(m => {
-      const o = document.createElement('option'); o.value = m; o.textContent = m; modelSel.appendChild(o);
-    });
-  }
-  if (settingsCache && settingsCache.model) modelSel.value = settingsCache.model;
+function onProvChange(){
+  const p=$('sProv').value;const ms=$('sModel');ms.innerHTML='';
+  if(sCache&&sCache.providers&&sCache.providers[p])sCache.providers[p].models.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;ms.appendChild(o)});
+  if(sCache&&sCache.model)ms.value=sCache.model;
 }
-
-async function saveSettings() {
-  const prov = document.getElementById('settingsProvider').value;
-  const key = document.getElementById('settingsApiKey').value;
-  const model = document.getElementById('settingsModel').value;
-  try {
-    const body = { provider: prov, model };
-    if (key) body.apiKey = key;
-    await apiPut('/api/settings', body);
-    notify('设置已保存'); closeSettings();
-  } catch (e) { notify('保存失败: ' + e.message); }
+async function saveSett(){
+  const b={provider:$('sProv').value,model:$('sModel').value};const k=$('sKey').value;if(k)b.apiKey=k;
+  try{await put('/api/settings',b);sCache=null;toast('已保存');closeSettings()}catch(e){toast('失败: '+e.message)}
 }
+async function testConn(){try{await saveSett();const r=await post('/api/settings/test',{});toast(r.ok?'连接成功':'失败: '+r.message)}catch(e){toast('测试失败')}}
 
-async function testConnection() {
-  const btn = document.getElementById('settingsTestBtn');
-  btn.textContent = '测试中...'; btn.disabled = true;
-  try {
-    // Save first
-    await saveSettings();
-    const r = await apiPost('/api/settings/test', {});
-    notify(r.ok ? '连接成功' : '连接失败: ' + r.message);
-  } catch (e) { notify('测试失败: ' + e.message); }
-  btn.textContent = '测试连接'; btn.disabled = false;
-}
-
-// ── Model Select Helper ──
-async function loadModelSelect(selectId) {
-  const sel = document.getElementById(selectId);
-  if (!sel) return;
-  try {
-    const s = settingsCache || await api('/api/settings');
-    settingsCache = s;
-    sel.innerHTML = '';
-    if (s.providers) {
-      for (const [k, v] of Object.entries(s.providers)) {
-        if (k === 'custom') continue;
-        v.models.forEach(m => {
-          const o = document.createElement('option'); o.value = k + '|' + m; o.textContent = m; sel.appendChild(o);
-        });
-      }
-    }
-    // Default to current config
-    if (s.provider && s.model) sel.value = s.provider + '|' + s.model;
-  } catch {}
-}
-
-// ── Utilities ──
-function esc(s) { if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function escRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-
-// ── Init ──
+/* ── Init ── */
 initTheme();
-renderCurrentView();
+render();
 </script>
 </body>
 </html>
