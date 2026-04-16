@@ -334,7 +334,6 @@
 .chat-refs{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:6px}
 .chat-ref{font-size:12px;padding:2px 8px;border-radius:var(--radius);background:var(--bg-hover);color:var(--fg-secondary);text-decoration:none;display:inline-flex;align-items:center;gap:4px}
 .chat-ref:hover{background:var(--accent-bg);color:var(--accent)}
-.chat-ref::before{content:'📄';font-size:10px}
 
 /* ── Precipitate (沉淀) ── */
 .chat-msg.assistant{position:relative}

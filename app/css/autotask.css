@@ -143,7 +143,6 @@
   background:var(--accent-bg);border-color:var(--accent-border);
   transform:translateY(-1px);
 }
-.autotask-template-icon{font-size:24px;line-height:1;margin-bottom:6px}
 .autotask-template-name{font-size:13px;font-weight:600;color:var(--fg);margin-bottom:2px}
 .autotask-template-desc{font-size:12px;color:var(--fg-tertiary);line-height:1.3}
 

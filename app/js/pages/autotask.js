@@ -30,32 +30,32 @@ const STATUS_COLORS = { success: 'var(--green)', error: 'var(--red)', partial: '
 
 /* ── Templates ── */
 const TEMPLATES = [
-  { id: 'hn', name: 'Hacker News', icon: '🟠', desc: '前沿技术讨论',
+  { id: 'hn', name: 'Hacker News', desc: '前沿技术讨论',
     config: { name: 'Hacker News 精选', sourceType: 'rss',
               sourceConfig: { url: 'https://hnrss.org/frontpage', maxItems: 10 },
               schedule: 'daily', scheduleTime: '09:00', topic: 'auto',
               filters: { keywords: [], excludeKeywords: [] } } },
-  { id: 'arxiv', name: 'arXiv cs.AI', icon: '📄', desc: 'AI 论文每日更新',
+  { id: 'arxiv', name: 'arXiv cs.AI', desc: 'AI 论文每日更新',
     config: { name: 'arXiv AI 论文', sourceType: 'rss',
               sourceConfig: { url: 'https://export.arxiv.org/rss/cs.AI', maxItems: 5 },
               schedule: 'daily', scheduleTime: '08:00', topic: 'auto',
               filters: { keywords: [], excludeKeywords: [] } } },
-  { id: 'hfpapers', name: 'HF Papers', icon: '🤗', desc: '精选 AI 论文',
+  { id: 'hfpapers', name: 'HF Papers', desc: '精选 AI 论文',
     config: { name: 'Hugging Face Papers', sourceType: 'webpage',
               sourceConfig: { url: 'https://huggingface.co/papers', maxItems: 5 },
               schedule: 'daily', scheduleTime: '10:00', topic: 'auto',
               filters: { keywords: [], excludeKeywords: [] } } },
-  { id: '36kr', name: '36氪', icon: '🟢', desc: '创投与商业',
+  { id: '36kr', name: '36氪', desc: '创投与商业',
     config: { name: '36氪资讯', sourceType: 'rss',
               sourceConfig: { url: 'https://36kr.com/feed', maxItems: 5 },
               schedule: 'daily', scheduleTime: '09:30', topic: 'auto',
               filters: { keywords: [], excludeKeywords: [] } } },
-  { id: 'sspai', name: '少数派', icon: '🔵', desc: '效率与生活',
+  { id: 'sspai', name: '少数派', desc: '效率与生活',
     config: { name: '少数派精选', sourceType: 'rss',
               sourceConfig: { url: 'https://sspai.com/feed', maxItems: 5 },
               schedule: 'daily', scheduleTime: '12:00', topic: 'auto',
               filters: { keywords: [], excludeKeywords: [] } } },
-  { id: 'ruanyf', name: '阮一峰周刊', icon: '📬', desc: '科技爱好者周刊（每周五）',
+  { id: 'ruanyf', name: '阮一峰周刊', desc: '科技爱好者周刊（每周五）',
     config: { name: '阮一峰科技周刊', sourceType: 'rss',
               sourceConfig: { url: 'https://www.ruanyifeng.com/blog/atom.xml', maxItems: 3 },
               schedule: 'daily', scheduleTime: '20:00', topic: 'auto',
@@ -237,7 +237,7 @@ function renderTaskList() {
     const recent = lastRunIngested(t.id, 3);
     if (recent.length) {
       s += '<div class="autotask-card-preview">';
-      s += '<div class="autotask-card-preview-label">📥 上次抓到 ' + recent.length + ' 篇</div>';
+      s += '<div class="autotask-card-preview-label">上次抓到 ' + recent.length + ' 篇</div>';
       s += '<ul class="autotask-card-preview-list">';
       recent.forEach(it => {
         const title = h(it.title || '无标题');
@@ -481,7 +481,6 @@ function renderWizardStep1() {
     s += '<div class="autotask-templates-grid">';
     TEMPLATES.forEach(t => {
       s += '<div class="autotask-template-card" onclick="pickTemplate(\'' + h(t.id) + '\')">';
-      s += '<div class="autotask-template-icon">' + t.icon + '</div>';
       s += '<div class="autotask-template-name">' + h(t.name) + '</div>';
       s += '<div class="autotask-template-desc">' + h(t.desc) + '</div>';
       s += '</div>';
@@ -584,7 +583,7 @@ function renderWizardStep2() {
   // Warnings
   if (wizardWarnings && wizardWarnings.length) {
     s += '<div style="padding:0 20px"><div class="autotask-warnings">';
-    s += '⚠️ ' + wizardWarnings.map(w => h(w)).join('<br>⚠️ ');
+    s += wizardWarnings.map(w => h(w)).join('<br>');
     s += '</div></div>';
   }
 
@@ -607,7 +606,7 @@ function renderWizardStep2() {
 
   // Advanced (collapsible)
   s += '<div style="padding:8px 20px">';
-  s += '<button class="autotask-advanced-toggle" onclick="toggleWizardAdvanced()">⚙️ 高级 ' + (wizardAdvancedOpen ? '▲' : '▼') + '</button>';
+  s += '<button class="autotask-advanced-toggle" onclick="toggleWizardAdvanced()">高级 ' + (wizardAdvancedOpen ? '▲' : '▼') + '</button>';
   if (wizardAdvancedOpen) {
     s += '<div class="autotask-advanced-panel">';
     s += '<div class="autotask-confirm-row"><span class="autotask-confirm-label">模型</span>';
@@ -738,7 +737,7 @@ function renderPreviewBlock() {
     return '<div class="autotask-preview-loading">测试中...</div>';
   }
   if (wizardPreview.error) {
-    return '<div class="autotask-preview-error">⚠️ ' + h(wizardPreview.error)
+    return '<div class="autotask-preview-error">' + h(wizardPreview.error)
       + ' <button class="autotask-action-btn" style="margin-left:8px" onclick="window._autotaskRefreshPreview()">重试</button></div>';
   }
   const items = wizardPreview.items || [];

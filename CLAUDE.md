@@ -108,6 +108,7 @@ data/uploads/       → Uploaded files
 
 ## Conventions
 
+- **严禁 emoji**（红线）：UI 文案、按钮、卡片图标、警告/错误前缀、commit message 一律不用任何 emoji（🟠 📄 🤗 ⚠️ ⚙️ 📥 ✅ ❌ 等都不行）。用户原话："太AI了，我讨厌这些垃圾 emoji"。需要图标用 SVG；状态用 CSS 圆点 + 文字。仅用户主动要求时例外。
 - UI language: Chinese (中文)
 - Wiki articles written in Chinese; raw materials preserve original language
 - Design tokens use CSS custom properties — change colors/radius in `base.css :root`, they cascade everywhere
