@@ -68,8 +68,9 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 .sidebar{
   width:var(--sidebar-w);background:var(--bg-sidebar);
   display:flex;flex-direction:column;flex-shrink:0;
-  overflow:hidden;position:relative;
+  overflow:hidden;position:relative;transition:width 200ms ease;
 }
+.sidebar.collapsed{width:0;overflow:hidden}
 .sidebar-resize{
   position:absolute;top:0;right:0;width:4px;height:100%;cursor:col-resize;z-index:10;
   transition:background var(--t);
@@ -80,6 +81,21 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
   font-size:14px;font-weight:600;letter-spacing:-0.01em;
 }
 .sidebar-header svg{flex-shrink:0;color:var(--fg-secondary)}
+.sidebar-header .sidebar-collapse-btn{
+  margin-left:auto;width:24px;height:24px;border-radius:var(--radius);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--fg-tertiary);transition:background var(--t),color var(--t);opacity:0;
+}
+.sidebar:hover .sidebar-collapse-btn{opacity:1}
+.sidebar-collapse-btn:hover{background:var(--bg-hover);color:var(--fg-secondary)}
+.sidebar-expand-btn{
+  position:fixed;top:10px;left:8px;z-index:15;width:28px;height:28px;
+  border-radius:var(--radius);display:none;align-items:center;justify-content:center;
+  color:var(--fg-tertiary);transition:background var(--t),color var(--t);
+}
+.sidebar-expand-btn:hover{background:var(--bg-hover);color:var(--fg-secondary)}
+.sidebar.collapsed ~ .main .sidebar-expand-btn{display:flex}
+
 .sidebar-nav{padding:2px 8px}
 .sidebar-item{
   display:flex;align-items:center;gap:8px;padding:5px 8px;
@@ -93,7 +109,15 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 .sidebar-section{
   font-size:11px;font-weight:600;color:var(--fg-tertiary);
   padding:16px 16px 4px;text-transform:uppercase;letter-spacing:0.04em;
+  display:flex;align-items:center;justify-content:space-between;
 }
+.sidebar-section-btn{
+  width:20px;height:20px;border-radius:var(--radius);display:flex;
+  align-items:center;justify-content:center;color:var(--fg-tertiary);
+  transition:background var(--t);opacity:0;
+}
+.sidebar-section:hover .sidebar-section-btn{opacity:1}
+.sidebar-section-btn:hover{background:var(--bg-hover);color:var(--fg-secondary)}
 .sidebar-pages{flex:1;overflow-y:auto;padding:2px 8px 16px}
 .sidebar-page{
   display:flex;align-items:center;gap:6px;padding:4px 8px 4px 12px;
@@ -103,30 +127,30 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 .sidebar-page:hover{background:var(--bg-hover)}
 .sidebar-page.active{background:var(--bg-active);color:var(--fg)}
 .sidebar-page svg{width:16px;height:16px;flex-shrink:0;opacity:0.5}
-.sidebar-topic{padding:8px 16px 2px;font-size:12px;font-weight:500;color:var(--fg-tertiary)}
+.sidebar-page .page-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.sidebar-topic{
+  padding:6px 16px 2px;font-size:12px;font-weight:500;color:var(--fg-tertiary);
+  display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none;
+}
+.sidebar-topic .fold-arrow{
+  width:12px;height:12px;transition:transform 150ms ease;display:inline-flex;
+  align-items:center;justify-content:center;font-size:10px;
+}
+.sidebar-topic.folded .fold-arrow{transform:rotate(-90deg)}
+.sidebar-topic.folded ~ .sidebar-page[data-topic]{display:none}
 
-/* Right-side TOC (Notion style) */
-.article-toc{
-  position:fixed;top:56px;right:16px;width:200px;
-  max-height:calc(100vh - 80px);overflow-y:auto;
-  font-size:12px;line-height:1.5;padding:8px 0;
+/* Chat list in sidebar */
+.sidebar-chat-list{padding:0 8px 8px}
+.sidebar-chat-item{
+  display:flex;align-items:center;gap:6px;padding:4px 8px 4px 12px;
+  border-radius:var(--radius);font-size:13px;color:var(--fg-secondary);
+  cursor:pointer;transition:background var(--t);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
-.article-toc-title{
-  font-size:11px;font-weight:600;color:var(--fg-tertiary);
-  padding:0 8px 6px;text-transform:uppercase;letter-spacing:0.04em;
-}
-.article-toc-item{
-  display:block;padding:3px 8px;border-radius:3px;
-  color:var(--fg-tertiary);cursor:pointer;
-  transition:color var(--t),background var(--t);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-}
-.article-toc-item:hover{color:var(--fg);background:var(--bg-hover)}
-.article-toc-item.active{color:var(--fg)}
-.article-toc-item.lvl2{padding-left:8px}
-.article-toc-item.lvl3{padding-left:20px}
-.article-toc-item.lvl4{padding-left:32px}
-@media(max-width:1100px){.article-toc{display:none}}
+.sidebar-chat-item:hover{background:var(--bg-hover)}
+.sidebar-chat-item.active{background:var(--bg-active);color:var(--fg)}
+.sidebar-chat-item svg{width:14px;height:14px;flex-shrink:0;opacity:0.4}
+.sidebar-chat-item .chat-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+
 .sidebar-bottom{
   padding:6px 8px;display:flex;flex-direction:column;gap:1px;
 }
@@ -139,7 +163,7 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 .sidebar-bottom-btn svg{width:16px;height:16px;opacity:0.5;flex-shrink:0}
 
 /* ── Main ── */
-.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.main{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
 
 /* ── Topbar ── */
 .topbar{
@@ -160,15 +184,24 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 .topbar-btn svg{width:15px;height:15px}
 .topbar-btn-accent{color:var(--accent)}
 .topbar-btn-accent:hover{background:var(--accent-bg)}
+#topbarDel:hover{color:var(--red)!important}
 
 /* ── Content ── */
 .content{flex:1;overflow-y:auto}
+
+/* ── Skeleton ── */
+@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
+.skel{border-radius:var(--radius);background:linear-gradient(90deg,var(--bg-hover) 25%,var(--bg-active) 50%,var(--bg-hover) 75%);background-size:800px 100%;animation:shimmer 1.5s infinite}
+.skel-line{height:14px;margin-bottom:10px;border-radius:3px}
+.skel-title{height:28px;width:40%;margin-bottom:16px}
+.skel-block{height:80px;margin-bottom:16px}
+.skel-circle{width:24px;height:24px;border-radius:50%}
 
 /* ── Page: Dashboard ── */
 .page-dashboard{max-width:var(--content-w);margin:0 auto;padding:40px 48px 120px;animation:fadeIn 150ms ease}
 @keyframes fadeIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
 
-/* Chat */
+/* Chat area (dashboard) */
 .chat-area{margin-bottom:48px}
 .chat-greeting{font-size:28px;font-weight:700;letter-spacing:-0.02em;margin-bottom:4px;text-align:center;padding-top:24px}
 .chat-sub{font-size:14px;color:var(--fg-secondary);text-align:center;margin-bottom:24px}
@@ -180,6 +213,7 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 }
 .chat-pill:hover{background:var(--bg-active);color:var(--fg)}
 
+/* Composer (shared between dashboard + chat page) */
 .chat-composer-wrap{position:relative}
 .chat-composer{
   display:flex;flex-direction:column;
@@ -235,11 +269,13 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 .chat-model-opt:hover{background:var(--bg-hover);color:var(--fg)}
 .chat-model-opt.active{background:var(--accent-bg);color:var(--accent);font-weight:500}
 
-/* Chat messages */
-.chat-msgs{display:flex;flex-direction:column;gap:20px;margin-bottom:24px;max-height:480px;overflow-y:auto}
-.chat-msg{display:flex;gap:12px;animation:fadeIn 150ms ease}
+/* ── Chat page #/chat/:id ── */
+.page-chat{display:flex;flex-direction:column;height:100%;animation:fadeIn 150ms ease}
+.chat-messages{flex:1;overflow-y:auto;padding:20px 0}
+.chat-messages-inner{max-width:var(--content-w);margin:0 auto;padding:0 48px}
+.chat-msg{display:flex;gap:12px;margin-bottom:24px;animation:fadeIn 150ms ease}
 .chat-msg-avatar{
-  width:24px;height:24px;border-radius:50%;flex-shrink:0;margin-top:2px;
+  width:26px;height:26px;border-radius:50%;flex-shrink:0;margin-top:2px;
   display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;
   background:var(--bg-active);color:var(--fg-secondary);
 }
@@ -257,9 +293,54 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 .chat-typing-dots span:nth-child(3){animation-delay:.4s}
 @keyframes dotPulse{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
 
-.chat-history-row{display:flex;align-items:center;gap:6px;margin-bottom:12px;font-size:12px;color:var(--fg-tertiary)}
-.chat-history-row a{transition:color var(--t)}
-.chat-history-row a:hover{color:var(--fg-secondary)}
+/* Citation panel */
+.chat-citations{
+  margin-top:8px;border:1px solid var(--border);border-radius:8px;
+  overflow:hidden;font-size:13px;
+}
+.chat-citations-head{
+  padding:6px 12px;background:var(--bg-hover);color:var(--fg-secondary);
+  cursor:pointer;display:flex;align-items:center;gap:6px;
+  transition:background var(--t);user-select:none;
+}
+.chat-citations-head:hover{background:var(--bg-active)}
+.chat-citations-head svg{width:12px;height:12px;transition:transform 150ms}
+.chat-citations-head.open svg{transform:rotate(90deg)}
+.chat-citations-body{display:none;padding:8px 12px;border-top:1px solid var(--border)}
+.chat-citations-body.open{display:block}
+.chat-citation-item{
+  display:flex;align-items:center;gap:6px;padding:4px 6px;
+  border-radius:var(--radius);cursor:pointer;transition:background var(--t);
+}
+.chat-citation-item:hover{background:var(--bg-hover)}
+.chat-citation-item svg{width:14px;height:14px;opacity:0.4;flex-shrink:0}
+
+/* Chat bottom composer (fixed) */
+.chat-bottom{
+  border-top:1px solid var(--border);padding:12px 0 16px;background:var(--bg);
+}
+.chat-bottom-inner{max-width:var(--content-w);margin:0 auto;padding:0 48px}
+
+/* Chat list page */
+.page-chat-list{max-width:var(--content-w);margin:0 auto;padding:32px 48px 120px;animation:fadeIn 150ms ease}
+.chat-list-heading{font-size:22px;font-weight:700;letter-spacing:-0.02em;margin-bottom:20px}
+.chat-list-item{
+  display:flex;align-items:center;gap:12px;padding:10px 12px;
+  border-radius:var(--radius);cursor:pointer;transition:background var(--t);
+}
+.chat-list-item:hover{background:var(--bg-hover)}
+.chat-list-item svg{width:18px;height:18px;opacity:0.35;flex-shrink:0}
+.chat-list-item-info{flex:1;min-width:0}
+.chat-list-item-title{font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-list-item-date{font-size:12px;color:var(--fg-tertiary)}
+.chat-list-item-del{
+  width:28px;height:28px;border-radius:var(--radius);display:flex;
+  align-items:center;justify-content:center;color:var(--fg-tertiary);
+  transition:background var(--t),color var(--t);opacity:0;
+}
+.chat-list-item:hover .chat-list-item-del{opacity:1}
+.chat-list-item-del:hover{background:var(--bg-hover);color:var(--red)}
+.chat-list-empty{color:var(--fg-tertiary);font-size:14px;padding:40px 0;text-align:center}
 
 /* Section headers */
 .section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;margin-top:8px}
@@ -292,7 +373,7 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 /* Stats */
 .stats-row{display:flex;gap:20px;font-size:12px;color:var(--fg-tertiary);padding-top:8px;border-top:1px solid var(--border)}
 
-/* ── Page: Article (Notion-style inline edit) ── */
+/* ── Page: Article ── */
 .page-article{animation:fadeIn 150ms ease}
 .page-article-inner{max-width:var(--content-w);margin:0 auto;padding:12px 48px 120px}
 
@@ -309,8 +390,6 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
   word-break:break-word;
 }
 .article-body:focus{caret-color:var(--accent)}
-
-/* Article rendered styles */
 .article-body h1{font-size:1.875em;font-weight:700;margin:1em 0 0.2em;line-height:1.25}
 .article-body h2{font-size:1.5em;font-weight:600;margin:1.4em 0 0.2em;line-height:1.3}
 .article-body h3{font-size:1.25em;font-weight:600;margin:1.2em 0 0.2em;line-height:1.35}
@@ -319,21 +398,11 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 .article-body a:hover{text-decoration-color:var(--fg)}
 .article-body strong{font-weight:600}
 .article-body em{font-style:italic}
-.article-body blockquote{
-  border-left:3px solid var(--fg);padding:2px 0 2px 16px;margin:6px 0;
-  color:var(--fg-secondary);
-}
+.article-body blockquote{border-left:3px solid var(--fg);padding:2px 0 2px 16px;margin:6px 0;color:var(--fg-secondary)}
 .article-body ul,.article-body ol{padding-left:1.6em;margin:0.3em 0}
 .article-body li{line-height:1.7;margin:1px 0}
-.article-body code{
-  font-family:var(--font-mono);font-size:0.85em;
-  background:rgba(135,131,120,0.15);padding:2px 5px;border-radius:3px;
-  color:#EB5757;
-}
-.article-body pre{
-  background:var(--bg-sidebar);border-radius:4px;padding:16px 20px;
-  margin:8px 0;overflow-x:auto;font-size:14px;line-height:1.55;
-}
+.article-body code{font-family:var(--font-mono);font-size:0.85em;background:rgba(135,131,120,0.15);padding:2px 5px;border-radius:3px;color:#EB5757}
+.article-body pre{background:var(--bg-sidebar);border-radius:4px;padding:16px 20px;margin:8px 0;overflow-x:auto;font-size:14px;line-height:1.55}
 .article-body pre code{background:none;padding:0;color:var(--fg)}
 .article-body hr{border:none;border-top:1px solid var(--border);margin:1.5em 0}
 .article-body img{max-width:100%;border-radius:4px;margin:8px 0}
@@ -349,8 +418,53 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 }
 .article-save-indicator.show{opacity:1}
 
-/* Article topbar delete */
-#topbarDel:hover{color:var(--red)!important}
+/* Related articles */
+.article-related{
+  margin-top:48px;padding-top:24px;border-top:1px solid var(--border);
+}
+.article-related-title{font-size:12px;font-weight:600;color:var(--fg-tertiary);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px}
+.article-related-item{
+  display:flex;align-items:center;gap:8px;padding:6px 8px;
+  border-radius:var(--radius);cursor:pointer;transition:background var(--t);font-size:14px;color:var(--fg-secondary);
+}
+.article-related-item:hover{background:var(--bg-hover);color:var(--fg)}
+.article-related-item svg{width:16px;height:16px;opacity:0.4;flex-shrink:0}
+
+/* Floating format toolbar */
+.format-toolbar{
+  position:absolute;z-index:100;display:none;
+  background:var(--fg);border-radius:6px;padding:4px;
+  box-shadow:0 4px 16px rgba(0,0,0,0.2);
+  gap:2px;align-items:center;
+}
+.format-toolbar.show{display:flex}
+.format-toolbar-btn{
+  width:28px;height:28px;border-radius:4px;display:flex;
+  align-items:center;justify-content:center;color:var(--bg);
+  transition:background 100ms;font-size:13px;font-weight:600;
+}
+.format-toolbar-btn:hover{background:rgba(255,255,255,0.15)}
+.format-toolbar-sep{width:1px;height:18px;background:rgba(255,255,255,0.15);margin:0 2px}
+
+/* Right-side TOC */
+.article-toc{
+  position:fixed;top:56px;right:16px;width:200px;
+  max-height:calc(100vh - 80px);overflow-y:auto;
+  font-size:12px;line-height:1.5;padding:8px 0;
+}
+.article-toc-title{font-size:11px;font-weight:600;color:var(--fg-tertiary);padding:0 8px 6px;text-transform:uppercase;letter-spacing:0.04em}
+.article-toc-item{
+  display:block;padding:3px 8px;border-radius:3px;
+  color:var(--fg-tertiary);cursor:pointer;
+  transition:color var(--t),background var(--t);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.article-toc-item:hover{color:var(--fg);background:var(--bg-hover)}
+.article-toc-item.active{color:var(--fg)}
+.article-toc-item.lvl2{padding-left:8px}
+.article-toc-item.lvl3{padding-left:20px}
+.article-toc-item.lvl4{padding-left:32px}
+@media(max-width:1100px){.article-toc{display:none}}
 
 /* ── Full Graph ── */
 .page-graph{height:100%;display:flex;flex-direction:column;padding:12px 16px;animation:fadeIn 150ms ease}
@@ -391,7 +505,7 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 .browse-group-list a:hover{background:var(--bg-hover);color:var(--fg)}
 .browse-group-list a svg{width:16px;height:16px;opacity:0.4;flex-shrink:0}
 
-/* ── Search Overlay ── */
+/* ── Search ── */
 .search-overlay{position:fixed;inset:0;z-index:200;display:none;background:rgba(15,15,15,0.6);justify-content:center;padding-top:12vh}
 .search-overlay.open{display:flex}
 .search-box{
@@ -405,14 +519,14 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 .search-hint{font-family:var(--font-mono);font-size:11px;color:var(--fg-tertiary);padding:2px 5px;background:var(--bg-hover);border-radius:3px}
 .search-results{overflow-y:auto;flex:1}
 .search-result{padding:10px 16px;cursor:pointer;transition:background 100ms;border-bottom:1px solid var(--border)}
-.search-result:hover{background:var(--bg-hover)}
+.search-result:hover,.search-result.focused{background:var(--bg-hover)}
 .search-result-title{font-size:14px;font-weight:500;margin-bottom:1px}
 .search-result-path{font-size:12px;color:var(--fg-tertiary)}
 .search-result-ctx{font-size:12px;color:var(--fg-secondary);margin-top:3px}
 .search-result-ctx mark{background:var(--accent-bg);color:var(--accent);border-radius:2px;padding:0 2px}
 .search-empty-msg{padding:32px;text-align:center;color:var(--fg-tertiary);font-size:13px}
 
-/* ── Ingest ── */
+/* ── Ingest (unified) ── */
 .ingest-overlay{position:fixed;inset:0;z-index:200;display:none;background:rgba(15,15,15,0.4)}
 .ingest-overlay.open{display:block}
 .ingest-panel{
@@ -424,18 +538,30 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 .ingest-overlay.open .ingest-panel{right:0}
 .ingest-head{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border)}
 .ingest-head h3{font-size:15px;font-weight:600}
-.ingest-tabs{display:flex;border-bottom:1px solid var(--border)}
-.ingest-tab{flex:1;padding:9px 16px;text-align:center;font-size:13px;color:var(--fg-secondary);border-bottom:2px solid transparent;transition:color var(--t)}
-.ingest-tab:hover{color:var(--fg)}
-.ingest-tab.active{color:var(--fg);border-bottom-color:var(--fg)}
 .ingest-form{flex:1;padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:16px}
 .field-label{font-size:12px;font-weight:500;color:var(--fg-secondary);margin-bottom:4px;display:block}
-.field-textarea{
-  width:100%;min-height:160px;resize:vertical;padding:10px 12px;
-  font-size:14px;line-height:1.6;border:1px solid var(--border);border-radius:var(--radius);
-  background:var(--bg);transition:border-color var(--t);
+
+/* Drag zone */
+.ingest-drop-zone{
+  position:relative;border:2px dashed var(--border);border-radius:8px;
+  min-height:200px;display:flex;flex-direction:column;
+  transition:border-color 200ms,background 200ms;
 }
-.field-textarea:focus{border-color:rgba(55,53,47,0.3)}
+.ingest-drop-zone.dragover{border-color:var(--accent);background:var(--accent-bg)}
+.ingest-drop-zone textarea{
+  width:100%;flex:1;resize:none;font-size:14px;line-height:1.6;
+  padding:12px 14px;border:none;background:transparent;min-height:200px;
+}
+.ingest-drop-zone textarea::placeholder{color:var(--fg-tertiary)}
+.ingest-drop-hint{
+  position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:8px;pointer-events:none;
+  color:var(--fg-tertiary);font-size:13px;opacity:0;transition:opacity 200ms;
+}
+.ingest-drop-zone.dragover .ingest-drop-hint{opacity:1}
+.ingest-drop-zone.dragover textarea{opacity:0.1}
+.ingest-drop-hint svg{width:32px;height:32px;opacity:0.4}
+
 .field-input{
   width:100%;padding:8px 12px;font-size:14px;
   border:1px solid var(--border);border-radius:var(--radius);
@@ -460,10 +586,29 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 }
 .btn-fill:hover{opacity:0.85}
 .btn-fill:disabled{opacity:0.3;cursor:not-allowed}
-.ingest-status-msg{font-size:13px;padding:8px 12px;border-radius:var(--radius);text-align:center}
-.ingest-status-msg.compiling{background:var(--accent-bg);color:var(--accent)}
-.ingest-status-msg.done{background:rgba(68,131,97,0.08);color:var(--green)}
-.ingest-status-msg.error{background:rgba(235,87,87,0.08);color:var(--red)}
+
+/* Ingest step progress */
+.ingest-steps{display:flex;align-items:center;gap:0;padding:8px 0}
+.ingest-step{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--fg-tertiary);flex:1}
+.ingest-step-dot{
+  width:22px;height:22px;border-radius:50%;border:2px solid var(--border);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  font-size:10px;transition:all 200ms;
+}
+.ingest-step.active .ingest-step-dot{border-color:var(--accent);color:var(--accent);animation:stepPulse 1.5s infinite}
+.ingest-step.done .ingest-step-dot{border-color:var(--green);background:var(--green);color:#fff}
+.ingest-step-line{flex:1;height:2px;background:var(--border);margin:0 4px}
+.ingest-step.done .ingest-step-line{background:var(--green)}
+@keyframes stepPulse{0%,100%{opacity:1}50%{opacity:0.5}}
+
+.ingest-result{
+  padding:10px 12px;border-radius:var(--radius);font-size:13px;
+  display:flex;align-items:center;gap:8px;cursor:pointer;
+  transition:background var(--t);
+}
+.ingest-result:hover{background:var(--bg-hover)}
+.ingest-result.done{background:rgba(68,131,97,0.06);color:var(--green)}
+.ingest-result.error{background:rgba(235,87,87,0.06);color:var(--red)}
 
 /* ── Settings ── */
 .modal-bg{position:fixed;inset:0;z-index:300;display:none;background:rgba(15,15,15,0.6);justify-content:center;align-items:center}
@@ -492,13 +637,34 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 .btn-delete{padding:7px 20px;border-radius:var(--radius);background:var(--red);color:#fff;font-size:13px;font-weight:500;transition:opacity var(--t)}
 .btn-delete:hover{opacity:0.85}
 
-/* ── Toast ── */
+/* ── Toast (with undo support) ── */
 .toast{
   position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(50px);
   padding:8px 16px;border-radius:6px;background:var(--fg);color:var(--bg);
   font-size:13px;z-index:500;opacity:0;transition:transform 200ms ease,opacity 200ms ease;
+  display:flex;align-items:center;gap:10px;
 }
 .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+.toast-undo{
+  font-weight:600;cursor:pointer;padding:2px 8px;border-radius:var(--radius);
+  transition:background 100ms;text-decoration:underline;
+}
+.toast-undo:hover{background:rgba(255,255,255,0.15)}
+
+/* ── Mobile bottom nav ── */
+.mobile-nav{
+  display:none;position:fixed;bottom:0;left:0;right:0;
+  background:var(--bg);border-top:1px solid var(--border);
+  padding:4px 0 env(safe-area-inset-bottom, 4px);z-index:100;
+}
+.mobile-nav-inner{display:flex;justify-content:space-around}
+.mobile-nav-item{
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:6px 12px;font-size:10px;color:var(--fg-tertiary);
+  cursor:pointer;transition:color var(--t);
+}
+.mobile-nav-item.active{color:var(--accent)}
+.mobile-nav-item svg{width:20px;height:20px}
 
 /* ── Responsive ── */
 @media(max-width:768px){
@@ -506,6 +672,12 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
   .page-dashboard{padding:20px 16px 120px}
   .page-article-inner{padding:12px 16px 120px}
   .page-browse{padding:20px 16px 120px}
+  .page-chat-list{padding:20px 16px 120px}
+  .chat-messages-inner{padding:0 16px}
+  .chat-bottom-inner{padding:0 16px}
+  .mobile-nav{display:block}
+  .content{padding-bottom:56px}
+  .sidebar-expand-btn{display:none!important}
 }
 </style>
 </head>
@@ -518,9 +690,16 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
   <div class="sidebar-header">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
     知识库
+    <button class="sidebar-collapse-btn" onclick="toggleSidebar()" title="收起侧边栏">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+    </button>
   </div>
   <nav class="sidebar-nav">
-    <div class="sidebar-item active" data-view="dashboard" onclick="go('#/')">
+    <div class="sidebar-item" data-view="dashboard" onclick="go('#/')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      首页
+    </div>
+    <div class="sidebar-item" data-view="chatlist" onclick="go('#/chat')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
       对话
     </div>
@@ -533,8 +712,24 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
       全部文章
     </div>
   </nav>
-  <div class="sidebar-section">文章</div>
+
+  <!-- Chat history in sidebar -->
+  <div class="sidebar-section">
+    <span>对话</span>
+    <button class="sidebar-section-btn" onclick="go('#/')" title="新对话">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+  </div>
+  <div class="sidebar-chat-list" id="sidebarChats"></div>
+
+  <div class="sidebar-section">
+    <span>文章</span>
+    <button class="sidebar-section-btn" onclick="newArticle()" title="新建文章">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+  </div>
   <div class="sidebar-pages" id="sidebarPages"></div>
+
   <div class="sidebar-bottom">
     <button class="sidebar-bottom-btn" onclick="openSettings()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
@@ -549,10 +744,13 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 
 <!-- Main -->
 <div class="main">
+  <button class="sidebar-expand-btn" id="sidebarExpandBtn" onclick="toggleSidebar()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+  </button>
   <div class="topbar" id="topbar">
     <div class="topbar-breadcrumb" id="breadcrumb"></div>
     <div class="topbar-actions" id="topbarActions">
-      <button class="topbar-btn" onclick="openSearch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>搜索</button>
+      <button class="topbar-btn" onclick="openSearch()" title="⌘K"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>搜索</button>
       <button class="topbar-btn topbar-btn-accent" onclick="openIngest()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>投喂</button>
     </div>
   </div>
@@ -560,33 +758,57 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
 </div>
 </div>
 
+<!-- Format toolbar -->
+<div class="format-toolbar" id="formatToolbar">
+  <button class="format-toolbar-btn" onclick="fmtCmd('bold')" title="加粗"><b>B</b></button>
+  <button class="format-toolbar-btn" onclick="fmtCmd('italic')" title="斜体"><i>I</i></button>
+  <button class="format-toolbar-btn" onclick="fmtCmd('code')" title="代码"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></button>
+  <div class="format-toolbar-sep"></div>
+  <button class="format-toolbar-btn" onclick="fmtCmd('link')" title="链接"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></button>
+  <div class="format-toolbar-sep"></div>
+  <button class="format-toolbar-btn" onclick="fmtCmd('h2')" title="H2" style="font-size:11px">H2</button>
+  <button class="format-toolbar-btn" onclick="fmtCmd('h3')" title="H3" style="font-size:11px">H3</button>
+</div>
+
 <!-- Search -->
 <div class="search-overlay" id="searchOverlay" onclick="if(event.target===this)closeSearch()">
   <div class="search-box">
     <div class="search-input-row">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input class="search-field" id="searchInput" placeholder="搜索..." autocomplete="off">
+      <input class="search-field" id="searchInput" placeholder="搜索文章..." autocomplete="off">
       <span class="search-hint">ESC</span>
     </div>
     <div class="search-results" id="searchResults"><div class="search-empty-msg">输入关键词搜索</div></div>
   </div>
 </div>
 
-<!-- Ingest -->
+<!-- Ingest (unified) -->
 <div class="ingest-overlay" id="ingestOverlay" onclick="if(event.target===this)closeIngest()">
   <div class="ingest-panel">
     <div class="ingest-head"><h3>投喂知识</h3><button class="topbar-btn" onclick="closeIngest()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
-    <div class="ingest-tabs">
-      <button class="ingest-tab active" data-tab="text" onclick="switchTab('text')">文本</button>
-      <button class="ingest-tab" data-tab="url" onclick="switchTab('url')">链接</button>
-    </div>
     <div class="ingest-form">
-      <div id="tabText"><label class="field-label">粘贴内容</label><textarea class="field-textarea" id="ingestText" placeholder="粘贴文本内容..."></textarea></div>
-      <div id="tabUrl" style="display:none"><label class="field-label">链接地址</label><input class="field-input" id="ingestUrl" placeholder="https://..."></div>
-      <div><label class="field-label">主题</label><select class="field-select" id="ingestTopic"><option value="auto">自动分类</option></select></div>
-      <div><label class="field-label">模型</label><select class="field-select" id="ingestModel"></select></div>
+      <div>
+        <label class="field-label">拖拽文件或粘贴内容 · 链接自动识别</label>
+        <div class="ingest-drop-zone" id="ingestDropZone">
+          <textarea id="ingestContent" placeholder="粘贴文本、拖入文件、或输入 https:// 链接..."></textarea>
+          <div class="ingest-drop-hint">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            释放文件
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <div style="flex:1"><label class="field-label">主题</label><select class="field-select" id="ingestTopic"><option value="auto">自动分类</option></select></div>
+        <div style="flex:1"><label class="field-label">模型</label><select class="field-select" id="ingestModel"></select></div>
+      </div>
       <button class="btn-fill" id="ingestBtn" onclick="submitIngest()">开始编译</button>
-      <div class="ingest-status-msg" id="ingestStatus" style="display:none"></div>
+      <div class="ingest-steps" id="ingestSteps" style="display:none">
+        <div class="ingest-step" data-step="fetch"><div class="ingest-step-dot">1</div><span>获取</span><div class="ingest-step-line"></div></div>
+        <div class="ingest-step" data-step="parse"><div class="ingest-step-dot">2</div><span>解析</span><div class="ingest-step-line"></div></div>
+        <div class="ingest-step" data-step="compile"><div class="ingest-step-dot">3</div><span>编译</span><div class="ingest-step-line"></div></div>
+        <div class="ingest-step" data-step="done"><div class="ingest-step-dot">✓</div><span>完成</span></div>
+      </div>
+      <div class="ingest-result" id="ingestResult" style="display:none"></div>
     </div>
   </div>
 </div>
@@ -615,14 +837,36 @@ input,textarea,select{font-family:inherit;font-size:inherit;color:var(--fg);back
   </div>
 </div>
 
+<!-- Toast -->
 <div class="toast" id="toast"></div>
+
+<!-- Mobile bottom nav -->
+<div class="mobile-nav" id="mobileNav">
+  <div class="mobile-nav-inner">
+    <div class="mobile-nav-item" data-view="dashboard" onclick="go('#/')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>首页
+    </div>
+    <div class="mobile-nav-item" data-view="chatlist" onclick="go('#/chat')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>对话
+    </div>
+    <div class="mobile-nav-item" data-view="browse" onclick="go('#/browse')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>文章
+    </div>
+    <div class="mobile-nav-item" onclick="openIngest()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>投喂
+    </div>
+  </div>
+</div>
 
 <script>
 /* ── State ── */
 let gd=null,td=null,sd=null,cv='',gaf=null,st=null,ipt=null;
 let convId=null,msgs=[],chatBusy=false;
 let artPath='',artMd='',saveT=null;
-let sCache=null;
+let sCache=null,chatList=null;
+let searchIdx=-1;
+let undoTimer=null,undoData=null;
+const foldedTopics=new Set();
 
 /* ── Helpers ── */
 const $=id=>document.getElementById(id);
@@ -631,9 +875,16 @@ const hRe=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 async function api(p,o){const r=await fetch(p,o);if(!r.ok)throw new Error(''+r.status);return r.json()}
 async function post(p,b){return api(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})}
 async function put(p,b){return api(p,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})}
-async function del(p){return api(p,{method:'DELETE'})}
-function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500)}
+async function apiDel(p){return api(p,{method:'DELETE'})}
+function toast(m,undoFn){
+  const t=$('toast');
+  t.innerHTML=h(m)+(undoFn?'<span class="toast-undo" id="toastUndo">撤销</span>':'');
+  t.classList.add('show');
+  if(undoFn){const btn=$('toastUndo');if(btn)btn.onclick=()=>{undoFn();t.classList.remove('show')}}
+  clearTimeout(undoTimer);undoTimer=setTimeout(()=>t.classList.remove('show'),undoFn?6000:2500);
+}
 function go(hash){location.hash=hash}
+function skelLines(n){let s='';for(let i=0;i<n;i++)s+='<div class="skel skel-line" style="width:'+((40+Math.random()*50)|0)+'%"></div>';return'<div class="skel skel-title"></div>'+s}
 
 /* ── Theme ── */
 function initTheme(){if(localStorage.getItem('kb-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');updThemeIcon()}
@@ -648,10 +899,19 @@ function updThemeIcon(){
   $('themeIcon').innerHTML=d?'<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>':'<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
 }
 
+/* ── Sidebar ── */
+function toggleSidebar(){
+  const sb=$('sidebar');sb.classList.toggle('collapsed');
+  localStorage.setItem('kb-sidebar',sb.classList.contains('collapsed')?'collapsed':'');
+}
+function initSidebar(){if(localStorage.getItem('kb-sidebar')==='collapsed')$('sidebar').classList.add('collapsed')}
+
 /* ── Router ── */
 function route(){
   const hash=location.hash||'#/';
   if(hash==='#/'||hash==='#/dashboard')return{v:'dashboard'};
+  if(hash==='#/chat')return{v:'chatlist'};
+  if(hash.startsWith('#/chat/'))return{v:'chat',id:hash.slice(7)};
   if(hash==='#/graph')return{v:'graph'};
   if(hash==='#/browse')return{v:'browse'};
   if(hash.startsWith('#/article/'))return{v:'article',p:hash.slice(10)};
@@ -659,12 +919,17 @@ function route(){
 }
 function updNav(v){
   document.querySelectorAll('.sidebar-item[data-view]').forEach(el=>{
-    el.classList.toggle('active',el.dataset.view===v||(v==='article'&&el.dataset.view==='browse'));
+    el.classList.toggle('active',el.dataset.view===v||(v==='article'&&el.dataset.view==='browse')||(v==='chat'&&el.dataset.view==='chatlist'));
+  });
+  document.querySelectorAll('.mobile-nav-item[data-view]').forEach(el=>{
+    el.classList.toggle('active',el.dataset.view===v||(v==='article'&&el.dataset.view==='browse')||(v==='chat'&&el.dataset.view==='chatlist'));
   });
 }
 function updBC(r){
   const bc=$('breadcrumb');
   if(r.v==='dashboard')bc.innerHTML='';
+  else if(r.v==='chatlist')bc.innerHTML='<a href="#/">知识库</a><span class="sep">/</span>对话';
+  else if(r.v==='chat')bc.innerHTML='<a href="#/">知识库</a><span class="sep">/</span><a href="#/chat">对话</a>';
   else if(r.v==='graph')bc.innerHTML='<a href="#/">知识库</a><span class="sep">/</span>知识图谱';
   else if(r.v==='browse')bc.innerHTML='<a href="#/">知识库</a><span class="sep">/</span>全部文章';
   else if(r.v==='article'&&r.p){
@@ -676,12 +941,13 @@ function updBC(r){
 }
 function cancelGA(){if(gaf){cancelAnimationFrame(gaf);gaf=null}}
 async function render(){
-  const r=route();cv=r.v;updNav(r.v);updBC(r);cancelGA();
-  // Clean up article-specific UI when leaving article view
+  const r=route();cv=r.v;updNav(r.v);updBC(r);cancelGA();hideFormatToolbar();
   const delBtn=document.getElementById('topbarDel');if(delBtn&&r.v!=='article')delBtn.remove();
-  updSidebarPages();
+  updSidebarPages();updSidebarChats();
   const c=$('content');c.scrollTop=0;
   if(r.v==='dashboard')await rDash(c);
+  else if(r.v==='chatlist')await rChatList(c);
+  else if(r.v==='chat')await rChat(c,r.id);
   else if(r.v==='graph')await rGraph(c);
   else if(r.v==='browse')await rBrowse(c);
   else if(r.v==='article')await rArticle(c,r.p);
@@ -696,27 +962,55 @@ async function updSidebarPages(){
     const tree=td||await api('/api/wiki/tree');td=tree;
     let s='';
     (tree||[]).forEach(t=>{
-      s+='<div class="sidebar-topic">'+h(t.name)+'</div>';
+      const folded=foldedTopics.has(t.name)?'folded':'';
+      s+='<div class="sidebar-topic '+folded+'" onclick="toggleFold(this,\''+h(t.name)+'\')" title="'+h(t.name)+'"><span class="fold-arrow">▾</span> '+h(t.name)+'</div>';
       t.children.forEach(c=>{
         const active=artPath===c.path?' active':'';
-        s+='<div class="sidebar-page'+active+'" onclick="go(\'#/article/'+h(c.path)+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'+h(c.title||c.file)+'</div>';
+        const display=folded?' style="display:none"':'';
+        s+='<div class="sidebar-page'+active+'" data-topic="'+h(t.name)+'"'+display+' onclick="go(\'#/article/'+h(c.path)+'\')" title="'+h(c.title||c.file)+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span class="page-title">'+h(c.title||c.file)+'</span></div>';
       });
     });
     sp.innerHTML=s;
   }catch{}
 }
+function toggleFold(el,topic){
+  el.classList.toggle('folded');
+  if(foldedTopics.has(topic))foldedTopics.delete(topic);else foldedTopics.add(topic);
+  const folded=el.classList.contains('folded');
+  const pages=el.parentElement.querySelectorAll('.sidebar-page[data-topic="'+topic+'"]');
+  pages.forEach(p=>p.style.display=folded?'none':'');
+}
+
+/* ── Sidebar chats ── */
+async function updSidebarChats(){
+  const sc=$('sidebarChats');if(!sc)return;
+  try{
+    const list=chatList||await api('/api/chat/list');chatList=list;
+    const items=(list||[]).slice(0,5);
+    if(!items.length){sc.innerHTML='';return}
+    let s='';
+    items.forEach(c=>{
+      const active=(cv==='chat'&&convId===c.id)?' active':'';
+      s+='<div class="sidebar-chat-item'+active+'" onclick="go(\'#/chat/'+h(c.id)+'\')" title="'+h(c.title)+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span class="chat-title">'+h(c.title)+'</span></div>';
+    });
+    sc.innerHTML=s;
+  }catch{sc.innerHTML=''}
+}
 
 /* ── Dashboard ── */
 async function rDash(c){
-  c.innerHTML='<div style="display:flex;align-items:center;justify-content:center;padding:60px;color:var(--fg-tertiary)"><div class="spin"></div></div>';
+  c.innerHTML='<div class="page-dashboard">'+skelLines(4)+'</div>';
   try{
     const[stats,graph,recent]=await Promise.all([api('/api/wiki/stats'),api('/api/wiki/graph'),api('/api/wiki/recent')]);
     sd=stats;gd=graph;
     let s='<div class="page-dashboard">';
 
-    // Chat
-    s+='<div class="chat-area" id="chatArea">';
-    s+=buildChat();
+    // Chat greeting + composer
+    s+='<div class="chat-area">';
+    s+='<div class="chat-greeting">基于知识库提问</div>';
+    s+='<div class="chat-sub">输入问题，AI 会结合你的知识库回答</div>';
+    s+='<div class="chat-pills"><span class="chat-pill" onclick="dashAsk(this)">知识库里有什么？</span><span class="chat-pill" onclick="dashAsk(this)">总结最近内容</span><span class="chat-pill" onclick="dashAsk(this)">有哪些主题？</span></div>';
+    s+=buildComposer('dash');
     s+='</div>';
 
     // Graph
@@ -730,7 +1024,7 @@ async function rDash(c){
     const ent=recent.entries||[];
     s+='<div class="section-head"><span class="section-label">最近活动</span></div>';
     s+='<div class="activity-card">';
-    if(!ent.length)s+='<div class="activity-none">暂无记录</div>';
+    if(!ent.length)s+='<div class="activity-none">暂无记录，投喂知识开始使用</div>';
     else ent.slice(0,6).forEach(a=>{
       const icon=a.type==='ingest'?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>':a.type==='query'?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
       s+='<div class="activity-row"><span class="activity-icon">'+icon+'</span><span class="activity-date">'+(a.date||'').slice(5)+'</span><span class="activity-label">'+h(a.title)+'</span></div>';
@@ -740,45 +1034,138 @@ async function rDash(c){
     // Stats
     s+='<div class="stats-row"><span>'+stats.articles+' 篇文章</span><span>'+stats.sources+' 个来源</span><span>'+stats.topics+' 个主题</span>';
     if(stats.lastUpdate)s+='<span>更新于 '+stats.lastUpdate.slice(5)+'</span>';
-    s+='</div>';
-
-    s+='</div>';
+    s+='</div></div>';
     c.innerHTML=s;
-    initChat();
+    initComposer('dash');
     if(graph.nodes.length>=2)requestAnimationFrame(()=>{const cv=document.getElementById('dgCanvas');if(cv)initFG(cv,graph,false)});
   }catch(e){c.innerHTML='<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败: '+h(e.message)+'</div>'}
 }
 
-/* ── Chat ── */
-function buildChat(){
-  let s='';
-  s+='<div class="chat-history-row"><a href="javascript:void(0)" onclick="newConv()">+ 新对话</a></div>';
-  if(!msgs.length){
-    s+='<div class="chat-greeting">你好</div>';
-    s+='<div class="chat-sub">基于你的知识库回答问题</div>';
-    s+='<div class="chat-pills"><span class="chat-pill" onclick="askPill(this)">知识库里有什么？</span><span class="chat-pill" onclick="askPill(this)">总结最近内容</span><span class="chat-pill" onclick="askPill(this)">有哪些主题？</span></div>';
-  }else{
-    s+='<div class="chat-msgs" id="chatMsgs">';
-    msgs.forEach(m=>s+=renderMsg(m));
-    s+='</div>';
-  }
-  s+='<div class="chat-composer-wrap"><div class="chat-composer">';
-  s+='<textarea class="chat-textarea" id="chatIn" placeholder="输入问题..." rows="1" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();sendMsg()}" oninput="this.style.height=\'auto\';this.style.height=Math.min(this.scrollHeight,160)+\'px\';$(\'chatSendBtn\').disabled=!this.value.trim()"></textarea>';
+/* ── Composer builder (shared) ── */
+function buildComposer(ctx){
+  let s='<div class="chat-composer-wrap"><div class="chat-composer">';
+  s+='<textarea class="chat-textarea" id="'+ctx+'In" placeholder="输入问题..." rows="1"></textarea>';
   s+='<div class="chat-toolbar"><div class="chat-toolbar-left">';
   s+='<button class="chat-attach-btn" title="附件"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>';
   s+='</div><div class="chat-toolbar-right">';
-  s+='<span class="chat-model-tag" id="chatModelTag" onclick="toggleModelDD()"><span id="chatModelName">选择模型</span> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span>';
-  s+='<button class="chat-send-btn" id="chatSendBtn" onclick="sendMsg()" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>';
-  s+='</div></div>';
-  s+='</div>';
-  s+='<div class="chat-model-dropdown" id="chatModelDD"></div>';
-  s+='</div>';
+  s+='<span class="chat-model-tag" id="'+ctx+'ModelTag" onclick="toggleDD(\''+ctx+'ModelDD\')"><span id="'+ctx+'ModelName">选择模型</span> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span>';
+  s+='<button class="chat-send-btn" id="'+ctx+'SendBtn" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>';
+  s+='</div></div></div>';
+  s+='<div class="chat-model-dropdown" id="'+ctx+'ModelDD"></div></div>';
   return s;
+}
+function initComposer(ctx){
+  loadModels(ctx+'ModelDD',ctx+'ModelTag');
+  const inp=$(ctx+'In'),btn=$(ctx+'SendBtn');
+  if(!inp||!btn)return;
+  inp.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(ctx==='dash')dashSend();else if(ctx==='cp')chatSend()}};
+  inp.oninput=()=>{inp.style.height='auto';inp.style.height=Math.min(inp.scrollHeight,160)+'px';btn.disabled=!inp.value.trim()};
+}
+
+/* ── Dashboard send → new chat page ── */
+async function dashAsk(el){$(  'dashIn').value=el.textContent;$('dashSendBtn').disabled=false;dashSend()}
+async function dashSend(){
+  const inp=$('dashIn');const t=inp.value.trim();if(!t||chatBusy)return;
+  chatBusy=true;$('dashSendBtn').disabled=true;
+  try{
+    const res=await post('/api/chat/new',{firstMessage:t});
+    convId=res.conversation.id;msgs=[{role:'user',content:t},res.message];
+    chatList=null;
+    go('#/chat/'+convId);
+  }catch(e){toast('发送失败: '+e.message)}
+  chatBusy=false;
+}
+
+/* ── Chat list page ── */
+async function rChatList(c){
+  c.innerHTML='<div class="page-chat-list">'+skelLines(5)+'</div>';
+  try{
+    const list=await api('/api/chat/list');chatList=list;
+    let s='<div class="page-chat-list"><div class="chat-list-heading">对话</div>';
+    if(!list||!list.length){
+      s+='<div class="chat-list-empty"><p style="margin-bottom:12px">还没有对话</p><button class="btn-fill" style="width:auto;padding:8px 20px" onclick="go(\'#/\')">开始提问</button></div>';
+    }else{
+      list.forEach(ch=>{
+        const d=ch.updatedAt?new Date(ch.updatedAt).toLocaleDateString('zh-CN',{month:'short',day:'numeric'}):'';
+        s+='<div class="chat-list-item" onclick="go(\'#/chat/'+h(ch.id)+'\')">';
+        s+='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>';
+        s+='<div class="chat-list-item-info"><div class="chat-list-item-title">'+h(ch.title)+'</div><div class="chat-list-item-date">'+d+'</div></div>';
+        s+='<button class="chat-list-item-del" onclick="event.stopPropagation();delChat(\''+h(ch.id)+'\')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>';
+        s+='</div>';
+      });
+    }
+    s+='</div>';c.innerHTML=s;
+  }catch(e){c.innerHTML='<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败</div>'}
+}
+async function delChat(id){
+  try{await apiDel('/api/chat/'+id);chatList=null;toast('已删除');render()}catch{toast('删除失败')}
+}
+
+/* ── Chat page ── */
+async function rChat(c,id){
+  c.innerHTML='<div class="page-chat"><div class="chat-messages"><div class="chat-messages-inner">'+skelLines(6)+'</div></div></div>';
+  convId=id;
+  try{
+    // If we have msgs from dashSend, use them; otherwise load from API
+    if(!msgs.length||convId!==id){
+      const conv=await api('/api/chat/'+id);
+      msgs=conv.messages||[];
+      convId=id;
+    }
+    renderChatPage(c);
+  }catch(e){c.innerHTML='<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败: '+h(e.message)+'</div>'}
+}
+function renderChatPage(c){
+  let s='<div class="page-chat"><div class="chat-messages" id="chatMsgs"><div class="chat-messages-inner">';
+  if(!msgs.length)s+='<div style="padding:40px 0;text-align:center;color:var(--fg-tertiary)">发送第一条消息开始对话</div>';
+  else msgs.forEach(m=>s+=renderMsg(m));
+  s+='</div></div>';
+  s+='<div class="chat-bottom"><div class="chat-bottom-inner">'+buildComposer('cp')+'</div></div>';
+  s+='</div>';
+
+  // Add topbar actions for chat
+  const topActs=$('topbarActions');
+  const delBtn=document.getElementById('topbarDel');
+  if(topActs&&!delBtn){
+    const btn=document.createElement('button');
+    btn.id='topbarDel';btn.className='topbar-btn';btn.style.color='var(--fg-tertiary)';
+    btn.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>';
+    btn.title='删除对话';
+    btn.onclick=()=>{delChat(convId);go('#/chat')};
+    topActs.insertBefore(btn,topActs.firstChild);
+  }
+
+  c.innerHTML=s;
+  initComposer('cp');
+  const msgsEl=$('chatMsgs');if(msgsEl)msgsEl.scrollTop=msgsEl.scrollHeight;
+  updSidebarChats();
 }
 function renderMsg(m){
   const av=m.role==='user'?'你':'AI';
   const body=m.role==='assistant'?fmtChat(m.content):h(m.content).replace(/\n/g,'<br>');
-  return'<div class="chat-msg '+m.role+'"><div class="chat-msg-avatar">'+av+'</div><div class="chat-msg-body">'+body+'</div></div>';
+  let s='<div class="chat-msg '+m.role+'"><div class="chat-msg-avatar">'+av+'</div><div class="chat-msg-body">'+body;
+  // Citations for assistant messages
+  if(m.role==='assistant'&&m.content){
+    const links=extractCitations(m.content);
+    if(links.length){
+      s+='<div class="chat-citations"><div class="chat-citations-head" onclick="this.classList.toggle(\'open\');this.nextElementSibling.classList.toggle(\'open\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>引用了 '+links.length+' 篇文章</div><div class="chat-citations-body">';
+      links.forEach(l=>{
+        s+='<div class="chat-citation-item" onclick="go(\'#/article/'+h(l.path)+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'+h(l.title)+'</div>';
+      });
+      s+='</div></div>';
+    }
+  }
+  s+='</div></div>';
+  return s;
+}
+function extractCitations(text){
+  const links=[];const seen=new Set();
+  const re=/\[([^\]]+)\]\(([^)]+\.md)\)/g;let m;
+  while((m=re.exec(text))!==null){
+    const path=m[2].replace(/^(\.\.\/)+/,'');
+    if(!seen.has(path)){seen.add(path);links.push({title:m[1],path})}
+  }
+  return links;
 }
 function fmtChat(t){
   if(!t)return'';
@@ -788,43 +1175,44 @@ function fmtChat(t){
   s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
   s=s.replace(/\[([^\]]+)\]\(([^)]+)\)/g,(m,l,u)=>{
     if(/^https?:/.test(u))return'<a href="'+h(u)+'" target="_blank">'+h(l)+'</a>';
-    if(u.endsWith('.md'))return'<a href="#/article/'+h(u)+'">'+h(l)+'</a>';
+    if(u.endsWith('.md')){const p=u.replace(/^(\.\.\/)+/,'');return'<a href="#/article/'+h(p)+'">'+h(l)+'</a>'}
     return'<a href="'+h(u)+'">'+h(l)+'</a>';
   });
   s=s.replace(/\n/g,'<br>');
   return s;
 }
-async function initChat(){
-  await loadModels('chatModelDD','chatModelTag');
-}
-function askPill(el){$('chatIn').value=el.textContent;$('chatSendBtn').disabled=false;sendMsg()}
-async function sendMsg(){
-  const inp=$('chatIn');const t=inp.value.trim();if(!t||chatBusy)return;
-  chatBusy=true;$('chatSendBtn').disabled=true;
+async function chatSend(){
+  const inp=$('cpIn');const t=inp.value.trim();if(!t||chatBusy)return;
+  chatBusy=true;$('cpSendBtn').disabled=true;
   msgs.push({role:'user',content:t});
-  const mc=$('chatMsgs');const welcome=document.querySelector('.chat-greeting');
-  if(welcome){
-    const area=$('chatArea');
-    // Remove welcome, rebuild with messages
-    area.innerHTML=buildChat();initChat();
-    const mc2=$('chatMsgs');if(mc2)mc2.scrollTop=mc2.scrollHeight;
-  }else{
-    if(mc){mc.innerHTML+=renderMsg({role:'user',content:t});mc.innerHTML+='<div class="chat-msg assistant" id="chatTyp"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body"><div class="chat-typing-dots"><span></span><span></span><span></span></div></div></div>';mc.scrollTop=mc.scrollHeight}
+  const msgsEl=$('chatMsgs');
+  if(msgsEl){
+    const inner=msgsEl.querySelector('.chat-messages-inner');
+    if(inner){
+      inner.innerHTML+=renderMsg({role:'user',content:t});
+      inner.innerHTML+='<div class="chat-msg assistant" id="chatTyp"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body"><div class="chat-typing-dots"><span></span><span></span><span></span></div></div></div>';
+      msgsEl.scrollTop=msgsEl.scrollHeight;
+    }
   }
   inp.value='';inp.style.height='auto';
   try{
-    let res;
-    if(!convId){res=await post('/api/chat/new',{firstMessage:t});convId=res.conversation.id;msgs.push(res.message)}
-    else{res=await post('/api/chat/'+convId+'/message',{content:t});msgs.push(res.message)}
+    const res=await post('/api/chat/'+convId+'/message',{content:t});
+    msgs.push(res.message);
     const typ=document.getElementById('chatTyp');if(typ)typ.remove();
-    const mc3=$('chatMsgs');if(mc3){mc3.innerHTML+=renderMsg(msgs[msgs.length-1]);mc3.scrollTop=mc3.scrollHeight}
+    if(msgsEl){
+      const inner=msgsEl.querySelector('.chat-messages-inner');
+      if(inner){inner.innerHTML+=renderMsg(msgs[msgs.length-1]);msgsEl.scrollTop=msgsEl.scrollHeight}
+    }
+    chatList=null;updSidebarChats();
   }catch(e){
     const typ=document.getElementById('chatTyp');if(typ)typ.remove();
-    const mc3=$('chatMsgs');if(mc3)mc3.innerHTML+='<div class="chat-msg assistant"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body" style="color:var(--red)">错误: '+h(e.message)+'</div></div>';
+    if(msgsEl){
+      const inner=msgsEl.querySelector('.chat-messages-inner');
+      if(inner)inner.innerHTML+='<div class="chat-msg assistant"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body" style="color:var(--red)">错误: '+h(e.message)+'</div></div>';
+    }
   }
-  chatBusy=false;$('chatSendBtn').disabled=false;
+  chatBusy=false;$('cpSendBtn').disabled=false;
 }
-function newConv(){convId=null;msgs=[];if(cv==='dashboard'){const a=$('chatArea');if(a){a.innerHTML=buildChat();initChat()}}}
 async function loadModels(ddId,tagId){
   try{
     const s=sCache||await api('/api/settings');sCache=s;
@@ -840,7 +1228,7 @@ async function loadModels(ddId,tagId){
     else tag.firstChild.textContent=s.model||'选择模型';
   }catch{}
 }
-function toggleModelDD(){$('chatModelDD').classList.toggle('open')}
+function toggleDD(id){$(id).classList.toggle('open')}
 function pickModel(el,ddId,tagId){
   $(ddId).querySelectorAll('.chat-model-opt').forEach(o=>o.classList.remove('active'));
   el.classList.add('active');
@@ -849,35 +1237,27 @@ function pickModel(el,ddId,tagId){
   $(ddId).classList.remove('open');
 }
 
-/* ── Article (contenteditable) ── */
+/* ── Article ── */
 async function rArticle(c,p){
-  c.innerHTML='<div style="display:flex;align-items:center;justify-content:center;padding:60px;color:var(--fg-tertiary)"><div class="spin"></div></div>';
+  c.innerHTML='<div class="page-article"><div class="page-article-inner">'+skelLines(8)+'</div></div>';
   artPath=p;
   try{
     const res=await api('/api/wiki/article?path='+encodeURIComponent(p));
     artMd=res.content||'';
     const lines=artMd.split('\n');
     let title='',bodyStart=0;
-    // Extract title (first # heading)
     if(lines[0]&&lines[0].startsWith('#')){title=lines[0].replace(/^#+\s*/,'');bodyStart=1;while(bodyStart<lines.length&&!lines[bodyStart].trim())bodyStart++}
-    // Strip metadata lines from body for clean display
     const bodyLines=lines.slice(bodyStart);
-    const cleanLines=[];
-    let skipMeta=true;
+    const cleanLines=[];let skipMeta=true;
     for(const line of bodyLines){
       if(skipMeta){
         const trimmed=line.trim();
-        // Skip: empty lines, word count, timestamps, source counts, blockquote metadata
-        if(!trimmed){continue}
-        if(/^\d+\s*(字|个来源|个引用)/.test(trimmed)){continue}
-        if(/^(创建|更新|Created|Updated|Published)\s*[:：]/.test(trimmed)){continue}
-        if(/^\d+\s*字\s*·/.test(trimmed)){continue}
+        if(!trimmed)continue;
+        if(/^\d+\s*(字|个来源|个引用)/.test(trimmed))continue;
+        if(/^(创建|更新|Created|Updated|Published)\s*[:：]/.test(trimmed))continue;
+        if(/^\d+\s*字\s*·/.test(trimmed))continue;
         if(/^>\s*(来源|原文|Source|Raw)[：:]/.test(trimmed)){cleanLines.push(line);continue}
-        // If it's a heading or normal paragraph, stop skipping
-        if(/^#{1,4}\s/.test(trimmed)||(!trimmed.startsWith('>')&&trimmed.length>0)){
-          skipMeta=false;
-          cleanLines.push(line);continue;
-        }
+        if(/^#{1,4}\s/.test(trimmed)||(!trimmed.startsWith('>')&&trimmed.length>0)){skipMeta=false;cleanLines.push(line);continue}
         continue;
       }
       cleanLines.push(line);
@@ -888,47 +1268,61 @@ async function rArticle(c,p){
     let s='<div class="page-article"><div class="page-article-inner">';
     s+='<div class="article-title" contenteditable="true" id="artTitle" oninput="onArtChange()">'+h(title)+'</div>';
     s+='<div class="article-body" contenteditable="true" id="artBody" oninput="onArtChange()">'+rendered+'</div>';
+    // Related articles
+    s+=await buildRelated(p);
     s+='</div></div>';
-    // Build right-side TOC
     s+=buildArticleTOC(artMd);
     s+='<div class="article-save-indicator" id="saveInd"></div>';
     c.innerHTML=s;
 
-    // Add delete button to topbar
     const topActs=$('topbarActions');
     if(topActs&&!document.getElementById('topbarDel')){
       const delBtn=document.createElement('button');
       delBtn.id='topbarDel';delBtn.className='topbar-btn';delBtn.style.color='var(--fg-tertiary)';
       delBtn.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>';
-      delBtn.title='删除文章';
-      delBtn.onclick=showDel;
+      delBtn.title='删除文章';delBtn.onclick=showDel;
       topActs.insertBefore(delBtn,topActs.firstChild);
     }
+
+    // Setup format toolbar for article body
+    setupFormatToolbar();
   }catch(e){c.innerHTML='<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败: '+h(e.message)+'</div>'}
 }
 
+async function buildRelated(curPath){
+  try{
+    const tree=td||await api('/api/wiki/tree');td=tree;
+    const parts=curPath.split('/');if(parts.length<2)return'';
+    const topic=parts[0];
+    const topicNode=(tree||[]).find(t=>t.name===topic);
+    if(!topicNode)return'';
+    const siblings=topicNode.children.filter(c=>c.path!==curPath);
+    if(!siblings.length)return'';
+    let s='<div class="article-related"><div class="article-related-title">同主题文章</div>';
+    siblings.forEach(c=>{
+      s+='<div class="article-related-item" onclick="go(\'#/article/'+h(c.path)+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'+h(c.title||c.file)+'</div>';
+    });
+    s+='</div>';return s;
+  }catch{return''}
+}
+
 function buildArticleTOC(md){
-  const headings=[];
-  const lines=md.split('\n');
-  let inCode=false;
+  const headings=[];const lines=md.split('\n');let inCode=false;
   for(const line of lines){
     if(line.trimStart().startsWith('```')){inCode=!inCode;continue}
     if(inCode)continue;
     const m=line.match(/^(#{1,4})\s+(.+)/);
     if(m&&m[1].length>1)headings.push({level:m[1].length,text:m[2].trim()});
   }
-  if(headings.length<2)return '';
-  let s='<div class="article-toc" id="articleToc">';
-  s+='<div class="article-toc-title">目录</div>';
+  if(headings.length<2)return'';
+  let s='<div class="article-toc" id="articleToc"><div class="article-toc-title">目录</div>';
   headings.forEach(heading=>{
     const cls='article-toc-item lvl'+heading.level;
     const id=heading.text.replace(/[^\w\u4e00-\u9fff]+/g,'-').replace(/^-|-$/g,'');
     s+='<div class="'+cls+'" onclick="scrollToH(\''+h(id)+'\')">'+h(heading.text)+'</div>';
   });
-  s+='</div>';
-  return s;
+  s+='</div>';return s;
 }
-
 function scrollToH(id){
   const body=$('artBody');if(!body)return;
   for(const el of body.querySelectorAll('h1,h2,h3,h4')){
@@ -947,23 +1341,49 @@ async function autoSave(){
   const titleEl=$('artTitle'),bodyEl=$('artBody'),ind=$('saveInd');
   if(!titleEl||!bodyEl)return;
   if(ind){ind.textContent='保存中...';ind.classList.add('show')}
-  // Convert contenteditable HTML back to markdown
   const title=titleEl.innerText.trim();
   const bodyHtml=bodyEl.innerHTML;
   const bodyMd=html2md(bodyHtml);
   const fullMd=(title?'# '+title+'\n\n':'')+bodyMd;
   try{
     await put('/api/wiki/article',{path:artPath,content:fullMd});
-    artMd=fullMd;
+    artMd=fullMd;td=null;
     if(ind){ind.textContent='已保存';setTimeout(()=>ind.classList.remove('show'),2000)}
   }catch{if(ind){ind.textContent='保存失败';ind.style.color='var(--red)'}}
 }
 
-/* ── HTML to Markdown converter ── */
-function html2md(html){
-  const div=document.createElement('div');div.innerHTML=html;
-  return node2md(div).trim();
+/* ── Format toolbar ── */
+function setupFormatToolbar(){
+  const body=$('artBody');if(!body)return;
+  document.addEventListener('selectionchange',()=>{
+    const sel=window.getSelection();
+    if(!sel.rangeCount||sel.isCollapsed||!body.contains(sel.anchorNode)){hideFormatToolbar();return}
+    const range=sel.getRangeAt(0);const rect=range.getBoundingClientRect();
+    const tb=$('formatToolbar');
+    tb.style.top=(rect.top+window.scrollY-42)+'px';
+    tb.style.left=(rect.left+rect.width/2-tb.offsetWidth/2)+'px';
+    tb.classList.add('show');
+  });
 }
+function hideFormatToolbar(){$('formatToolbar').classList.remove('show')}
+function fmtCmd(cmd){
+  if(cmd==='bold')document.execCommand('bold');
+  else if(cmd==='italic')document.execCommand('italic');
+  else if(cmd==='code'){
+    const sel=window.getSelection();
+    if(sel.rangeCount){const text=sel.toString();document.execCommand('insertHTML','<code>'+h(text)+'</code>')}
+  }
+  else if(cmd==='link'){
+    const url=prompt('链接地址:','https://');
+    if(url)document.execCommand('createLink',false,url);
+  }
+  else if(cmd==='h2')document.execCommand('formatBlock',false,'h2');
+  else if(cmd==='h3')document.execCommand('formatBlock',false,'h3');
+  hideFormatToolbar();onArtChange();
+}
+
+/* ── HTML to Markdown ── */
+function html2md(html){const div=document.createElement('div');div.innerHTML=html;return node2md(div).trim()}
 function node2md(node){
   let md='';
   for(const child of node.childNodes){
@@ -1002,14 +1422,39 @@ function table2md(table){
 let delPath='';
 function showDel(){delPath=artPath;$('delConfirm').classList.add('open')}
 function closeDel(){$('delConfirm').classList.remove('open')}
-async function doDel(){closeDel();try{await del('/api/wiki/article?path='+encodeURIComponent(delPath));td=null;toast('已删除');go('#/browse')}catch(e){toast('删除失败')}}
+async function doDel(){
+  closeDel();
+  const path=delPath;
+  // Save content for undo
+  let savedContent=artMd;
+  try{
+    await apiDel('/api/wiki/article?path='+encodeURIComponent(path));td=null;
+    go('#/browse');
+    toast('已删除',async()=>{
+      try{await put('/api/wiki/article',{path,content:savedContent});td=null;toast('已恢复');go('#/article/'+path)}catch{toast('恢复失败')}
+    });
+  }catch(e){toast('删除失败')}
+}
+
+/* New article */
+async function newArticle(){
+  const title=prompt('文章标题:');if(!title)return;
+  const tree=td||await api('/api/wiki/tree');td=tree;
+  const topic=(tree&&tree.length)?tree[0].name:'general';
+  const slug=title.toLowerCase().replace(/[^\w\u4e00-\u9fff]+/g,'-').replace(/^-|-$/g,'');
+  const path=topic+'/'+slug+'.md';
+  try{
+    await put('/api/wiki/article',{path,content:'# '+title+'\n\n'});td=null;
+    go('#/article/'+path);toast('已创建');
+  }catch(e){toast('创建失败: '+e.message)}
+}
 
 /* ── Browse ── */
 async function rBrowse(c){
-  c.innerHTML='<div style="padding:60px;text-align:center;color:var(--fg-tertiary)">...</div>';
+  c.innerHTML='<div class="page-browse">'+skelLines(5)+'</div>';
   try{
     const tree=td||await api('/api/wiki/tree');td=tree;
-    if(!tree||!tree.length){c.innerHTML='<div class="page-browse"><div class="browse-heading">全部文章</div><div style="color:var(--fg-tertiary);font-size:14px">暂无文章，投喂知识后出现</div></div>';return}
+    if(!tree||!tree.length){c.innerHTML='<div class="page-browse"><div class="browse-heading">全部文章</div><div style="color:var(--fg-tertiary);font-size:14px;padding:20px 0;text-align:center">暂无文章<br><br><button class="btn-fill" style="width:auto;padding:8px 20px" onclick="openIngest()">投喂知识</button></div></div>';return}
     let s='<div class="page-browse"><div class="browse-heading">全部文章</div>';
     tree.forEach(t=>{
       s+='<div class="browse-group"><div class="browse-group-head" onclick="this.parentElement.classList.toggle(\'closed\')"><span class="arr">&#9660;</span> '+h(t.name)+'<span class="browse-group-count">'+t.children.length+'</span></div><ul class="browse-group-list">';
@@ -1017,12 +1462,12 @@ async function rBrowse(c){
       s+='</ul></div>';
     });
     s+='</div>';c.innerHTML=s;
-  }catch(e){c.innerHTML='<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败</div>'}
+  }catch{c.innerHTML='<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败</div>'}
 }
 
 /* ── Full Graph ── */
 async function rGraph(c){
-  c.innerHTML='<div style="padding:60px;text-align:center;color:var(--fg-tertiary)">...</div>';
+  c.innerHTML='<div style="padding:60px;text-align:center;color:var(--fg-tertiary)">加载中...</div>';
   try{
     const g=gd||await api('/api/wiki/graph');gd=g;
     const topics=[...new Set(g.nodes.map(n=>n.topic).filter(Boolean))];
@@ -1037,7 +1482,7 @@ async function rGraph(c){
     s+='</div></div>';
     c.innerHTML=s;
     if(g.nodes.length>=2)requestAnimationFrame(()=>{const cv=document.getElementById('fgCanvas');if(cv)initFG(cv,g,true)});
-  }catch(e){c.innerHTML='<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败</div>'}
+  }catch{c.innerHTML='<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败</div>'}
 }
 
 /* ── Markdown Renderer ── */
@@ -1141,16 +1586,24 @@ function initFG(canvas,data,full){
 function gZoom(f){if(!gs)return;const c=gs.canvas;const r=c.getBoundingClientRect();const cx=r.width/2,cy=r.height/2;const nz=Math.max(0.3,Math.min(5,gs.zoom*f));gs.px=cx-(cx-gs.px)*(nz/gs.zoom);gs.py=cy-(cy-gs.py)*(nz/gs.zoom);gs.zoom=nz;cancelGA();const el=gs.full?document.getElementById('fgCanvas'):document.getElementById('dgCanvas');if(el)initFG(el,gs.data,gs.full)}
 function applyGF(){if(!gs)return;const cbs=document.querySelectorAll('.graph-filter-label input');const en=new Set();cbs.forEach(cb=>{if(cb.checked)en.add(cb.dataset.topic)});const f={nodes:gs.data.nodes.filter(n=>!n.topic||en.has(n.topic)),edges:gs.data.edges.filter(e=>{const s=gs.data.nodes.find(n=>n.id===e.source);const t=gs.data.nodes.find(n=>n.id===e.target);return s&&t&&(!s.topic||en.has(s.topic))&&(!t.topic||en.has(t.topic))})};const ct=document.querySelector('.graph-count');if(ct)ct.textContent=f.nodes.length+' 节点';cancelGA();const cv=document.getElementById('fgCanvas');if(cv)initFG(cv,f,true)}
 
-/* ── Search ── */
-function openSearch(){$('searchOverlay').classList.add('open');const i=$('searchInput');i.value='';i.focus();$('searchResults').innerHTML='<div class="search-empty-msg">输入关键词搜索</div>'}
+/* ── Search (with keyboard nav) ── */
+function openSearch(){$('searchOverlay').classList.add('open');const i=$('searchInput');i.value='';i.focus();searchIdx=-1;$('searchResults').innerHTML='<div class="search-empty-msg">输入关键词搜索 · ↑↓ 导航 · ↵ 打开</div>'}
 function closeSearch(){$('searchOverlay').classList.remove('open')}
 document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();openSearch()}
   if(e.key==='Escape'){closeSearch();closeIngest();closeSettings();closeDel()}
+  // Search keyboard navigation
+  if($('searchOverlay').classList.contains('open')){
+    const items=$('searchResults').querySelectorAll('.search-result');
+    if(e.key==='ArrowDown'){e.preventDefault();searchIdx=Math.min(searchIdx+1,items.length-1);updSearchFocus(items)}
+    else if(e.key==='ArrowUp'){e.preventDefault();searchIdx=Math.max(searchIdx-1,0);updSearchFocus(items)}
+    else if(e.key==='Enter'&&searchIdx>=0&&items[searchIdx]){e.preventDefault();items[searchIdx].click()}
+  }
 });
+function updSearchFocus(items){items.forEach((el,i)=>el.classList.toggle('focused',i===searchIdx))}
 $('searchInput').addEventListener('input',e=>{
-  clearTimeout(st);const q=e.target.value.trim();
-  if(!q){$('searchResults').innerHTML='<div class="search-empty-msg">输入关键词搜索</div>';return}
+  clearTimeout(st);const q=e.target.value.trim();searchIdx=-1;
+  if(!q){$('searchResults').innerHTML='<div class="search-empty-msg">输入关键词搜索 · ↑↓ 导航 · ↵ 打开</div>';return}
   st=setTimeout(async()=>{
     try{const r=await api('/api/search?q='+encodeURIComponent(q));const c=$('searchResults');
       if(!r||!r.length){c.innerHTML='<div class="search-empty-msg">未找到结果</div>';return}
@@ -1159,10 +1612,30 @@ $('searchInput').addEventListener('input',e=>{
   },200);
 });
 
-/* ── Ingest ── */
-function openIngest(){$('ingestOverlay').classList.add('open');loadTopics();loadModels2('ingestModel')}
+/* ── Ingest (unified) ── */
+function openIngest(){$('ingestOverlay').classList.add('open');loadTopics();loadModels2('ingestModel');resetIngestUI()}
 function closeIngest(){$('ingestOverlay').classList.remove('open');if(ipt){clearInterval(ipt);ipt=null}}
-function switchTab(t){document.querySelectorAll('.ingest-tab').forEach(el=>el.classList.toggle('active',el.dataset.tab===t));$('tabText').style.display=t==='text'?'':'none';$('tabUrl').style.display=t==='url'?'':'none'}
+function resetIngestUI(){
+  $('ingestContent').value='';$('ingestBtn').disabled=false;
+  $('ingestSteps').style.display='none';$('ingestResult').style.display='none';
+  $('ingestSteps').querySelectorAll('.ingest-step').forEach(s=>{s.classList.remove('active','done')});
+}
+// Drag & drop
+(function(){
+  const dz=$('ingestDropZone');if(!dz)return;
+  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('dragover')});
+  dz.addEventListener('dragleave',()=>dz.classList.remove('dragover'));
+  dz.addEventListener('drop',e=>{
+    e.preventDefault();dz.classList.remove('dragover');
+    const files=e.dataTransfer.files;
+    if(files.length){
+      const f=files[0];const reader=new FileReader();
+      reader.onload=()=>{$('ingestContent').value=reader.result};
+      reader.readAsText(f);
+    }
+  });
+})();
+
 async function loadTopics(){try{const tree=td||await api('/api/wiki/tree');td=tree;const s=$('ingestTopic');const v=s.value;s.innerHTML='<option value="auto">自动分类</option>';if(tree)tree.forEach(t=>{const o=document.createElement('option');o.value=t.name;o.textContent=t.name;s.appendChild(o)});if(v)s.value=v}catch{}}
 async function loadModels2(id){
   try{const s=sCache||await api('/api/settings');sCache=s;const sel=$(id);if(!sel)return;sel.innerHTML='';
@@ -1171,21 +1644,61 @@ async function loadModels2(id){
   }catch{}
 }
 async function submitIngest(){
-  const tab=document.querySelector('.ingest-tab.active').dataset.tab;
+  const content=$('ingestContent').value.trim();
+  if(!content){toast('请输入内容');return}
   const topic=$('ingestTopic').value;const model=$('ingestModel');
-  let content='';
-  if(tab==='text'){content=$('ingestText').value.trim();if(!content){toast('请输入内容');return}}
-  else{content=$('ingestUrl').value.trim();if(!content){toast('请输入链接');return}}
-  const btn=$('ingestBtn');const st=$('ingestStatus');btn.disabled=true;st.style.display='';st.className='ingest-status-msg compiling';st.textContent='编译中...';
+  // Auto-detect type
+  const type=/^https?:\/\//.test(content)?'url':'text';
+
+  const btn=$('ingestBtn');const steps=$('ingestSteps');const result=$('ingestResult');
+  btn.disabled=true;steps.style.display='flex';result.style.display='none';
+  setStep('fetch');
+
   try{
-    const body={type:tab,content,topic};
+    const body={type,content,topic};
     if(model&&model.value){const p=model.value.split('|');if(p.length===2){body.provider=p[0];body.model=p[1]}}
     await fetch('/api/ingest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    ipt=setInterval(async()=>{try{const s=await api('/api/ingest/status');
-      if(s.status==='done'){clearInterval(ipt);ipt=null;st.className='ingest-status-msg done';st.textContent='编译完成';btn.disabled=false;$('ingestText').value='';$('ingestUrl').value='';gd=null;td=null;sd=null;toast('知识库已更新');setTimeout(()=>{closeIngest();render()},800)}
-      else if(s.status==='error'||s.status==='failed'){clearInterval(ipt);ipt=null;st.className='ingest-status-msg error';st.textContent='失败: '+(s.message||'');btn.disabled=false}
-    }catch{}},2000);
-  }catch(e){st.className='ingest-status-msg error';st.textContent='提交失败';btn.disabled=false}
+    setStep('parse');
+    let pollCount=0;
+    ipt=setInterval(async()=>{
+      try{
+        pollCount++;
+        if(pollCount>3)setStep('compile');
+        const s=await api('/api/ingest/status');
+        if(s.status==='done'){
+          clearInterval(ipt);ipt=null;setStep('done');
+          btn.disabled=false;gd=null;td=null;sd=null;chatList=null;
+          // Show result with link
+          const artTitle=s.article?.title||'新文章';
+          const artPath=s.article?.path||'';
+          result.style.display='flex';result.className='ingest-result done';
+          result.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> 已创建: '+h(artTitle)+' →';
+          result.onclick=()=>{closeIngest();if(artPath)go('#/article/'+artPath);else render()};
+          toast('知识库已更新');
+        }else if(s.status==='error'||s.status==='failed'){
+          clearInterval(ipt);ipt=null;
+          steps.querySelectorAll('.ingest-step').forEach(s=>s.classList.remove('active'));
+          result.style.display='flex';result.className='ingest-result error';
+          result.innerHTML='编译失败: '+(s.message||'未知错误');result.onclick=null;
+          btn.disabled=false;
+        }
+      }catch{}
+    },2000);
+  }catch(e){
+    steps.style.display='none';
+    result.style.display='flex';result.className='ingest-result error';
+    result.innerHTML='提交失败: '+h(e.message);result.onclick=null;
+    btn.disabled=false;
+  }
+}
+function setStep(name){
+  const order=['fetch','parse','compile','done'];
+  const idx=order.indexOf(name);
+  $('ingestSteps').querySelectorAll('.ingest-step').forEach((el,i)=>{
+    el.classList.remove('active','done');
+    if(i<idx)el.classList.add('done');
+    else if(i===idx)el.classList.add('active');
+  });
 }
 
 /* ── Settings ── */
@@ -1210,7 +1723,6 @@ async function saveSett(){
 async function testConn(){try{await saveSett();const r=await post('/api/settings/test',{});toast(r.ok?'连接成功':'失败: '+r.message)}catch(e){toast('测试失败')}}
 
 /* ── Init ── */
-/* ── Sidebar Resize ── */
 (function(){
   const handle=$('sidebarResize'),sb=$('sidebar');
   if(!handle||!sb)return;
@@ -1221,18 +1733,19 @@ async function testConn(){try{await saveSett();const r=await post('/api/settings
     document.addEventListener('mousemove',onMove);
     document.addEventListener('mouseup',onUp);
   });
-  function onMove(e){
-    const w=Math.max(180,Math.min(400,startW+(e.clientX-startX)));
-    sb.style.width=w+'px';
-  }
-  function onUp(){
-    handle.classList.remove('dragging');
-    document.removeEventListener('mousemove',onMove);
-    document.removeEventListener('mouseup',onUp);
-  }
+  function onMove(e){const w=Math.max(180,Math.min(400,startW+(e.clientX-startX)));sb.style.width=w+'px'}
+  function onUp(){handle.classList.remove('dragging');document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp)}
 })();
 
+// Close dropdowns on outside click
+document.addEventListener('click',e=>{
+  document.querySelectorAll('.chat-model-dropdown.open').forEach(dd=>{
+    if(!dd.contains(e.target)&&!e.target.closest('.chat-model-tag'))dd.classList.remove('open');
+  });
+});
+
 initTheme();
+initSidebar();
 render();
 </script>
 </body>
