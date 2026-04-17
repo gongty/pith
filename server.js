@@ -285,6 +285,8 @@ function pickModelByUse(providerKey, useKey, cfg) {
   const list = getProviderModels(providerKey, cfg);
   const pref = list.find(m => m.use === useKey);
   if (pref) return pref.id;
+  // embed 用途绝不回退到 chat 模型：没有 use === 'embed' 就返回空，由调用方报错
+  if (useKey === 'embed') return '';
   // fallbacks
   const fallbackOrder = useKey === 'strong'
     ? ['strong', 'main', 'fast']
@@ -384,6 +386,38 @@ function loadConfig() {
       stages: resolvePresetForProvider('balanced', cfg.provider, cfg)
     };
   }
+  // migration: 首启补齐 embed 模型 + ask 配置块（团队 A / M1）
+  let needSave = false;
+  if (!cfg.providers || typeof cfg.providers !== 'object') cfg.providers = {};
+  const EMBED_DEFAULTS = {
+    bailian: { id: 'text-embedding-v3',      label: 'Qwen Embedding v3',     use: 'embed', isBuiltin: true },
+    openai:  { id: 'text-embedding-3-small', label: 'OpenAI Embedding 3 Small', use: 'embed', isBuiltin: true }
+  };
+  for (const pk of Object.keys(EMBED_DEFAULTS)) {
+    const pcfg = cfg.providers[pk] || {};
+    const models = Array.isArray(pcfg.models) ? pcfg.models.slice() : [];
+    if (!models.some(m => m && m.use === 'embed')) {
+      models.push(EMBED_DEFAULTS[pk]);
+      pcfg.models = models;
+      cfg.providers[pk] = pcfg;
+      needSave = true;
+    }
+  }
+  if (!cfg.ask || typeof cfg.ask !== 'object') {
+    cfg.ask = {
+      maxHops: 2,
+      topK: 20,
+      fuseTopN: 5,
+      rrfK: 60,
+      timeoutMs: 30000,
+      maxAnswerTokens: 4000,
+      embedBatchSize: 64
+    };
+    needSave = true;
+  }
+  if (needSave) {
+    try { saveConfig(cfg); } catch {}
+  }
   return cfg;
 }
 
@@ -397,6 +431,7 @@ function saveConfig(cfg) {
   };
   if (cfg.providers && typeof cfg.providers === 'object') toSave.providers = cfg.providers;
   if (cfg.pipeline && typeof cfg.pipeline === 'object') toSave.pipeline = cfg.pipeline;
+  if (cfg.ask && typeof cfg.ask === 'object') toSave.ask = cfg.ask;
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(toSave, null, 2), 'utf-8');
 }
 
@@ -899,7 +934,7 @@ async function runCompilePipeline(topicDir, filename, filePath, task, overrides)
 ## 编译原则（重要）
 1. 信息保真：原文的数据、数字、对比、决策理由必须保留，不可概括为"等"
 2. 保留结构：原文中的表格、列表、对比矩阵照搬为 Markdown 表格，不要摊平成散文
-3. 保留图片：原文中的 ![图片](images/xxx) 原样保留在对应位置，路径不要改
+3. 保留图片：原文如果包含 ![alt](images/真实文件名.png) 这类已经下载到本地的图片引用，原样保留在对应位置，路径不要改。**如果原文没有图片，不要凭空发明图片占位符**——禁止写 ![图片](images/xxx)、![](images/example.png) 等占位 URL，宁可不写图片也不要写假路径
 4. 保留引用：原文中有价值的原话用 > 引用块保留
 5. 决策要有 Why：如果原文提到"做了 X"，必须保留"为什么做 X"的理由
 6. 不要发明内容：只编译原文中有的信息，不添加原文没有的分析
@@ -1174,6 +1209,26 @@ ${existingTagsStr}
   let relPath = '';
   const persistStage = startStage(task, 'persist', '写入文件', { source: 'code' });
   try {
+    // 删除 LLM 凭空发明的占位符图片（filename 是 xxx/example/placeholder 之类，
+    // 或没有真实扩展名）。整行干掉，避免渲染出"破图 alt=图片"。
+    articleContent = articleContent.replace(
+      /^[ \t]*!\[[^\]]*\]\([^)]*\)[ \t]*$\n?/gm,
+      (m) => {
+        const inner = m.match(/\(([^)]+)\)/);
+        if (!inner) return m;
+        const url = inner[1].trim();
+        // 真实远程图片 (http/https) 一律保留
+        if (/^https?:\/\//i.test(url)) return m;
+        // 提取文件名（最后一个 / 后的部分）
+        const fname = url.split('/').pop() || '';
+        // 占位符黑名单：xxx, xxxx, example, placeholder, your-image, filename, image-url 等
+        if (/^(x{2,}|example|placeholder|your[-_]?image|filename|image[-_]?url|todo|tbd)(\.[a-z0-9]+)?$/i.test(fname)) return '';
+        // 没有合法图片扩展名也判为占位
+        if (!/\.(png|jpg|jpeg|gif|webp|svg|bmp|avif)$/i.test(fname)) return '';
+        return m;
+      }
+    );
+
     // 修正 images 路径
     articleContent = articleContent.replace(/!\[([^\]]*)\]\(images\/([^)]+)\)/g,
       `![$1](../../raw/${topicDir}/images/$2)`);
@@ -2674,7 +2729,12 @@ async function extractContent(type, content, filename, urlVal, rawDir) {
 // ── 自动化任务 ──
 
 const { fetchSource: fetchSourceAdapter, AGGREGATOR_SCRIPT: AGG_SCRIPT_PATH } = require('./lib/sources.js');
+const { handleAsk: askOrchestratorHandle } = require('./lib/ask-orchestrator.js');
 const SYSTEM_SOURCES_PATH = path.join(ROOT, 'data', 'system-sources.json');
+
+// ── 向量索引（团队 A / M1） ──
+const vectors = require('./lib/vectors.js');
+vectors.__setConfigProvider(getFullConfig);
 
 function loadSystemSources() {
   try {
@@ -4011,6 +4071,23 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, backfillProgress);
   }
 
+  // 向量索引：触发重建（异步 fire-and-forget，返回任务起始 meta）
+  if (p === '/api/wiki/reindex-vectors' && req.method === 'POST') {
+    const force = params.get('force') === '1' || params.get('force') === 'true';
+    // 立即返回，不阻塞（重建可能数十秒～数分钟）
+    vectors.buildVectorIndex({ force }).then(r => {
+      console.log('[vectors] reindex done', r);
+    }).catch(e => {
+      console.error('[vectors] reindex failed:', e.message);
+    });
+    return json(res, 202, { ok: true, started: true, force });
+  }
+
+  // 向量索引状态
+  if (p === '/api/wiki/vectors/stats' && req.method === 'GET') {
+    return json(res, 200, { ok: true, ready: vectors.isVectorReady(), stats: vectors.vectorStats() });
+  }
+
   if (p === '/api/wiki/search-suggest') {
     const q = (params.get('q') || '').toLowerCase();
     if (!q) return json(res, 400, { error: '缺少 q 参数' });
@@ -4320,6 +4397,22 @@ const server = http.createServer(async (req, res) => {
 
   if (p === '/api/tasks') {
     return json(res, 200, taskQueue.slice(-20));
+  }
+
+  // POST /api/wiki/ask — M3 多跳问答（clarify JSON / answer SSE）
+  if (p === '/api/wiki/ask' && req.method === 'POST') {
+    askOrchestratorHandle(req, res, {
+      callLLM,
+      pickModelByUse,
+      getFullConfig,
+      retrieveContext
+    }).catch(err => {
+      try {
+        if (!res.headersSent) json(res, 500, { error: `ask 失败: ${err.message}` });
+        else { try { res.write(`event: error\ndata: ${JSON.stringify({ message: err.message })}\n\n`); } catch {} try { res.end(); } catch {} }
+      } catch {}
+    });
+    return;
   }
 
   // POST /api/wiki/query — Wiki Chat

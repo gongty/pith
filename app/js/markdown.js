@@ -69,7 +69,15 @@ export function renderMd(md, ap) {
     return '#/article/' + r;
   }
   function inl(t) {
-    t = t.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
+    t = t.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m, alt, src) => {
+      const trimmed = (src || '').trim();
+      // 占位符 / 空 src 直接不渲染（LLM 偶尔写出 images/xxx 这类假路径）
+      if (!trimmed) return '';
+      const fname = trimmed.split('/').pop() || '';
+      if (/^(x{2,}|example|placeholder|your[-_]?image|filename|image[-_]?url|todo|tbd)(\.[a-z0-9]+)?$/i.test(fname)) return '';
+      // 真图加 onerror：404 时整张图自隐藏，避免显示 "alt=图片" 破图占位
+      return '<img src="' + trimmed + '" alt="' + alt + '" onerror="this.style.display=\'none\'">';
+    });
     t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, l, u) => { const r = resLink(u); const ext = /^https?:/.test(r); return '<a href="' + h(r) + '"' + (ext ? ' target="_blank"' : '') + '>' + h(l) + '</a>'; });
     t = t.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
     t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
