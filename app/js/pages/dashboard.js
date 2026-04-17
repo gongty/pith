@@ -26,10 +26,10 @@ export async function rDash(c) {
     s += '</div>';
 
     // Graph
-    s += '<div class="section-head"><span class="section-label">知识图谱</span><a class="section-link" href="#/graph">查看全部 &rarr;</a></div>';
+    s += '<div class="section-head"><span class="section-label">知识图谱</span></div>';
     s += '<div class="graph-card" id="dgWrap">';
     if (graph.nodes.length < 2) s += '<div class="graph-empty-msg">投喂更多知识，图谱会生长</div>';
-    else s += '<canvas id="dgCanvas"></canvas>';
+    else s += '<canvas id="dgCanvas"></canvas><div class="graph-focus-card" hidden></div>';
     s += '<div class="graph-footer" id="dgLegend"></div></div>';
 
     // Recent

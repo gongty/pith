@@ -1501,9 +1501,14 @@ function walkMd(dir) {
   const files = [];
   if (!fs.existsSync(dir)) return files;
   for (const d of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, d.name);
-    if (d.isDirectory()) { files.push(...walkMd(full)); continue; }
-    if (d.name.endsWith('.md')) files.push(full);
+    // 跳过归档 / 下划线前缀目录（数据清理归档用）
+    if (d.isDirectory()) {
+      if (d.name.startsWith('_')) continue;
+      if (d.name === 'wiki-archive' || d.name === 'archive') continue;
+      files.push(...walkMd(path.join(dir, d.name)));
+      continue;
+    }
+    if (d.name.endsWith('.md')) files.push(path.join(dir, d.name));
   }
   return files;
 }
@@ -2581,7 +2586,7 @@ async function extractPDF(b64) {
   return text;
 }
 
-function fetchBuffer(url) {
+function fetchBufferOnce(url) {
   const isWechat = /mp\.weixin\.qq\.com/.test(url);
   const args = ['-sL', '-m', '30'];
   if (isWechat) {
@@ -2594,6 +2599,7 @@ function fetchBuffer(url) {
     // 通用浏览器头，避免部分站点直接 403；Accept 包含 PDF
     args.push('-H', 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
     args.push('-H', 'Accept: text/html,application/xhtml+xml,application/pdf,application/xml;q=0.9,*/*;q=0.8');
+    args.push('-H', 'Accept-Language: zh-CN,zh;q=0.9,en;q=0.8');
   }
   args.push(url);
   return new Promise((resolve, reject) => {
@@ -2604,8 +2610,30 @@ function fetchBuffer(url) {
     proc.stdout.on('data', d => { size += d.length; if (size < 20 * 1024 * 1024) chunks.push(d); });
     proc.stderr.on('data', () => {});
     proc.on('error', reject);
-    proc.on('close', () => resolve(Buffer.concat(chunks)));
+    proc.on('close', code => resolve({ buf: Buffer.concat(chunks), code }));
   });
+}
+
+// fetchBuffer: 内置 1 次退避重试。
+// 触发重试条件：curl 非 0 退出 / 返回 <2KB 且不是 PDF 魔数（可能是被反爬截断）。
+// 仍失败就返回最后一次的 buffer（可能 <2KB），让上游走"短内容/诊断"分支。
+async function fetchBuffer(url) {
+  const MIN_OK_BYTES = 2048;
+  const BACKOFF_MS = 800;
+  let lastBuf = Buffer.alloc(0);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, BACKOFF_MS));
+    try {
+      const { buf, code } = await fetchBufferOnce(url);
+      lastBuf = buf;
+      const looksPdf = isPdfBuffer(buf);
+      const okSize = buf.length >= MIN_OK_BYTES || looksPdf;
+      if (code === 0 && okSize) return buf;
+    } catch (e) {
+      if (attempt === 1) throw e;
+    }
+  }
+  return lastBuf;
 }
 
 async function fetchHTML(url) {
@@ -2793,7 +2821,9 @@ async function extractURLReadability(url, rawDir) {
     }
     const text = stripHtml(html);
     if (text.length > 100) return text;
-    return `[Fetched content too short]\n\nURL: ${url}\n\n${text}`;
+    // 诊断信息：排查时能立刻看出是 0 字节 / challenge 页 / SPA 壳子
+    const diag = `htmlBytes=${buf.length}, strippedLen=${text.length}, snippet="${text.slice(0, 60).replace(/"/g, "'")}"`;
+    return `[Fetched content too short] ${diag}\n\nURL: ${url}\n\n${text}`;
   } catch (e) {
     return `[Fetch failed: ${e.message}]\n\nURL: ${url}`;
   }
@@ -3040,7 +3070,83 @@ function normalizeTask(t) {
 function loadAutotasks() { try { const tasks = JSON.parse(fs.readFileSync(path.join(AUTOTASKS_DIR, 'tasks.json'), 'utf-8')); return tasks.map(normalizeTask); } catch { return []; } }
 function saveAutotasks(tasks) { fs.writeFileSync(path.join(AUTOTASKS_DIR, 'tasks.json'), JSON.stringify(tasks, null, 2), 'utf-8'); }
 function loadHistory() { try { return JSON.parse(fs.readFileSync(path.join(AUTOTASKS_DIR, 'history.json'), 'utf-8')); } catch { return []; } }
-function saveHistory(hist) { fs.writeFileSync(path.join(AUTOTASKS_DIR, 'history.json'), JSON.stringify(hist, null, 2), 'utf-8'); if (hist.length > 200) saveHistory(hist.slice(-200)); }
+// history.json 容量保底：超过 100 条时按 startedAt 降序保留最近 100 条，
+// 旧条目归档到 data/autotasks/history-archive-<YYYY-MM>.jsonl（append 模式，每行一个 JSON）。
+// 归档失败走 fail-safe：跳过归档只截断主文件，避免因归档 IO 失败阻塞主流程。
+function saveHistory(hist) {
+  let toWrite = hist;
+  if (Array.isArray(hist) && hist.length > 100) {
+    try {
+      const sorted = hist.slice().sort((a, b) => {
+        const ta = new Date(a && a.startedAt || 0).getTime();
+        const tb = new Date(b && b.startedAt || 0).getTime();
+        return tb - ta;
+      });
+      const keep = sorted.slice(0, 100);
+      const archive = sorted.slice(100);
+      if (archive.length) {
+        try {
+          const grouped = {};
+          for (const r of archive) {
+            const d = new Date(r && r.startedAt || Date.now());
+            const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+            (grouped[ym] = grouped[ym] || []).push(r);
+          }
+          for (const ym of Object.keys(grouped)) {
+            const lines = grouped[ym].map(r => JSON.stringify(r)).join('\n') + '\n';
+            const archiveFile = path.join(AUTOTASKS_DIR, `history-archive-${ym}.jsonl`);
+            fs.appendFileSync(archiveFile, lines, 'utf-8');
+          }
+        } catch (e) {
+          console.warn('[AutoTask] history archive failed (truncating anyway):', e.message);
+        }
+      }
+      toWrite = keep;
+    } catch (e) {
+      console.warn('[AutoTask] history trim prep failed, writing as-is:', e.message);
+      toWrite = hist;
+    }
+  }
+  fs.writeFileSync(path.join(AUTOTASKS_DIR, 'history.json'), JSON.stringify(toWrite, null, 2), 'utf-8');
+}
+
+// 节流状态：runId → { lastWriteAt, pendingTimer, dirty }。
+// 避免 persistRun 高频同步写放大把 event loop 压垮。
+const __persistRunState = new Map();
+
+// 启动时孤儿 run 自愈：上次进程非正常退出留下的 status='running' run 被永远卡在运行态。
+// 这里扫一遍全部标成 error 并追加 errors 说明，写回主文件（tmp + rename 原子替换）。
+function reconcileOrphanRuns() {
+  try {
+    const histPath = path.join(AUTOTASKS_DIR, 'history.json');
+    let hist;
+    try { hist = JSON.parse(fs.readFileSync(histPath, 'utf-8')); }
+    catch { return; }
+    if (!Array.isArray(hist)) return;
+    let recovered = 0;
+    for (const r of hist) {
+      if (r && r.status === 'running') {
+        r.status = 'error';
+        r.finishedAt = new Date().toISOString();
+        if (!Array.isArray(r.errors)) r.errors = [];
+        const phase = (r.progress && r.progress.phase) || 'unknown';
+        const current = (r.progress && r.progress.current) != null ? r.progress.current : '?';
+        const total = (r.progress && r.progress.total) != null ? r.progress.total : '?';
+        r.errors.push(`reconciled on startup: marked as error (was stuck in phase=${phase}, current=${current}/${total})`);
+        r.progress = null;
+        recovered++;
+      }
+    }
+    if (recovered > 0) {
+      const tmp = histPath + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify(hist, null, 2), 'utf-8');
+      fs.renameSync(tmp, histPath);
+      console.log(`[AutoTask] reconcileOrphanRuns: recovered ${recovered} stuck run(s)`);
+    }
+  } catch (e) {
+    console.warn('[AutoTask] reconcileOrphanRuns failed:', e.message);
+  }
+}
 function loadDedup() { try { return JSON.parse(fs.readFileSync(path.join(AUTOTASKS_DIR, 'dedup.json'), 'utf-8')); } catch { return { urls: {}, hashes: {} }; } }
 function saveDedup(d) { fs.writeFileSync(path.join(AUTOTASKS_DIR, 'dedup.json'), JSON.stringify(d, null, 2), 'utf-8'); }
 
@@ -3080,20 +3186,37 @@ function markIngested(url, content, runId) {
   saveDedup(dedup);
 }
 
-async function fetchRSS(url) {
-  // SSRF guard: protocol + DNS + private-IP block, re-run on redirect.
-  await assertSafeUrl(url);
-  const xml = await new Promise((resolve, reject) => {
-    const mod = url.startsWith('https') ? https : http;
-    const req = mod.get(url, { headers: { 'User-Agent': 'WikiBot/1.0' } }, r => {
+// Shared HTTP GET helper with redirect following and SSRF re-check on every hop.
+// Old fetchRSS/fetchWebpageLinks recursed on redirect but the inner promise resolved
+// to the *parsed* result, not the raw body — so 301 (e.g. arxiv http→https) returned
+// the recursive parser's items array back up into the outer text-stage, which then
+// regex-failed and produced 0 items. Centralizing here makes both callers correct.
+async function httpGetTextFollow(url, redirectsLeft = 5, headers = {}) {
+  // SSRF guard: protocol + DNS + private-IP block. Re-runs on every redirect so
+  // a public host can't bounce us into 127.0.0.1 / 169.254.169.254.
+  const parsed = await assertSafeUrl(url);
+  return new Promise((resolve, reject) => {
+    const mod = parsed.protocol === 'https:' ? https : http;
+    const req = mod.get(parsed.toString(), { headers: { 'User-Agent': 'WikiBot/1.0', ...headers } }, r => {
       if (r.statusCode >= 300 && r.statusCode < 400 && r.headers.location) {
-        return fetchRSS(r.headers.location).then(resolve).catch(reject);
+        if (redirectsLeft <= 0) { r.resume(); return reject(new Error('too many redirects fetching ' + url)); }
+        let next;
+        try { next = new URL(r.headers.location, parsed).toString(); }
+        catch (e) { r.resume(); return reject(new Error('invalid redirect target from ' + url)); }
+        r.resume();
+        return httpGetTextFollow(next, redirectsLeft - 1, headers).then(resolve, reject);
       }
+      if (r.statusCode >= 400) { r.resume(); return reject(new Error(`HTTP ${r.statusCode} fetching ${url}`)); }
       let data = ''; r.on('data', c => data += c); r.on('end', () => resolve(data));
+      r.on('error', reject);
     });
     req.on('error', reject);
-    req.setTimeout(30000, () => { req.destroy(); reject(new Error('RSS fetch timeout')); });
+    req.setTimeout(30000, () => { req.destroy(); reject(new Error('Fetch timeout')); });
   });
+}
+
+async function fetchRSS(url) {
+  const xml = await httpGetTextFollow(url);
 
   const items = [];
   const itemRegex = /<item[\s>]([\s\S]*?)<\/item>/gi;
@@ -3124,18 +3247,7 @@ async function fetchRSS(url) {
 }
 
 async function fetchWebpageLinks(url, selector) {
-  await assertSafeUrl(url);
-  const html = await new Promise((resolve, reject) => {
-    const mod = url.startsWith('https') ? https : http;
-    const req = mod.get(url, { headers: { 'User-Agent': 'Mozilla/5.0 WikiBot/1.0' } }, r => {
-      if (r.statusCode >= 300 && r.statusCode < 400 && r.headers.location) {
-        return fetchWebpageLinks(r.headers.location, selector).then(resolve).catch(reject);
-      }
-      let data = ''; r.on('data', c => data += c); r.on('end', () => resolve(data));
-    });
-    req.on('error', reject);
-    req.setTimeout(30000, () => { req.destroy(); reject(new Error('Webpage fetch timeout')); });
-  });
+  const html = await httpGetTextFollow(url, 5, { 'User-Agent': 'Mozilla/5.0 WikiBot/1.0' });
 
   const links = [];
   const linkRegex = /<a\s[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
@@ -3244,7 +3356,7 @@ ${feedbackStr}
   try {
     const raw = await Promise.race([
       callLLM(systemPrompt, userPrompt, overrides, { temperature: 0, maxTokens: 256 }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('gate timeout')), 20000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error('gate timeout')), 15000))
     ]);
     let cleaned = String(raw || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
     const parsed = JSON.parse(cleaned);
@@ -3355,18 +3467,45 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
   // Serialize history.json writes under the same in-process lock so concurrent runs
   // do not clobber each other's updates. Snapshot the current run state at call time
   // so a later persistRun() does not lose intermediate updates from before this write completes.
-  const persistRun = () => {
-    const snapshot = JSON.parse(JSON.stringify(run));
-    withAutotaskWriteLock(() => {
-      try {
-        const h = loadHistory();
-        const i = h.findIndex(r => r.id === runId);
-        if (i >= 0) h[i] = snapshot; else h.push(snapshot);
-        saveHistory(h);
-      } catch (e) { console.error('[AutoTask] persist run failed:', e.message); }
-    });
+  //
+  // Throttling: 历史文件体量（几 MB）下每条 gate item 都同步 JSON.parse + writeFileSync 会
+  // 把 __autotaskWriteLock 链堆满并让 setTimeout 排在饥饿队列里。默认做 1000ms 节流，
+  // 关键阶段（初始化/终态/phase 切换）显式传 {force:true} 强制立即落盘。
+  const persistRun = (opts) => {
+    const force = !!(opts && opts.force);
+    const state = __persistRunState.get(runId) || { lastWriteAt: 0, pendingTimer: null, dirty: false };
+    __persistRunState.set(runId, state);
+
+    const flush = () => {
+      if (state.pendingTimer) { clearTimeout(state.pendingTimer); state.pendingTimer = null; }
+      const snapshot = JSON.parse(JSON.stringify(run));
+      state.lastWriteAt = Date.now();
+      state.dirty = false;
+      withAutotaskWriteLock(() => {
+        try {
+          const h = loadHistory();
+          const i = h.findIndex(r => r.id === runId);
+          if (i >= 0) h[i] = snapshot; else h.push(snapshot);
+          saveHistory(h);
+        } catch (e) { console.error('[AutoTask] persist run failed:', e.message); }
+      });
+    };
+
+    if (force) { flush(); return; }
+
+    const elapsed = Date.now() - state.lastWriteAt;
+    if (elapsed >= 1000) { flush(); return; }
+
+    // 节流窗口内：标记 dirty + 若无 pending timer 就排一个
+    state.dirty = true;
+    if (!state.pendingTimer) {
+      state.pendingTimer = setTimeout(() => {
+        state.pendingTimer = null;
+        if (state.dirty) flush();
+      }, Math.max(1, 1000 - elapsed));
+    }
   };
-  persistRun();
+  persistRun({ force: true });
 
   try {
     // 1. Fetch all sources in parallel
@@ -3393,7 +3532,7 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
 
     // 2. Dedup (cross-source by URL + content hash, plus rolling 30-day file)
     run.progress = { phase: 'dedup', current: 0, total: items.length, currentTitle: null };
-    persistRun();
+    persistRun({ force: true });
 
     const dedup = pruneDedup(loadDedup());
     saveDedup(dedup);
@@ -3411,7 +3550,7 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
 
     // 3. Keyword pre-filter
     run.progress = { phase: 'prefilter', current: 0, total: items.length, currentTitle: null };
-    persistRun();
+    persistRun({ force: true });
 
     const expanded = (task.preferences && task.preferences.expanded_keywords) || [];
     const mustExclude = (task.preferences && task.preferences.must_exclude) || [];
@@ -3437,7 +3576,7 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
 
     // 4. LLM relevance gate (concurrency 5)
     run.progress = { phase: 'gating', current: 0, total: preGateItems.length, currentTitle: null };
-    persistRun();
+    persistRun({ force: true });
 
     let processed = 0;
     const gateResults = await mapLimit(preGateItems, 5, async (it) => {
@@ -3446,6 +3585,8 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
       run.progress.current = processed;
       run.progress.currentTitle = it.title || it.url || '';
       persistRun();
+      // 让 event loop 有机会调度定时器 / 其它 I/O，避免被连续 write 饿死。
+      await new Promise(resolve => setImmediate(resolve));
       return { item: it, gate: r };
     });
 
@@ -3533,7 +3674,13 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
 
     // 6. Process kept items (extract + compile)
     run.progress = { phase: 'processing', current: 0, total: kept.length, currentTitle: null };
-    persistRun();
+    persistRun({ force: true });
+
+    // 同 host 限速：串行抓多条同域名 URL（典型场景：36kr / arxiv 批量）时，burst 请求
+    // 容易触发反爬返回空壳页。记录每个 host 上次抓取时间戳，距离 <500ms 时补 sleep。
+    const HOST_MIN_GAP_MS = 500;
+    const hostLastFetchAt = new Map();
+    const hostOf = u => { try { return new URL(u).host; } catch { return ''; } };
 
     let processedIdx = 0;
     for (const item of kept) {
@@ -3541,6 +3688,19 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
       run.progress.currentTitle = item.title || item.url || '';
       persistRun();
       processedIdx += 1;
+
+      // 同 host 节流
+      if (item.url) {
+        const host = hostOf(item.url);
+        if (host) {
+          const last = hostLastFetchAt.get(host) || 0;
+          const gap = Date.now() - last;
+          if (gap < HOST_MIN_GAP_MS) {
+            await new Promise(r => setTimeout(r, HOST_MIN_GAP_MS - gap));
+          }
+          hostLastFetchAt.set(host, Date.now());
+        }
+      }
 
       // Composite key (url||title + sourceId): two pending items with empty URLs from the same source
       // would otherwise collide on the same record and one's processing result would overwrite the other's.
@@ -3598,7 +3758,8 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
         const rawContent = `# Source\n\n> Source: ${item.url}\n> Title: ${item.title}\n> Collected: ${date}\n> Type: autotask\n> Task: ${task.name}\n> SourceId: ${item.sourceId || 'unknown'}${item.__smartFill ? '\n> SmartFill: yes' : ''}\n\n${extractedText}`;
         fs.writeFileSync(filePath, rawContent, 'utf-8');
 
-        const compileTask = pushTask('autotask');
+        const displayName = (item.title && String(item.title).trim()) || task.name || 'autotask';
+        const compileTask = pushTask('autotask', { name: displayName });
         await compileArticle(topicDir, rawFilename, filePath, compileTask, modelOverrides);
 
         await markIngestedTimed(item.url, extractedText, runId);
@@ -3632,6 +3793,8 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
       .map(([reason, count]) => ({ reason, count }));
 
     // 8. Write brief
+    run.progress = { phase: 'brief', current: 0, total: 1, currentTitle: null };
+    persistRun({ force: true });
     try {
       const runDate = new Date().toISOString().slice(0, 10);
       const keptForBrief = itemRecords.filter(r => r.status === 'ingested' || r.status === 'smart_fill');
@@ -3672,7 +3835,8 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
     saveAutotasks(updatedTasks);
   }
 
-  persistRun();
+  persistRun({ force: true });
+  __persistRunState.delete(runId);
   return run;
   } finally {
     runningAutotasks.delete(taskId);
@@ -4300,26 +4464,23 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (p === '/api/wiki/graph') {
-    // 双层图谱：concept 节点（canonical tag / topic）+ article 节点。
+    // 双层图谱：concept 节点（canonical tag，经 stopword + hapax 过滤）+ article 节点。
     //  - co-concept 边：两个 concept 在 >=2 篇文章共现，权重 = 共现次数 × IDF
-    //  - contains 边：article -> parent concept（topic 同名优先；否则用该文章最高频 tag）
     //  - link 边：existing markdown-link 解析（article -> article），see-also / reference 两类
-    // 破宽泛概念：出现在 >50% 文章里的 concept 不参与 co-concept 边（同旧逻辑）。
+    //  - topic 降级为 cluster（layout metadata），不再是 concept 节点。
     const excluded = new Set(['index.md', 'log.md']);
     const allFiles = walkMd(WIKI).filter(f => !excluded.has(path.basename(f)));
     const conceptsObj = concepts.loadConcepts();
 
-    // ── 1. 先收集所有文章的基础信息 ──
-    const articleInfos = []; // { rel, topic, title, rawTags, tags (canonical), keywords0, content }
+    // ── 1. 收集所有文章的基础信息 ──
+    const articleInfos = []; // { rel, topic, title, rawTags, tags, fmKeyword0, content, filePath }
     for (const f of allFiles) {
       const rel = path.relative(WIKI, f);
       const parts = rel.split(path.sep);
       const topic = parts.length > 1 ? parts[0] : '';
       const title = extractTitle(f);
       const rawTags = extractTags(f);
-      // 即使 frontmatter 已被 compile 阶段 normalize，老文章 / 手改的 md 可能还有原始写法
       const tags = [...new Set(rawTags.map(t => concepts.normalizeTag(t, conceptsObj)).filter(Boolean))];
-      // 尝试读 frontmatter 里的 keywords[0]（label 规则用）
       let fmKeyword0 = '';
       let content = '';
       try {
@@ -4332,110 +4493,154 @@ const server = http.createServer(async (req, res) => {
       articleInfos.push({ rel, topic, title, rawTags, tags, fmKeyword0, content, filePath: f });
     }
 
-    // ── 2. 概念 & 频次统计 ──
-    const conceptArticles = new Map(); // conceptLabel -> Set<articleRel>
-    const conceptIsTopic = new Map();  // conceptLabel -> topicDirName | null
-    const tagGlobalFreq = new Map();   // canonical tag -> total count across articles
-
-    function touchConcept(label, articleRel, topicDirIfAny) {
-      if (!label) return;
-      if (!conceptArticles.has(label)) conceptArticles.set(label, new Set());
-      conceptArticles.get(label).add(articleRel);
-      if (topicDirIfAny && !conceptIsTopic.has(label)) {
-        conceptIsTopic.set(label, topicDirIfAny);
+    // ── 2. tag 频次统计（先算所有 tag 的 articleCount） ──
+    const tagArticles = new Map();   // canonical tag -> Set<articleRel>
+    for (const info of articleInfos) {
+      for (const t of info.tags) {
+        if (!tagArticles.has(t)) tagArticles.set(t, new Set());
+        tagArticles.get(t).add(info.rel);
       }
     }
 
-    // 收集 topic 目录：一个 topic 目录（含 >=1 篇文章）就是一个 implicit concept
-    const topicToConcept = new Map(); // topicDir -> canonicalLabel
-    for (const info of articleInfos) {
-      if (!info.topic) continue;
-      if (!topicToConcept.has(info.topic)) {
-        const canon = concepts.normalizeTag(info.topic, conceptsObj);
-        topicToConcept.set(info.topic, canon);
-      }
+    // ── 3. 两档过滤：hapax (articleCount < 2) + stopword ──
+    let droppedHapax = 0;
+    let droppedStopword = 0;
+    const survivingConcepts = new Set(); // canonical tag 留下的
+    for (const [label, set] of tagArticles.entries()) {
+      if (set.size < 2) { droppedHapax++; continue; }
+      if (concepts.isStopConcept(label, conceptsObj)) { droppedStopword++; continue; }
+      survivingConcepts.add(label);
     }
 
-    // 给每篇文章登记 concepts
+    // 对每篇文章，只保留 surviving 的 tag
     for (const info of articleInfos) {
-      const set = new Set(info.tags);
-      // 加上 topic 概念
-      if (info.topic && topicToConcept.has(info.topic)) {
-        set.add(topicToConcept.get(info.topic));
-      }
-      info.conceptsOnThisArticle = [...set];
-      for (const t of info.tags) tagGlobalFreq.set(t, (tagGlobalFreq.get(t) || 0) + 1);
-      for (const c of info.conceptsOnThisArticle) {
-        const topicMatch = [...topicToConcept.entries()].find(([, v]) => v === c);
-        touchConcept(c, info.rel, topicMatch ? topicMatch[0] : null);
-      }
+      info.survivingTags = info.tags.filter(t => survivingConcepts.has(t));
     }
 
     const totalArticles = articleInfos.length || 1;
 
-    // ── 3. 生成 concept 节点 ──
+    // ── 4. topic -> cluster（layout metadata） ──
+    // cluster 的 label 沿用 topic 目录名（normalize 过一遍，但不强制 canonical map）
+    // 每个 cluster 统计 articleCount / conceptCount（该 topic 下文章涉及的 surviving concept 数）
+    const clusterMap = new Map(); // topic -> { label, articleCount, conceptSet: Set }
+    for (const info of articleInfos) {
+      const topic = info.topic || '(root)';
+      if (!clusterMap.has(topic)) {
+        clusterMap.set(topic, {
+          id: topic,
+          label: info.topic ? concepts.normalizeTag(info.topic, conceptsObj) : '(root)',
+          articleCount: 0,
+          conceptSet: new Set(),
+        });
+      }
+      const c = clusterMap.get(topic);
+      c.articleCount++;
+      for (const t of info.survivingTags) c.conceptSet.add(t);
+    }
+    const clusters = [...clusterMap.values()].map(c => ({
+      id: c.id,
+      label: c.label,
+      articleCount: c.articleCount,
+      conceptCount: c.conceptSet.size,
+      color: null,
+    })).sort((a, b) => b.articleCount - a.articleCount || a.id.localeCompare(b.id));
+
+    // ── 5. 为每个 surviving concept 算 cluster 归属（最多文章所在 topic，tie-break 按 alpha） ──
+    const conceptTopicCount = new Map(); // label -> Map<topic, n>
+    for (const label of survivingConcepts) conceptTopicCount.set(label, new Map());
+    for (const info of articleInfos) {
+      const topic = info.topic || '(root)';
+      for (const t of info.survivingTags) {
+        const m = conceptTopicCount.get(t);
+        m.set(topic, (m.get(topic) || 0) + 1);
+      }
+    }
+
+    // ── 6. co-occurrence 矩阵（为 concept 节点的 coOccurMax 字段 + 6b 边做准备） ──
+    const coOccur = new Map(); // "a|b" (a<b alpha) -> count
+    for (const info of articleInfos) {
+      const arr = info.survivingTags;
+      for (let i = 0; i < arr.length; i++) {
+        for (let j = i + 1; j < arr.length; j++) {
+          const a = arr[i], b = arr[j];
+          const key = a < b ? a + '|' + b : b + '|' + a;
+          coOccur.set(key, (coOccur.get(key) || 0) + 1);
+        }
+      }
+    }
+    const conceptMaxCo = new Map(); // label -> max co-occur count with any peer
+    for (const [k, v] of coOccur.entries()) {
+      const [a, b] = k.split('|');
+      if (v > (conceptMaxCo.get(a) || 0)) conceptMaxCo.set(a, v);
+      if (v > (conceptMaxCo.get(b) || 0)) conceptMaxCo.set(b, v);
+    }
+
+    // ── 7. 生成 concept 节点 ──
     const conceptNodes = [];
     const conceptIdByLabel = new Map();
-    for (const [label, articleSet] of conceptArticles.entries()) {
+    for (const label of survivingConcepts) {
       const id = concepts.conceptIdFromLabel(label);
       conceptIdByLabel.set(label, id);
+      const articleCount = tagArticles.get(label).size;
+      // 选 cluster：该 concept 下文章最多的 topic，tie-break 按 alpha
+      const topicCounts = conceptTopicCount.get(label);
+      let cluster = '';
+      let bestN = -1;
+      const sortedTopics = [...topicCounts.entries()].sort((a, b) => {
+        if (b[1] !== a[1]) return b[1] - a[1];
+        return a[0].localeCompare(b[0]);
+      });
+      if (sortedTopics.length) {
+        cluster = sortedTopics[0][0];
+        bestN = sortedTopics[0][1];
+      }
       conceptNodes.push({
         id,
         kind: 'concept',
         label,
-        articleCount: articleSet.size,
-        topic: conceptIsTopic.get(label) || null
+        articleCount,
+        cluster,
+        coOccurMax: conceptMaxCo.get(label) || 0,
       });
     }
 
-    // ── 4. article node label 规则 ──
+    // ── 8. article node label ──
     function labelForArticle(info, parentConceptLabel) {
-      // (1) frontmatter.keywords[0] <= 12 chars
       if (info.fmKeyword0 && info.fmKeyword0.length <= 12) return info.fmKeyword0;
-      // (2) strip common prefix
       let t = info.title || '';
       if (parentConceptLabel) {
         const stripped = t.replace(new RegExp('^\\s*' + parentConceptLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*[的之\\-:：]\\s*'), '');
         if (stripped && stripped !== t) t = stripped;
       }
-      // (3) fallback: full title （已完成）
-      // (4) truncate to 14
       if (t.length > 14) t = t.slice(0, 14) + '…';
       return t || info.title || info.rel;
     }
 
-    // ── 5. 生成 article 节点 + parent concept 选择 ──
+    // ── 9. 生成 article 节点 + parent concept（最频繁的 surviving tag） ──
     const articleNodes = [];
-    const articleParentConcept = new Map(); // articleRel -> parentConceptLabel | null
     for (const info of articleInfos) {
       let parentLabel = null;
-      const topicCanon = info.topic ? topicToConcept.get(info.topic) : '';
-      if (topicCanon && conceptArticles.has(topicCanon)) {
-        parentLabel = topicCanon;
-      } else if (info.tags && info.tags.length) {
-        // 选文章 tag 里全局频次最高者
+      if (info.survivingTags.length) {
         let best = null, bestFreq = -1;
-        for (const t of info.tags) {
-          const f = tagGlobalFreq.get(t) || 0;
+        for (const t of info.survivingTags) {
+          const f = tagArticles.get(t).size;
           if (f > bestFreq) { best = t; bestFreq = f; }
         }
         parentLabel = best;
       }
-      articleParentConcept.set(info.rel, parentLabel);
-
       const label = labelForArticle(info, parentLabel);
       articleNodes.push({
         id: info.rel,
         kind: 'article',
         label,
         topic: info.topic,
-        tags: info.tags,
+        tags: info.survivingTags,
         parent: parentLabel ? conceptIdByLabel.get(parentLabel) || null : null,
-        path: info.rel
+        path: info.rel,
       });
     }
 
-    // ── 6. edges ──
+    // ── 10. edges ──
     const edges = [];
     const edgeSet = new Set();
     function addEdge(src, tgt, payload) {
@@ -4445,42 +4650,29 @@ const server = http.createServer(async (req, res) => {
       edges.push({ source: src, target: tgt, ...payload });
     }
 
-    // 6a. contains 边：article -> parent concept
-    for (const info of articleInfos) {
-      const parentLabel = articleParentConcept.get(info.rel);
-      if (!parentLabel) continue;
-      const parentId = conceptIdByLabel.get(parentLabel);
-      if (!parentId) continue;
-      addEdge(parentId, info.rel, { kind: 'contains', weight: 1 });
-    }
-
-    // 6b. co-concept 边：两概念在 >=2 篇文章共现，权重 = 共现次数 × IDF（丢弃 >50% 覆盖的概念）
-    const labelList = [...conceptArticles.keys()];
+    // 10a. co-concept 边：co >= 2，权重 = co × IDF（丢弃 >50% 覆盖率的宽泛概念）
     const conceptCoverage = new Map();
-    for (const [label, set] of conceptArticles.entries()) conceptCoverage.set(label, set.size / totalArticles);
-    for (let i = 0; i < labelList.length; i++) {
-      const a = labelList[i];
+    for (const label of survivingConcepts) {
+      conceptCoverage.set(label, tagArticles.get(label).size / totalArticles);
+    }
+    for (const [key, co] of coOccur.entries()) {
+      if (co < 2) continue;
+      const [a, b] = key.split('|');
+      if (!survivingConcepts.has(a) || !survivingConcepts.has(b)) continue;
       if ((conceptCoverage.get(a) || 0) > 0.5) continue;
-      const setA = conceptArticles.get(a);
-      for (let j = i + 1; j < labelList.length; j++) {
-        const b = labelList[j];
-        if ((conceptCoverage.get(b) || 0) > 0.5) continue;
-        const setB = conceptArticles.get(b);
-        let co = 0;
-        for (const x of setA) if (setB.has(x)) co++;
-        if (co < 2) continue;
-        // IDF 用其中频次较低者（稀有概念权重高）
-        const freq = Math.max(setA.size, setB.size);
-        const idf = Math.log((totalArticles + 1) / (freq + 1));
-        const weight = Math.round((co * Math.max(0.1, idf)) * 100) / 100;
-        const idA = conceptIdByLabel.get(a);
-        const idB = conceptIdByLabel.get(b);
-        if (!idA || !idB) continue;
-        addEdge(idA, idB, { kind: 'co-concept', weight });
-      }
+      if ((conceptCoverage.get(b) || 0) > 0.5) continue;
+      const fa = tagArticles.get(a).size;
+      const fb = tagArticles.get(b).size;
+      const freq = Math.max(fa, fb);
+      const idf = Math.log((totalArticles + 1) / (freq + 1));
+      const weight = Math.round((co * Math.max(0.1, idf)) * 100) / 100;
+      const idA = conceptIdByLabel.get(a);
+      const idB = conceptIdByLabel.get(b);
+      if (!idA || !idB) continue;
+      addEdge(idA, idB, { kind: 'co-concept', weight });
     }
 
-    // 6c. link 边：existing markdown-link 解析 article -> article
+    // 10b. link 边：markdown-link 解析 article -> article
     for (const info of articleInfos) {
       const content = info.content;
       if (!content) continue;
@@ -4508,7 +4700,17 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    return json(res, 200, { nodes: [...conceptNodes, ...articleNodes], edges });
+    return json(res, 200, {
+      nodes: [...conceptNodes, ...articleNodes],
+      edges,
+      clusters,
+      stats: {
+        articleCount: articleInfos.length,
+        conceptCount: conceptNodes.length,
+        droppedHapax,
+        droppedStopword,
+      },
+    });
   }
 
   if (p === '/api/wiki/stats') {
@@ -6148,6 +6350,7 @@ if (require.main === module) setInterval(() => {
 
 if (require.main === module) {
   loadQueue();
+  reconcileOrphanRuns();
   server.listen(PORT, () => {
     console.log(`Wiki 应用已启动：http://localhost:${PORT}`);
     console.log(`[ingest] concurrency=${INGEST_CONCURRENCY} queueCap=200`);

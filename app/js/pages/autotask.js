@@ -2,7 +2,14 @@ import { $, h, relTime, api, post, put, apiDel, toast, skelLines } from '../util
 import state from '../state.js';
 
 /* ── Local state ── */
-let currentTab = 'tasks';
+const TAB_STORAGE_KEY = 'autotask.tab';
+function readStoredTab() {
+  try {
+    const v = localStorage.getItem(TAB_STORAGE_KEY);
+    return (v === 'history' || v === 'tasks') ? v : 'tasks';
+  } catch (_) { return 'tasks'; }
+}
+let currentTab = readStoredTab();
 let tasks = [];
 let history = [];
 let topicsList = [];
@@ -37,13 +44,30 @@ const SOURCE_LABELS = { rss: 'RSS', webpage: '网页', api: 'API' };
 const SCHEDULE_LABELS = { daily: '每日', hourly: '每小时', manual: '仅手动' };
 const STATUS_COLORS = { success: 'var(--green)', error: 'var(--red)', partial: 'var(--yellow)', running: 'var(--accent)' };
 
-/* ── Intent presets: 一键填入常见任务模板，给空白框一个起点 ── */
+/* ── Intent presets: 一键填入常见任务模板，给空白框一个起点
+   主力受众：AI 音乐方向的产品经理 / 运营，兼顾通用 AI 与技术 ── */
 const INTENT_PRESETS = [
-  { label: 'AI 研究进展', text: '了解头部 AI 公司（OpenAI、Anthropic、Google DeepMind、Meta）的研究新进展，重点是论文和技术博客，跳过招聘和市场活动' },
-  { label: '前端 / 开发工具更新', text: '跟踪主流前端框架和开发工具的版本更新（React、Vue、Next.js、TypeScript、Vite、Bun 等），重点是 release notes 和 breaking changes' },
-  { label: 'AI 产品与开源模型', text: '关注头部 AI 公司的产品发布与主流开源模型的新版本（如 Llama、Qwen、DeepSeek、Mistral），跳过纯营销内容' },
-  { label: 'arxiv 论文跟踪', text: '跟踪 cs.LG、cs.CL、cs.AI 方向的最新 arxiv 论文，重点是 LLM、agent、RAG、推理相关' },
-  { label: '科技商业新闻', text: '了解科技行业的融资、并购、新产品发布等商业动态，跳过名人八卦和股价波动' }
+  // AI 音乐（主战场）
+  { group: 'AI 音乐', label: 'AI 音乐产品动态', text: '跟踪 AI 音乐生成产品的新动态（Suno、Udio、Stable Audio、ElevenLabs、Mubert 等），重点是新功能、新模型和公开的效果对比，跳过融资八卦和广告软文' },
+  { group: 'AI 音乐', label: '音频与语音模型', text: '关注音频 / 语音生成与处理的新模型和开源项目（TTS、voice cloning、vocal stems 分离、音色迁移、伴奏生成），重点是可复现的技术方案和 demo' },
+  { group: 'AI 音乐', label: '音乐创作工具', text: '关注 AI 辅助音乐创作工具和 DAW 生态的更新（Ableton、Native Instruments、Output、Splice 等），重点是实际能落到创作流程里的功能' },
+  { group: 'AI 音乐', label: '音乐行业与版权', text: '了解音乐行业的商业与政策动态，重点是 AI 音乐相关的版权诉讼、平台规则变化（Spotify、YouTube、TikTok）、AI 生成音乐的发行与分成，跳过娱乐八卦' },
+
+  // 产品与运营（AI PM / 运营视角）
+  { group: '产品与运营', label: 'AI 产品发版', text: '跟踪头部 AI 产品的发版与功能更新（ChatGPT、Claude、Gemini、DeepSeek、阿里百炼等），重点是定价、限流、新能力与用户反馈，便于做竞品对标' },
+  { group: '产品与运营', label: 'AI 创业与融资', text: '了解 AI 赛道的创业公司动态，重点是新产品发布、融资与被收购、团队变动，按赛道聚合（音频 / 视频 / Agent / 创作工具），跳过纯股价讨论' },
+  { group: '产品与运营', label: '出海与增长案例', text: '关注 AI 产品的出海与增长案例，重点是 Product Hunt 新品、海外 AI 工具的获客策略、定价实验、内容营销，跳过国内公众号软文' },
+  { group: '产品与运营', label: '社交平台算法', text: '跟踪 TikTok / YouTube Shorts / Instagram Reels 的算法和创作者政策变化，重点是与 AI 生成内容、AI 音乐分发相关的规则，跳过网红八卦' },
+
+  // 通用 AI 研究
+  { group: '通用 AI 研究', label: '大厂研究进展', text: '了解头部 AI 公司（OpenAI、Anthropic、Google DeepMind、Meta、Mistral、DeepSeek）的研究进展，重点是论文和官方技术博客，跳过招聘和市场活动' },
+  { group: '通用 AI 研究', label: '开源模型新版本', text: '关注主流开源模型的新版本（Llama、Qwen、DeepSeek、Mistral、Gemma 等）及其多模态 / 音频 / 推理能力更新，跳过纯基准测试刷榜' },
+  { group: '通用 AI 研究', label: 'Agent / RAG / 多模态', text: '跟踪 AI Agent、RAG、多模态（图 / 音 / 视频）方向的新论文和工程实践，重点是可落地的架构与开源实现' },
+  { group: '通用 AI 研究', label: '视频与图像 AI', text: '关注视频 / 图像生成模型的新动态（Sora、Veo、Runway、Luma、Flux 等），重点是与音乐 MV、短视频创作相关的跨界可能性' },
+
+  // 技术（偶尔用）
+  { group: '技术', label: 'arxiv 论文跟踪', text: '跟踪 cs.LG、cs.CL、cs.AI、cs.SD（音频）方向的最新 arxiv 论文，重点是 LLM、agent、audio / music generation、推理相关' },
+  { group: '技术', label: '前端 / 工具链', text: '跟踪主流前端框架和开发工具的版本更新（React、Vue、Next.js、TypeScript、Vite、Bun 等），重点是 release notes 和 breaking changes' }
 ];
 
 /* ── Helpers ── */
@@ -361,29 +385,55 @@ function renderRunSummaryCard(run) {
     const ms = new Date(run.finishedAt) - new Date(run.startedAt);
     if (ms > 0) durStr = (ms / 1000).toFixed(1) + 's';
   }
-  const statusLabel = run.status === 'success' ? 'success' : run.status === 'error' ? 'error' : run.status === 'partial' ? 'partial' : (run.status || '');
+  const statusLabelMap = { success: '成功', error: '失败', partial: '部分成功', running: '运行中' };
+  const statusLabel = statusLabelMap[run.status] || (run.status || '未知');
 
-  let s = '<div class="autotask-history-row' + dimClass + runningClass + watchingClass + '" data-run-id="' + h(runId || '') + '">';
+  // Precompute counts / sources / reasons for non-running rows
+  const found = run.itemsFound != null ? run.itemsFound : (run.items ? run.items.length : 0);
+  const ingested = run.itemsIngested != null ? run.itemsIngested : (run.items || []).filter(x => x.status === 'ingested').length;
+  const skipped = run.itemsSkipped != null ? run.itemsSkipped : (run.items || []).filter(x => x.status === 'skipped' || x.status === 'gated_out').length;
+  let okCount = 0, failed = [], totalSrc = 0;
+  if (run.sourceStatus && typeof run.sourceStatus === 'object') {
+    const entries = Object.entries(run.sourceStatus);
+    totalSrc = entries.length;
+    okCount = entries.filter(([, v]) => v && v.status === 'ok').length;
+    failed = entries.filter(([, v]) => v && v.status === 'error');
+  }
+  const topReasons = isRunning ? [] : computeTopReasons(run);
+
+  let s = '<div class="autotask-history-row' + dimClass + runningClass + watchingClass + (expanded ? ' expanded' : '') + '" data-run-id="' + h(runId || '') + '">';
+
+  // Head row: 状态点 · 任务名 · 状态文案 · 入库大号 · 时间/耗时 · 展开
   s += '<div class="autotask-history-head">';
   if (isRunning) {
     s += '<span class="autotask-status-dot pulsing" style="background:' + dotColor + '"></span>';
   } else {
     s += '<span class="autotask-status-dot" style="background:' + dotColor + '"></span>';
   }
-  s += '<span class="autotask-history-name">' + h(run.taskName || '未知任务') + '</span>';
-  if (isRunning) s += '<span class="autotask-running-badge">运行中</span>';
-  s += '<span class="autotask-history-time">' + relTime(run.startedAt) + '</span>';
+  if (isRunning) {
+    s += '<span class="autotask-running-badge">运行中</span>';
+  }
+  s += '<span class="autotask-history-name">' + h(run.taskName || '未知任务');
+  if (run.status !== 'success' && !isRunning) {
+    s += ' <span class="autotask-history-status" style="color:' + dotColor + '">· ' + h(statusLabel) + '</span>';
+  }
+  s += '</span>';
+  if (!isRunning && ingested > 0) {
+    s += '<span class="autotask-history-ingested" title="本次入库">入库 ' + ingested + '</span>';
+  }
+  s += '<span class="autotask-history-time">' + h(relTime(run.startedAt));
+  if (durStr && !isRunning) s += ' · ' + h(durStr);
+  s += '</span>';
+  // Expand chevron (non-running only) - 移动到头行末尾而不是单独的 actions 行
+  if (!isRunning) {
+    s += '<button class="autotask-history-chevron' + (expanded ? ' is-open' : '') + '" onclick="toggleRunExpand(\'' + h(runId) + '\')" title="' + (expanded ? '收起' : '展开') + '">'
+      + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+      + '</button>';
+  }
   s += '</div>';
 
-  // New summary line: "<time> · <status> · <duration>"
-  if (!isRunning) {
-    let summary = h(tsStr) + ' · <span style="color:' + dotColor + '">' + h(statusLabel) + '</span>';
-    if (durStr) summary += ' · ' + durStr;
-    s += '<div class="autotask-run-summary-line">' + summary + '</div>';
-  }
-
-  // Counts: "考虑 X / 留下 Y / 跳过 Z"
   if (isRunning) {
+    // 保持原有 running UI
     const prog = run.progress || { phase: 'fetching', current: 0, total: 0, currentTitle: null };
     const phaseLabel = prog.phase === 'fetching' ? '抓取数据源...' : prog.phase === 'filtering' ? '过滤中...' : '处理条目';
     const total = prog.total || 0;
@@ -391,68 +441,72 @@ function renderRunSummaryCard(run) {
     const pct = total > 0 ? Math.min(100, Math.round((cur / total) * 100)) : (prog.phase === 'fetching' ? 10 : 5);
     s += '<div class="autotask-progress-bar"><div class="autotask-progress-fill" style="width:' + pct + '%"></div></div>';
     s += '<div class="autotask-history-meta">';
-    if (prog.phase === 'processing' && total > 0) {
-      s += h(phaseLabel) + ' ' + cur + '/' + total;
-    } else {
-      s += h(phaseLabel);
-    }
+    if (prog.phase === 'processing' && total > 0) s += h(phaseLabel) + ' ' + cur + '/' + total;
+    else s += h(phaseLabel);
     if (run.itemsIngested) s += ' · 已入库 ' + run.itemsIngested;
     if (run.itemsSkipped) s += ' · 已跳过 ' + run.itemsSkipped;
     if (prog.currentTitle) s += '<div class="autotask-progress-current">当前: ' + h(prog.currentTitle.length > 80 ? prog.currentTitle.slice(0, 78) + '...' : prog.currentTitle) + '</div>';
     s += '</div>';
   } else {
-    const found = run.itemsFound != null ? run.itemsFound : (run.items ? run.items.length : 0);
-    const ingested = run.itemsIngested != null ? run.itemsIngested : (run.items || []).filter(x => x.status === 'ingested').length;
-    const skipped = run.itemsSkipped != null ? run.itemsSkipped : (run.items || []).filter(x => x.status === 'skipped' || x.status === 'gated_out').length;
-    s += '<div class="autotask-history-counts">考虑 ' + found + ' / 留下 ' + ingested + ' / 跳过 ' + skipped + '</div>';
-
-    // Top-3 skip reasons
-    const topReasons = computeTopReasons(run);
-    if (topReasons.length) {
-      s += '<div class="autotask-history-reasons">跳过原因 top 3: ';
-      s += topReasons.map(r => h(r.label) + ' (' + r.count + ')').join(' · ');
-      s += '</div>';
+    // 失败或需要一眼看到信息时才渲染副行（非 noise）
+    const subParts = [];
+    // 错误消息：折叠态截断显示，展开看完整
+    if (run.error) {
+      const errShort = truncate(run.error, 120);
+      subParts.push('<span class="autotask-history-sub-err">错误：' + h(errShort) + '</span>');
     }
-    if (run.error) s += '<div class="autotask-history-meta"><span style="color:var(--red)">' + h(run.error) + '</span></div>';
+    // 有过滤/跳过数据时展示
+    if (!run.error && (found > 0 || skipped > 0)) {
+      const parts = [];
+      parts.push('考虑 ' + found);
+      if (skipped > 0) parts.push('跳过 ' + skipped);
+      subParts.push('<span class="autotask-history-sub-counts">' + parts.join(' · ') + '</span>');
+    }
+    // 源状态：仅当有失败或部分失败时才展示，全 OK 不占位置
+    if (failed.length > 0) {
+      subParts.push('<span class="autotask-history-sub-src autotask-history-sub-src-bad">源 ' + okCount + '/' + totalSrc + ' · ' + failed.length + ' 失败</span>');
+    }
+    // brief link
+    if (run.briefPath) {
+      subParts.push('<a class="autotask-history-sub-brief" href="#/article/' + h(run.briefPath) + '">简报 →</a>');
+    }
+    if (subParts.length) {
+      s += '<div class="autotask-history-sub">' + subParts.join('<span class="autotask-history-sub-sep">·</span>') + '</div>';
+    }
 
-    // Per-source fetch status (so a quietly-failing feed is visible).
-    if (run.sourceStatus && typeof run.sourceStatus === 'object') {
-      const entries = Object.entries(run.sourceStatus);
-      if (entries.length) {
-        const failed = entries.filter(([, v]) => v && v.status === 'error');
-        // Count `ok` explicitly so an unknown/missing status doesn't get tallied as OK.
-        const okCount = entries.filter(([, v]) => v && v.status === 'ok').length;
-        s += '<div class="autotask-history-sources">';
-        s += '源 ' + okCount + '/' + entries.length + ' OK';
-        if (failed.length) {
-          s += ' · <span style="color:var(--red)">' + failed.length + ' 个失败</span>';
-          s += '<details class="autotask-source-fail-detail"><summary>展开失败详情</summary><ul>';
-          failed.forEach(([id, v]) => {
-            s += '<li>' + h(id) + ': ' + h(truncate(v.error || '未知错误', 80)) + '</li>';
-          });
-          s += '</ul></details>';
-        }
+    // Expand area
+    if (expanded) {
+      s += '<div class="autotask-history-expand">';
+      // 精确时间戳
+      s += '<div class="autotask-history-expand-line"><span class="autotask-history-expand-lbl">时间</span>' + h(tsStr) + (durStr ? ' · 耗时 ' + h(durStr) : '') + '</div>';
+      // 完整计数
+      s += '<div class="autotask-history-expand-line"><span class="autotask-history-expand-lbl">计数</span>考虑 ' + found + ' · 入库 ' + ingested + ' · 跳过 ' + skipped + '</div>';
+      // 完整错误
+      if (run.error) {
+        s += '<div class="autotask-history-expand-line autotask-history-expand-err"><span class="autotask-history-expand-lbl">错误</span>' + h(run.error) + '</div>';
+      }
+      // skip reasons
+      if (topReasons.length) {
+        s += '<div class="autotask-history-expand-line"><span class="autotask-history-expand-lbl">跳过原因</span>';
+        s += topReasons.map(r => '<span class="autotask-source-chip">' + h(r.label) + ' · ' + r.count + '</span>').join('');
         s += '</div>';
       }
+      // 失败源详情
+      if (failed.length > 0) {
+        s += '<div class="autotask-history-expand-line"><span class="autotask-history-expand-lbl">失败源</span><ul class="autotask-history-expand-sources">';
+        failed.forEach(([id, v]) => {
+          s += '<li>' + h(id) + '：' + h(truncate(v.error || '未知错误', 120)) + '</li>';
+        });
+        s += '</ul></div>';
+      }
+      // 全 OK 但展开了也展示源总数
+      if (totalSrc > 0 && failed.length === 0) {
+        s += '<div class="autotask-history-expand-line"><span class="autotask-history-expand-lbl">源</span>' + okCount + '/' + totalSrc + ' OK</div>';
+      }
+      // per-item
+      if ((run.items || []).length) s += renderRunItems(run);
+      s += '</div>';
     }
-
-    if (run.briefPath) {
-      s += '<div class="autotask-history-brief"><a href="#/article/' + h(run.briefPath) + '">查看本次简报 →</a></div>';
-    }
-  }
-
-  // Expand toggle
-  if (!isRunning && (run.items || []).length) {
-    s += '<div class="autotask-history-actions">';
-    s += '<button class="autotask-action-btn" onclick="toggleRunExpand(\'' + h(runId) + '\')">' + (expanded ? '收起' : '展开看每条') + '</button>';
-    s += '</div>';
-    if (expanded) {
-      s += renderRunItems(run);
-    }
-  } else if (isRunning) {
-    // no-op
-  } else {
-    s += '<div class="autotask-history-actions"><button class="autotask-action-btn" onclick="toggleRunExpand(\'' + h(runId) + '\')">' + (expanded ? '收起' : '展开看每条') + '</button></div>';
   }
 
   s += '</div>';
@@ -611,6 +665,7 @@ export function switchHistoryRange(days) {
 
 export function switchAutotaskTab(tab) {
   currentTab = tab;
+  try { localStorage.setItem(TAB_STORAGE_KEY, tab); } catch (_) {}
   const c = $('content');
   if (c) renderPage(c);
 }
@@ -678,14 +733,27 @@ function renderWizardStep1() {
   s += '<textarea class="autotask-nl-textarea" id="autotaskIntentInput" rows="4" placeholder="了解大厂 AI 研究新进展，重点是论文和技术博客，跳过招聘和市场活动" oninput="window._autotaskIntentChange&&window._autotaskIntentChange(this.value)">' + h(wizardIntent) + '</textarea>';
   s += '</div>';
 
-  // Preset chips: one-click fill the textarea. Helps users stuck at the empty box.
+  // Preset chips: one-click fill the textarea. Grouped by topic.
   s += '<div class="autotask-intent-presets">';
   s += '<div class="autotask-intent-presets-label">不知道写什么？试试这些：</div>';
-  s += '<div class="autotask-intent-presets-row">';
+  // Preserve original order while grouping by `group` field
+  const _groupOrder = [];
+  const _grouped = new Map();
   INTENT_PRESETS.forEach((p, i) => {
-    s += '<button class="autotask-intent-preset-chip" type="button"' + (wizardBusy ? ' disabled' : '') + ' onclick="pickAutotaskIntentPreset(' + i + ')">' + h(p.label) + '</button>';
+    const g = p.group || '其他';
+    if (!_grouped.has(g)) { _grouped.set(g, []); _groupOrder.push(g); }
+    _grouped.get(g).push({ p, i });
   });
-  s += '</div>';
+  _groupOrder.forEach(g => {
+    s += '<div class="autotask-intent-presets-group">';
+    s += '<div class="autotask-intent-presets-group-title">' + h(g) + '</div>';
+    s += '<div class="autotask-intent-presets-row">';
+    _grouped.get(g).forEach(({ p, i }) => {
+      s += '<button class="autotask-intent-preset-chip" type="button"' + (wizardBusy ? ' disabled' : '') + ' onclick="pickAutotaskIntentPreset(' + i + ')">' + h(p.label) + '</button>';
+    });
+    s += '</div>';
+    s += '</div>';
+  });
   s += '</div>';
 
   if (wizardBusy) {
@@ -1106,6 +1174,7 @@ export async function runAutotask(taskId) {
     if (!runId) { toast('已触发但未拿到 runId'); return; }
     watchingRunId = runId;
     currentTab = 'history';
+    try { localStorage.setItem(TAB_STORAGE_KEY, 'history'); } catch (_) {}
     await refreshData();
     const c = $('content');
     if (c) renderPage(c);

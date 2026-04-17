@@ -516,5 +516,215 @@
     "tags": ["english", "podcast", "developer", "open-source", "engineering"],
     "lang": "en",
     "cadence": "weekly"
+  },
+  {
+    "id": "suno-blog",
+    "type": "webpage",
+    "url": "https://suno.com/blog",
+    "label": "Suno Blog",
+    "description": "AI music generation product announcements and research posts from Suno; skip minor marketing copy.",
+    "tags": ["ai", "music", "product", "english"],
+    "lang": "en",
+    "cadence": "irregular"
+  },
+  {
+    "id": "udio-blog",
+    "type": "webpage",
+    "url": "https://www.udio.com/blog",
+    "label": "Udio Blog",
+    "description": "Udio product and label-partnership announcements (Warner, UMG) for AI music; skip contest posts.",
+    "tags": ["ai", "music", "product", "english"],
+    "lang": "en",
+    "cadence": "irregular"
+  },
+  {
+    "id": "elevenlabs-blog",
+    "type": "webpage",
+    "url": "https://elevenlabs.io/blog",
+    "label": "ElevenLabs Blog",
+    "description": "Voice AI and audio model releases, research and partnership posts; skip customer case studies.",
+    "tags": ["ai", "audio", "voice", "product", "english"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "stability-ai-news",
+    "type": "webpage",
+    "url": "https://stability.ai/news-updates",
+    "label": "Stability AI News",
+    "description": "Stability AI model releases and music/image partnerships; skip compliance PR posts.",
+    "tags": ["ai", "audio", "image", "research", "english"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "mubert-blog",
+    "type": "webpage",
+    "url": "https://mubert.com/blog/",
+    "label": "Mubert Blog",
+    "description": "AI generative music platform posts on production, licensing and API use-cases.",
+    "tags": ["ai", "music", "product", "english"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "ableton-blog",
+    "type": "webpage",
+    "url": "https://www.ableton.com/en/blog/",
+    "label": "Ableton Blog",
+    "description": "Ableton Live / Push / Move release notes and sound-design articles; skip pure artist interviews.",
+    "tags": ["music", "daw", "product", "english"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "ni-blog",
+    "type": "webpage",
+    "url": "https://blog.native-instruments.com/",
+    "label": "Native Instruments Blog",
+    "description": "Kontakt / Maschine / Traktor tutorials and producer interviews; skip pure artist features.",
+    "tags": ["music", "daw", "production", "english"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "output-mag",
+    "type": "webpage",
+    "url": "https://output.com/blog",
+    "label": "Output Mag",
+    "description": "Plugin reviews and music production tutorials from Output.",
+    "tags": ["music", "production", "tutorial", "english"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "mbw-feed",
+    "type": "rss",
+    "url": "https://www.musicbusinessworldwide.com/feed/",
+    "label": "Music Business Worldwide",
+    "description": "Music industry business news: label deals, streaming economics, AI licensing.",
+    "tags": ["music", "industry", "business", "english"],
+    "lang": "en",
+    "cadence": "daily"
+  },
+  {
+    "id": "musically-feed",
+    "type": "rss",
+    "url": "https://musically.com/feed/",
+    "label": "Music Ally",
+    "description": "Music and streaming tech analysis from Music Ally; industry data and platform updates.",
+    "tags": ["music", "industry", "streaming", "english"],
+    "lang": "en",
+    "cadence": "daily"
+  },
+  {
+    "id": "youtube-blog",
+    "type": "rss",
+    "url": "https://blog.youtube/rss/",
+    "label": "YouTube Official Blog",
+    "description": "YouTube product, creator-policy and platform announcements; skip non-creator marketing.",
+    "tags": ["platform", "video", "creator", "english"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "spotify-newsroom",
+    "type": "rss",
+    "url": "https://newsroom.spotify.com/feed/",
+    "label": "Spotify Newsroom",
+    "description": "Spotify product launches, partnerships and editorial features for music streaming.",
+    "tags": ["music", "streaming", "platform", "english"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "deepseek-changelog",
+    "type": "changelog",
+    "url": "https://api-docs.deepseek.com/updates",
+    "label": "DeepSeek API Changelog",
+    "description": "DeepSeek model version upgrades and API capability changes.",
+    "tags": ["ai", "llm", "changelog", "china", "english"],
+    "lang": "en",
+    "cadence": "irregular"
+  },
+  {
+    "id": "bailian-release-notes",
+    "type": "changelog",
+    "url": "https://help.aliyun.com/zh/model-studio/release-notes",
+    "label": "阿里云百炼 产品动态",
+    "description": "阿里云百炼 / 通义大模型平台模型上下架与功能更新动态。",
+    "tags": ["ai", "llm", "changelog", "china", "chinese"],
+    "lang": "zh",
+    "cadence": "weekly"
+  },
+  {
+    "id": "runway-blog",
+    "type": "webpage",
+    "url": "https://runwayml.com/news",
+    "label": "Runway News",
+    "description": "Runway video AI model releases (Gen-3/Gen-4), research and partnership posts.",
+    "tags": ["ai", "video", "product", "english"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "bfl-blog",
+    "type": "webpage",
+    "url": "https://bfl.ai/blog",
+    "label": "Black Forest Labs Blog",
+    "description": "FLUX image/video model releases and partnership announcements from Black Forest Labs.",
+    "tags": ["ai", "image", "video", "research", "english"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "react-blog",
+    "type": "webpage",
+    "url": "https://react.dev/blog",
+    "label": "React Blog",
+    "description": "Official React team posts: releases, compiler, security advisories.",
+    "tags": ["frontend", "react", "changelog", "english"],
+    "lang": "en",
+    "cadence": "irregular"
+  },
+  {
+    "id": "vuejs-blog",
+    "type": "rss",
+    "url": "https://blog.vuejs.org/feed.rss",
+    "label": "The Vue Point",
+    "description": "Official Vue.js major-release and ecosystem announcements (low volume).",
+    "tags": ["frontend", "vue", "changelog", "english"],
+    "lang": "en",
+    "cadence": "irregular"
+  },
+  {
+    "id": "typescript-blog",
+    "type": "rss",
+    "url": "https://devblogs.microsoft.com/typescript/feed/",
+    "label": "TypeScript Blog",
+    "description": "TypeScript release announcements from Microsoft DevBlogs (low volume).",
+    "tags": ["frontend", "typescript", "changelog", "english"],
+    "lang": "en",
+    "cadence": "irregular"
+  },
+  {
+    "id": "vite-releases",
+    "type": "rss",
+    "url": "https://github.com/vitejs/vite/releases.atom",
+    "label": "Vite Releases",
+    "description": "Vite / create-vite / plugin-legacy GitHub release feed.",
+    "tags": ["frontend", "vite", "changelog", "english"],
+    "lang": "en",
+    "cadence": "weekly"
+  },
+  {
+    "id": "bun-blog",
+    "type": "rss",
+    "url": "https://bun.com/rss.xml",
+    "label": "Bun Blog",
+    "description": "Bun runtime release notes and deep-dive feature articles (high volume).",
+    "tags": ["frontend", "runtime", "bun", "changelog", "english"],
+    "lang": "en",
+    "cadence": "weekly"
   }
 ]

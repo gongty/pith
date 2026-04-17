@@ -132,11 +132,68 @@
   display:flex;flex-direction:column;gap:6px;transition:all 180ms ease;
 }
 .autotask-history-row:hover{border-color:var(--accent-border);box-shadow:0 2px 8px rgba(91,91,214,0.06)}
-.autotask-history-head{display:flex;align-items:center;gap:8px}
-.autotask-history-name{font-weight:600;font-size:14px;color:var(--fg);flex:1}
+.autotask-history-row{padding:12px 16px}
+.autotask-history-head{display:flex;align-items:center;gap:10px}
+.autotask-history-name{
+  font-weight:600;font-size:14px;color:var(--fg);flex:1;
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.autotask-history-status{font-weight:500;font-size:13px;margin-left:2px}
 .autotask-history-time{font-size:12px;color:var(--fg-tertiary);flex-shrink:0}
 .autotask-history-meta{font-size:13px;color:var(--fg-secondary)}
 .autotask-history-actions{display:flex;gap:6px;justify-content:flex-end}
+
+/* 入库计数强调徽章 */
+.autotask-history-ingested{
+  display:inline-flex;align-items:center;padding:1px 9px;border-radius:10px;
+  font-size:11.5px;font-weight:600;letter-spacing:.2px;flex-shrink:0;
+  background:var(--accent-bg);color:var(--accent);
+}
+[data-theme="dark"] .autotask-history-ingested{background:rgba(91,91,214,0.2)}
+
+/* 展开 chevron */
+.autotask-history-chevron{
+  width:24px;height:24px;border-radius:var(--radius);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  color:var(--fg-tertiary);background:none;border:none;cursor:pointer;
+  transition:all var(--t);
+}
+.autotask-history-chevron:hover{background:var(--bg-hover);color:var(--fg-secondary)}
+.autotask-history-chevron svg{transition:transform 180ms ease}
+.autotask-history-chevron.is-open svg{transform:rotate(180deg)}
+
+/* 折叠态副行：一行塞所有辅助信息 */
+.autotask-history-sub{
+  display:flex;align-items:center;flex-wrap:wrap;gap:6px;
+  font-size:12px;color:var(--fg-tertiary);line-height:1.5;
+}
+.autotask-history-sub-sep{opacity:.4}
+.autotask-history-sub-err{color:var(--red)}
+.autotask-history-sub-counts{color:var(--fg-tertiary)}
+.autotask-history-sub-src-bad{color:var(--red)}
+.autotask-history-sub-brief{color:var(--accent);text-decoration:none}
+.autotask-history-sub-brief:hover{text-decoration:underline}
+
+/* 展开区 */
+.autotask-history-expand{
+  margin-top:4px;padding-top:10px;border-top:1px dashed var(--border);
+  display:flex;flex-direction:column;gap:8px;
+}
+.autotask-history-expand-line{
+  font-size:12.5px;color:var(--fg-secondary);line-height:1.55;
+  display:flex;align-items:flex-start;flex-wrap:wrap;gap:6px;
+}
+.autotask-history-expand-lbl{
+  color:var(--fg-tertiary);font-size:11px;letter-spacing:.3px;
+  min-width:52px;flex-shrink:0;margin-top:1px;
+}
+.autotask-history-expand-err{color:var(--red);word-break:break-word}
+.autotask-history-expand-err .autotask-history-expand-lbl{color:var(--red);opacity:.7}
+.autotask-history-expand-sources{
+  list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:3px;
+  font-size:12px;color:var(--fg-secondary);flex:1;min-width:0;
+}
+.autotask-history-expand-sources li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* ── Modals ── */
 .autotask-modal-bg{
@@ -212,7 +269,13 @@
 /* Intent presets: clickable starter chips */
 .autotask-intent-presets{margin-top:14px}
 .autotask-intent-presets-label{
-  font-size:12px;color:var(--fg-tertiary);margin-bottom:8px;
+  font-size:12px;color:var(--fg-tertiary);margin-bottom:10px;
+}
+.autotask-intent-presets-group{margin-bottom:10px}
+.autotask-intent-presets-group:last-child{margin-bottom:0}
+.autotask-intent-presets-group-title{
+  font-size:11px;color:var(--fg-tertiary);margin-bottom:6px;
+  letter-spacing:0.3px;
 }
 .autotask-intent-presets-row{
   display:flex;flex-wrap:wrap;gap:6px;
@@ -425,7 +488,7 @@
 /* Running run highlighting */
 .autotask-history-row.running{border-color:var(--accent-border);background:var(--accent-bg)}
 .autotask-history-row.running.watching{box-shadow:0 0 0 2px var(--accent-bg),0 0 0 3px rgba(91,91,214,0.35)}
-.autotask-running-badge{display:inline-block;margin-left:auto;padding:2px 10px;border-radius:10px;background:var(--accent);color:#fff;font-size:11px;font-weight:500;letter-spacing:.3px}
+.autotask-running-badge{display:inline-block;padding:2px 10px;border-radius:10px;background:var(--accent);color:#fff;font-size:11px;font-weight:500;letter-spacing:.3px;flex-shrink:0}
 .autotask-status-dot.pulsing{position:relative;animation:autotask-pulse 1.4s ease-in-out infinite}
 @keyframes autotask-pulse{0%,100%{box-shadow:0 0 0 0 rgba(91,91,214,.6)}50%{box-shadow:0 0 0 6px rgba(91,91,214,0)}}
 .autotask-progress-bar{margin:8px 0 6px;height:4px;border-radius:2px;background:rgba(91,91,214,.12);overflow:hidden}

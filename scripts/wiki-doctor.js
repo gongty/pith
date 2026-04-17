@@ -129,25 +129,47 @@ for (const f of wikiFiles) {
 if (noFm.length) push('info', 'legacy 文章缺 frontmatter（走 extractKeywords fallback）', noFm, 'curl -X POST "http://localhost:3456/api/wiki/backfill-tags?useModel=main"');
 
 // ── [warning] concept 漂移：frontmatter tags 里有非 canonical 形式 ──
+// ── [info]    hapax tags：全语料只出现 1 次的 tag 数量（consolidation 提示）
 if (conceptsMod) {
   try {
     const conceptsObj = conceptsMod.loadConcepts();
     const drift = [];
+    const tagCount = new Map(); // canonical tag -> # articles
     for (const f of wikiFiles) {
       let content;
       try { content = fs.readFileSync(f, 'utf-8'); } catch { continue; }
       const { data } = parseFrontmatterLocal(content);
       const tags = Array.isArray(data.tags) ? data.tags : [];
+      const seenInFile = new Set();
       for (const t of tags) {
         const c = conceptsMod.normalizeTag(t, conceptsObj);
+        // 漂移：canonical 与原 tag 不同 → 但 canonical 若是 stopword，不报（规范化对但词本身就不该做 concept）
         if (c && c !== t) {
-          drift.push(`${path.relative(WIKI, f)}  :  "${t}" -> "${c}"`);
+          const isStop = typeof conceptsMod.isStopConcept === 'function'
+            ? conceptsMod.isStopConcept(c, conceptsObj)
+            : false;
+          if (!isStop) {
+            drift.push(`${path.relative(WIKI, f)}  :  "${t}" -> "${c}"`);
+          }
+        }
+        if (c && !seenInFile.has(c)) {
+          seenInFile.add(c);
+          tagCount.set(c, (tagCount.get(c) || 0) + 1);
         }
       }
     }
     if (drift.length) {
       push('warning', 'concept 漂移（frontmatter tags 非 canonical）', drift,
         '运行 POST /api/wiki/concepts/rebuild 后重新编译或手动改 frontmatter');
+    }
+    const hapaxTags = [...tagCount.entries()]
+      .filter(([, n]) => n === 1)
+      .map(([t]) => t)
+      .sort();
+    if (hapaxTags.length) {
+      push('info', `稀有 tag（articleCount === 1，共 ${hapaxTags.length} 个，可考虑合并或加 stopword）`,
+        hapaxTags,
+        '编辑 data/concepts.json 的 aliases 合并同义，或 stopwords 过滤源元数据');
     }
   } catch {}
 }
