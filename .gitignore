@@ -9,3 +9,4 @@ start.sh
 test-vectors.sh
 test-ask.sh
 config.json.bak
+.DS_Store
