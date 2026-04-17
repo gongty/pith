@@ -95,6 +95,7 @@ export async function rArticle(c, p) {
       topActs.insertBefore(delBtn, topActs.firstChild);
     }
     setupTitlePlainPaste();
+    setupBodyPasteSanitize();
     setupFormatToolbar();
     initTocSpy();
     setupSlashMenu();
@@ -246,6 +247,76 @@ function setupTitlePlainPaste() {
     e.preventDefault();
     const clean = text.replace(/[\r\n\t]+/g, ' ').trim();
     document.execCommand('insertText', false, clean);
+  });
+}
+
+/* ── Body: 富文本粘贴清洗 ──
+   保留结构/语义（段落、列表、标题、链接、代码、加粗、斜体、图片、表格、引用），
+   剥掉所有 inline style / class / 颜色 / font-* / mso-* 等 attribute 垃圾，
+   展开 span / font 这类纯样式壳，删 script / style / meta 节点，
+   防 XSS：<a href> 剥 javascript: 协议，所有 on* 事件属性清掉。 */
+const BODY_KEEP_TAGS = new Set([
+  'P','DIV','BR','H1','H2','H3','H4','H5','H6',
+  'UL','OL','LI','BLOCKQUOTE','PRE','CODE','HR',
+  'TABLE','THEAD','TBODY','TR','TH','TD',
+  'STRONG','B','EM','I','U','S','DEL','A','IMG',
+]);
+const BODY_UNWRAP_TAGS = new Set(['SPAN','FONT','O:P','META']);
+const BODY_DROP_TAGS = new Set(['SCRIPT','STYLE','LINK','HEAD','TITLE','NOSCRIPT','IFRAME','OBJECT','EMBED']);
+const BODY_ATTR_WHITELIST = {
+  A: new Set(['href','title']),
+  IMG: new Set(['src','alt','title']),
+};
+
+function sanitizeBodyHtml(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const root = doc.body;
+  function walk(node) {
+    const children = Array.from(node.childNodes);
+    for (const child of children) {
+      if (child.nodeType === 8) { child.remove(); continue; }
+      if (child.nodeType !== 1) continue;
+      const tag = child.tagName.toUpperCase();
+      if (BODY_DROP_TAGS.has(tag)) { child.remove(); continue; }
+      if (BODY_UNWRAP_TAGS.has(tag) || !BODY_KEEP_TAGS.has(tag)) {
+        walk(child);
+        while (child.firstChild) child.parentNode.insertBefore(child.firstChild, child);
+        child.remove();
+        continue;
+      }
+      const whitelist = BODY_ATTR_WHITELIST[tag] || null;
+      for (const attr of Array.from(child.attributes)) {
+        const name = attr.name.toLowerCase();
+        // 没白名单：全删；有白名单：白名单外全删
+        if (!whitelist || !whitelist.has(name)) child.removeAttribute(attr.name);
+      }
+      if (tag === 'A') {
+        const href = child.getAttribute('href') || '';
+        if (/^\s*javascript:/i.test(href) || /^\s*data:/i.test(href)) child.removeAttribute('href');
+      }
+      if (tag === 'IMG') {
+        const src = child.getAttribute('src') || '';
+        if (/^\s*javascript:/i.test(src)) child.removeAttribute('src');
+      }
+      walk(child);
+    }
+  }
+  walk(root);
+  return root.innerHTML;
+}
+
+function setupBodyPasteSanitize() {
+  const el = $('artBody'); if (!el) return;
+  el.addEventListener('paste', e => {
+    const cd = e.clipboardData || window.clipboardData;
+    if (!cd) return;
+    const html = cd.getData('text/html');
+    if (!html) return; // 纯文本交给浏览器默认行为，没有 style 问题
+    e.preventDefault();
+    const clean = sanitizeBodyHtml(html);
+    if (!clean) return;
+    document.execCommand('insertHTML', false, clean);
+    onArtChange();
   });
 }
 
