@@ -484,6 +484,13 @@ export function initFG(canvas, data, full) {
       canvas.style.cursor = found ? 'pointer' : 'grab';
       if (settled) { settled = false; if (!state.gaf) state.gaf = requestAnimationFrame(loop); }
     }
+    // hover-driven focus：鼠标压在 concept 上立刻弹，移到空白处延迟关闭
+    if (found && found.kind === 'concept') {
+      cancelUnfocus();
+      if (focused !== found) setFocus(found);
+    } else if (!found && focused) {
+      scheduleUnfocus();
+    }
   };
 
   canvas.onmousedown = e => {
@@ -504,29 +511,31 @@ export function initFG(canvas, data, full) {
 
   canvas.onmouseup = e => {
     if (drag) {
-      const r = canvas.getBoundingClientRect();
-      const mx = e.clientX - r.left, my = e.clientY - r.top;
-      const click = Math.sqrt((mx - dsx) ** 2 + (my - dsy) ** 2) < 4;
-      if (click && drag.kind === 'concept') {
-        if (focused === drag) setFocus(null);
-        else setFocus(drag);
-      }
+      // hover 已管 focus，click 节点不再做切换；只收尾 drag 状态
       drag = null; canvas.style.cursor = hov ? 'pointer' : 'grab';
     }
     if (pan) {
-      // 空白点击退出 focus
+      // 空白点击立即退出 focus（不等 hover 超时）
       const r = canvas.getBoundingClientRect();
       const mx = e.clientX - r.left, my = e.clientY - r.top;
       const click = Math.sqrt((mx - psx) ** 2 + (my - psy) ** 2) < 4;
-      if (click && focused) setFocus(null);
+      if (click && focused) { cancelUnfocus(); setFocus(null); }
       pan = false; canvas.style.cursor = 'grab';
     }
   };
 
   canvas.onmouseleave = () => {
     hov = null; drag = null; pan = false;
+    if (focused) scheduleUnfocus();
     if (settled) { settled = false; if (!state.gaf) state.gaf = requestAnimationFrame(loop); }
   };
+
+  // popup 自身也是 hover 敏感区 —— 鼠标移进去时撤销关闭，否则用户想点列表链接就被抢走了
+  const cardEl = cardHost && cardHost.querySelector('.graph-focus-card');
+  if (cardEl) {
+    cardEl.addEventListener('mouseenter', cancelUnfocus);
+    cardEl.addEventListener('mouseleave', () => scheduleUnfocus());
+  }
 
   // ESC 退出 focus
   const escHandler = e => {
