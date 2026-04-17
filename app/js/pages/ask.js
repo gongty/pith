@@ -6,7 +6,7 @@
  *   clarifyAnswers 有值   → SSE 流
  */
 
-import { $, h, api, toast, go } from '../utils.js';
+import { $, h, api, toast, go, jsAttr } from '../utils.js';
 import { renderMd } from '../markdown.js';
 import { openSSE } from '../sse.js';
 
@@ -89,7 +89,10 @@ export function rAsk(container, initialQuery = '') {
         const picked = s.clarifyAnswers[q.id] || '';
         for (const opt of (q.options || [])) {
           const active = opt === picked ? ' active' : '';
-          html += '<button class="ask-chip' + active + '" onclick="pickClarifyOption(\'' + h(q.id) + '\', ' + JSON.stringify(opt) + ')">' + h(opt) + '</button>';
+          // q.id 和 opt 都来自 LLM，可能含 `'` / U+2028 等会击穿 JS 字符串字面量的字符。
+          // 把字符串参数编成 JS-level `\uXXXX` 转义而非 HTML 实体（后者会被 HTML
+          // attribute 解码回原字符，破坏 JS 解析）。
+          html += '<button class="ask-chip' + active + '" onclick="pickClarifyOption(\'' + jsAttr(q.id) + '\', \'' + jsAttr(opt) + '\')">' + h(opt) + '</button>';
         }
         html += '</div></div>';
       }

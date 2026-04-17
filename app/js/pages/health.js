@@ -1,4 +1,4 @@
-import { $, h, api, go, relTime, toast } from '../utils.js';
+import { $, h, api, go, relTime, toast, jsAttr } from '../utils.js';
 
 function scoreColor(score) {
   if (score >= 90) return 'var(--green)';
@@ -84,7 +84,7 @@ export async function rHealth(c) {
       s += '<div class="health-issues">';
       for (const issue of issues) {
         const clickPath = issue.path || (issue.paths && issue.paths[0]) || '';
-        const clickable = clickPath ? ' onclick="go(\'#/article/' + h(clickPath) + '\')"' : '';
+        const clickable = clickPath ? ' onclick="go(\'#/article/' + jsAttr(clickPath) + '\')"' : '';
         const cursor = clickPath ? ' style="cursor:pointer"' : '';
 
         let desc = '';

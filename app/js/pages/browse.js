@@ -1,4 +1,4 @@
-import { h, api, go, skelLines } from '../utils.js';
+import { h, api, go, skelLines, jsAttr } from '../utils.js';
 import state from '../state.js';
 
 function relTime(ms) {
@@ -74,7 +74,7 @@ export async function rBrowse(c, tagFilter) {
         + '</div>';
       s += '<div class="browse-group-grid">';
       t.children.forEach(ch => {
-        s += '<div class="browse-card" onclick="go(\'#/article/' + h(ch.path) + '\')">'
+        s += '<div class="browse-card" onclick="go(\'#/article/' + jsAttr(ch.path) + '\')">'
           + '<div class="browse-card-title">' + h(ch.title || ch.name) + '</div>'
           + '<div class="browse-card-meta">'
           + '<span class="browse-card-topic" style="color:' + color.fg + ';background:' + color.bg + '">' + h(t.name) + '</span>'

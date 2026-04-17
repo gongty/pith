@@ -1,4 +1,4 @@
-import { $, h, api } from './utils.js';
+import { $, h, api, jsAttr } from './utils.js';
 import state from './state.js';
 
 export function toggleSidebar() {
@@ -84,7 +84,7 @@ export async function updSidebarPages() {
       b.items.forEach(c => {
         const active = state.artPath === c.path ? ' active' : '';
         const hidden = state.foldedDates.has(b.key) ? ' style="display:none"' : '';
-        s += '<div class="sidebar-page' + active + '" data-date="' + h(b.key) + '"' + hidden + ' onclick="go(\'#/article/' + h(c.path) + '\')" title="' + h(c.title || c.file) + '">'
+        s += '<div class="sidebar-page' + active + '" data-date="' + h(b.key) + '" data-path="' + h(c.path) + '"' + hidden + ' onclick="go(\'#/article/' + jsAttr(c.path) + '\')" title="' + h(c.title || c.file) + '">'
           + '<span class="page-title">' + h(c.title || c.file) + '</span>'
           + '</div>';
       });
@@ -119,7 +119,9 @@ export function initSidebarPreview() {
       preview.style.left = (rect.right + 8) + 'px';
       preview.classList.add('show');
       try {
-        const path = page.getAttribute('onclick')?.match(/article\/(.*?)'/)?.[1];
+        // 从 data-path 读而不是反解 onclick：后者在路径含 `'` 时被 jsAttr 编成
+        // `\u0027`，正则匹配会提前被 onclick 外层的 `'` 截断，得到错误路径。
+        const path = page.getAttribute('data-path') || '';
         if (path) {
           const res = await api('/api/wiki/article?path=' + encodeURIComponent(path));
           const lines = (res.content || '').split('\n').filter(l => l.trim() && !l.startsWith('#'));
@@ -153,8 +155,8 @@ export async function updSidebarChats() {
     let s = '';
     items.forEach(c => {
       const active = (state.cv === 'chat' && state.convId === c.id) ? ' active' : '';
-      s += '<div class="sidebar-chat-item' + active + '" onclick="go(\'#/chat/' + h(c.id) + '\')" title="' + h(c.title) + '"><span class="chat-title">' + h(c.title) + '</span>'
-        + '<button class="sidebar-chat-archive" onclick="event.stopPropagation();archiveChat(\'' + h(c.id) + '\')" title="归档"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg></button>'
+      s += '<div class="sidebar-chat-item' + active + '" onclick="go(\'#/chat/' + jsAttr(c.id) + '\')" title="' + h(c.title) + '"><span class="chat-title">' + h(c.title) + '</span>'
+        + '<button class="sidebar-chat-archive" onclick="event.stopPropagation();archiveChat(\'' + jsAttr(c.id) + '\')" title="归档"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg></button>'
         + '</div>';
     });
     sc.innerHTML = s;

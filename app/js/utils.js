@@ -4,6 +4,26 @@ export const $ = id => document.getElementById(id);
 export const h = s => s ? String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') : '';
 export const hRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// Safe encoder for strings that get dropped into an inline `onclick="foo('...')"`
+// handler. The host is a double-quoted HTML attribute whose value is
+// HTML-decoded *before* the JS parser runs, so entity-encoding `'` as
+// `&#39;` is not enough — it decodes back to `'` and terminates the JS
+// string literal (classic cause of "links do nothing" when titles/paths
+// contain apostrophes, e.g. `amazon's-...md`). We emit JS-level Unicode
+// escapes instead; they survive HTML decoding and stay inert inside a JS
+// string. See the same pattern in pages/autotask.js (escapeAttr).
+export const jsAttr = s => String(s || '')
+  .replace(/\\/g, '\\\\')
+  .replace(/'/g, '\\u0027')
+  .replace(/"/g, '\\u0022')
+  .replace(/</g, '\\u003C')
+  .replace(/>/g, '\\u003E')
+  .replace(/&/g, '\\u0026')
+  .replace(/\r/g, '\\u000D')
+  .replace(/\n/g, '\\u000A')
+  .replace(/\u2028/g, '\\u2028')
+  .replace(/\u2029/g, '\\u2029');
+
 export function relTime(d) {
   if (!d) return '';
   const now = new Date(), then = new Date(d), diff = Math.floor((now - then) / 1000);

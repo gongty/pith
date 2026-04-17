@@ -1,4 +1,4 @@
-import { $, h, hRe, api, go } from './utils.js';
+import { $, h, hRe, api, go, jsAttr } from './utils.js';
 import state from './state.js';
 
 export function openSearch() {
@@ -58,7 +58,7 @@ export function initSearchInput() {
         const countHint = '<div class="search-count">' + shown + ' / ' + r.length + ' 篇文章</div>';
         c.innerHTML = countHint + r.slice(0, 8).map(x => {
           const ctx = x.matches && x.matches.length ? '<div class="search-result-ctx">' + h(x.matches[0].text).replace(new RegExp(hRe(q), 'gi'), '<mark>$&</mark>') + '</div>' : '';
-          return '<div class="search-result" onclick="closeSearch();go(\'#/article/' + h(x.path) + '\')"><div class="search-result-title">' + h(x.title) + '</div><div class="search-result-path">' + h(x.path) + '</div>' + ctx + '</div>';
+          return '<div class="search-result" onclick="closeSearch();go(\'#/article/' + jsAttr(x.path) + '\')"><div class="search-result-title">' + h(x.title) + '</div><div class="search-result-path">' + h(x.path) + '</div>' + ctx + '</div>';
         }).join('') + aiRow(q);
       } catch { $('searchResults').innerHTML = '<div class="search-empty-msg">搜索出错</div>'; }
     }, 200);
