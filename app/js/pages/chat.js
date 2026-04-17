@@ -28,7 +28,33 @@ export async function rChatList(c) {
 }
 
 export async function delChat(id) {
-  try { await apiDel('/api/chat/' + id); state.chatList = null; toast('已归档'); window.render(); } catch { toast('归档失败'); }
+  try {
+    // 归档前先抓一份列表快照，用于"自动选中下一条"——时间序：
+    // list 由服务端按 updatedAt 降序返回（最新在前），所以 idx+1 是时间上更老的"下一条"。
+    const listBefore = Array.isArray(state.chatList) ? state.chatList.slice() : [];
+    await apiDel('/api/chat/' + id);
+    state.chatList = null;
+    toast('已归档');
+    // 若归档的是正在看的那条，必须清掉 convId/msgs/override，否则 rChat 里
+    // sameConv=(state.convId===id && state.msgs.length>0) 判定为 true，
+    // 会直接复用内存里缓存的消息重渲染，右侧看起来"没归档"。
+    // 同时 hash 也得从 #/chat/<archivedId> 切走，不然 render 还会再命中这条路由。
+    if (state.convId === id) {
+      // 找下一条：优先紧邻其后（更老），否则紧邻其前（更新），都没就新对话空白页
+      const idx = listBefore.findIndex(c => c && c.id === id);
+      let nextId = null;
+      if (idx >= 0) {
+        if (idx + 1 < listBefore.length) nextId = listBefore[idx + 1].id;
+        else if (idx > 0) nextId = listBefore[idx - 1].id;
+      }
+      state.convId = null;
+      state.msgs = [];
+      state.currentConvOverride = null;
+      go(nextId ? '#/chat/' + nextId : '#/chat');
+      return;
+    }
+    window.render();
+  } catch { toast('归档失败'); }
 }
 export { delChat as archiveChat };
 

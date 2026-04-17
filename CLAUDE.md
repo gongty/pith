@@ -10,18 +10,25 @@ Personal knowledge base app — AI-assisted wiki with chat, knowledge graph, con
 
 ```bash
 ./start.sh                                          # 推荐，内含环境变量（若存在）
-WIKI_API_KEY=$(cat .api-key) node server.js        # .api-key 是本地密钥文件（gitignored），内容为 sk-xxx
+WIKI_API_KEY=$(cat .api-key) node server.js        # .api-key 是本地便利文件（gitignored），内容为 sk-xxx
 WIKI_API_KEY=sk-xxx node server.js                 # 手动指定
 PORT=3000 WIKI_API_KEY=sk-xxx node server.js       # 自定义端口
+WIKI_ADMIN_TOKEN=<至少 16 字符随机串> WIKI_API_KEY=sk-xxx node server.js  # 启用鉴权（生产/上云必需）
 ```
 
 Default port: 3456. First run `npm install` to install dependencies (pdf-parse, @mozilla/readability, jsdom). No build step. Node.js stdlib + vanilla JS frontend.
 
-`.api-key` 是本地便利文件（gitignored），仅用于手动 `cat` 后喂给环境变量；server 本身只读 `process.env.WIKI_API_KEY`，从不直接读 `.api-key`。`start.sh` 也 gitignored，丢了就用上面第二行等价命令。
+**环境变量**
+- `WIKI_API_KEY`（必需）：LLM provider 密钥。**server 只从此环境变量读，绝不落盘**。`.api-key` 是用户本地便利文件（gitignored），仅用于手动 `cat` 后喂给环境变量，server 不直接读取。
+- `WIKI_ADMIN_TOKEN`（可选，生产必需）：≥16 字符启用 auth 中间件，所有写端点 + 敏感 GET 要求 `Authorization: Bearer <token>` 或 `wiki_admin_token` cookie。未设置或 <16 字符启动时 `console.warn` 提示，行为回到"所有端点匿名可访问"（仅限本地开发）。
+- `AGGREGATOR_SCRIPT`（可选）：覆盖 autotask `aggregator` 源类型调用的 python 脚本路径。默认 `path.resolve(__dirname, '../../plugins/news-skills/news-aggregator-skill/scripts/fetch_news.py')`。
+- `PORT`：默认 3456。
 
-**No tests, no lint, no CI.** `package.json` 只有 `start` 脚本，`npm test` 返回 `exit 1`。验证改动靠浏览器手测 + 服务端日志。
+`start.sh` gitignored，丢了就用上面手动命令。
 
-**运行时外部依赖（PATH 上需要）**：本地 CLI compile 模式需要 `claude`；音视频本地转录路径需要 `ffmpeg` + `whisper`；autotask `aggregator` 源类型需要 `python3`（subprocess 调用 `../plugins/news-skills/news-aggregator-skill/scripts/fetch_news.py`）。缺失时 ingest/compile 会尝试 fallback 到云端 API，失败时看 stderr。
+**No tests, no lint, no CI.** `package.json` 只有 `start` 脚本，`npm test` 返回 `exit 1`。验证改动靠浏览器手测 + 服务端日志 + `node test-persist-retry.js`（持久层单测，22 个断言）。
+
+**运行时外部依赖（PATH 上需要）**：音视频本地转录路径需要 `ffmpeg` + `whisper`（失败时若 provider 是 openai 会 fallback 到 Whisper API）；autotask `aggregator` 源类型需要 `python3` 和 `AGGREGATOR_SCRIPT` 指向的脚本（**缺失时显式 reject 错误，不再静默返回空**）。图片 OCR / 文本/URL/PDF ingest 全走云 API，无本地二进制依赖。**本地 `claude` CLI 不再是运行依赖**：`callLLM` / `queryWiki` / `compileArticle` 遇到 `provider.format === 'cli'` 直接抛错，要求切换到云端 provider。
 
 ## Architecture
 
@@ -29,17 +36,18 @@ Default port: 3456. First run `npm install` to install dependencies (pdf-parse, 
 
 Single-file raw Node.js HTTP server (~5400 lines). Key subsystems:
 
-- **LLM Integration** — 7 providers (Bailian/阿里云, OpenRouter, Anthropic, OpenAI, DeepSeek, custom, local Claude CLI). `callLLM()` is the universal entry point. `getFullConfig()` merges `loadConfig()` (provider/model) + `loadApiKey()` (env var only). `pickModelByUse(provider, use, cfg)` resolves use-key ('fast' / 'main' / 'strong') to concrete model id with fallback.
-- **Compilation Engine** — `runCompilePipeline()` is the 7-stage pipeline: title → topic → content+summary(parallel) → tags → filename → seealso → persist. Each stage tracked via `startStage`/`doneStage`/`errorStage`. Tags are piggybacked: LLM content stage emits `<!-- tags: a, b, c -->` trailer, extracted after content, stripped from body. Two compile modes: local CLI (spawns `claude` with tools) and API (server-driven JSON generation). Embedded rules in `COMPILE_RULES` constant. **Defensive guards at persist**: (1) `slugifyTitle()` 清洗 emoji / 弯引号 / 箭头 / 控制符，避免脏字符击穿前端 inline onclick；(2) filename 阶段若同 topic 下已存在同名文件，自动追加 `-2/-3/...` 避让，不覆盖他人文章；(3) persist 拒绝写入 `articleContent.trim().length < 40` 的近空文章（宁抛错也不留 0 字节僵尸）；(4) 写 index.md / log.md 的显示文本走 `sanitizeDisplayText()` 剥 emoji / 转义管道符。
+- **LLM Integration** — 6 cloud providers (Bailian/阿里云, OpenRouter, Anthropic, OpenAI, DeepSeek, custom) + 一个 `local` Claude CLI provider（**仅保留配置定义，实际不可用**：`callLLM` 和 `compileArticle` 都会对 `provider.format === 'cli'` 直接抛错）。`callLLM()` is the universal entry point. `getFullConfig()` merges `loadConfig()` (provider/model) + `loadApiKey()` (env var only). `pickModelByUse(provider, use, cfg)` resolves use-key ('fast' / 'main' / 'strong') to concrete model id with fallback. **默认 provider 是 `bailian`**（不再是 local），`loadConfig()` 在 config.json 缺失或未指定 provider 时回落到 bailian。`callLocalCLI` 函数体保留未删，但无调用方。
+- **Compilation Engine** — `runCompilePipeline()` is the 7-stage pipeline: title → topic → content+summary(parallel) → tags → filename → seealso → persist. Each stage tracked via `startStage`/`doneStage`/`errorStage`. Tags are piggybacked: LLM content stage emits `<!-- tags: a, b, c -->` trailer, extracted after content, stripped from body. **只有 API compile 模式可用**（server-driven JSON 生成）；`compileArticle` 入口若 `provider.format === 'cli'` 会抛"文章编译不支持本地 CLI 模式，请切换到云端 provider"。Embedded rules in `COMPILE_RULES` constant. **Defensive guards at persist**: (1) `slugifyTitle()` 清洗 emoji / 弯引号 / 箭头 / 控制符，避免脏字符击穿前端 inline onclick；(2) filename 阶段若同 topic 下已存在同名文件，自动追加 `-2/-3/...` 避让，不覆盖他人文章；(3) persist 拒绝写入 `articleContent.trim().length < 40` 的近空文章（宁抛错也不留 0 字节僵尸）；(4) 写 index.md / log.md 的显示文本走 `sanitizeDisplayText()` 剥 emoji / 转义管道符。
 - **Tag System** — Articles store tags as YAML frontmatter: `---\ntags: [a, b, c]\n---\n`. Core functions around line 1290-1410: `parseFrontmatter(content)` / `serializeFrontmatter(data)` / `extractTitle(fp)` (skips fm) / `extractTags(fp)` (frontmatter first; falls back to `extractKeywords` with `TAG_FALLBACK_STOP` filter for legacy articles) / `collectExistingTags(limit)` (frequency-sorted, fed to LLM prompts for semantic convergence). `runBackfillTags({force, useModel})` regenerates tags for articles missing them; exposed via `POST /api/wiki/backfill-tags?force=1&useModel=main`. **Any code that writes .md files must preserve frontmatter** — use `parseFrontmatter` + `serializeFrontmatter`, never raw string concat.
 - **Chat System** — JSON file storage in `data/chats/`. Per-conversation files `conv_*.json` + `_index.json` index. Supports context retrieval from wiki for RAG.
 - **Wiki Data & Graph** — `searchWiki()` for full-text (BM25-ish 关键词) search. `retrieveContext(question)` for chat RAG：**lex + vec RRF 融合**——`searchWiki` 走词法、`vectors.vectorSearch` 走语义（cosine topK），RRF 合并后取前 N。融合参数读 `config.json` 的 `ask.{topK,rrfK,fuseTopN}`，默认 20/60/5。向量若未 ready 或 provider 不支持就 fallback 纯词法。`/api/wiki/tree` returns topic → children with `{title, tags, mtime}`. `/api/wiki/graph` builds 2-layer graph: explicit markdown links (see-also / reference edges) + tag co-occurrence edges with IDF weighting (tags shared by >50% of articles are dropped as too-common; dangling targets filtered via `fs.existsSync`). The standalone `buildGraph()` function (line ~1703) is legacy — the live graph API has its own inline logic.
-- **Vector Retrieval (`lib/vectors.js`)** — 独立模块，`server.js:2934` 加载。导出 `callEmbedding / buildVectorIndex / vectorSearch / vectorStats / isVectorReady`。索引落 `data/vectors/index.jsonl`（每行一个 chunk：`{path, chunkId, vec, heading, byteRange}`）+ `data/vectors/meta.json`（`{embedModel, dim, lastBuildAt, coverage}`）。**写策略**：先写 `.tmp` 再 `fs.renameSync` 原子替换，并发经 `__vectorWriteLock` 链式 Promise 串行化，不写 `.lock` 文件。**Provider 限制**：embedding 仅支持 `bailian / openai / custom`，其它（anthropic / deepseek / local / openrouter）抛 `NoEmbeddingProviderError`；`retrieveContext` 捕获后 fallback 到纯 lex。**增量索引**：`runCompilePipeline` 持久化后 fire-and-forget 调 `vectors.buildVectorIndex({paths:[relPath]})`（见 line ~1307）；全量重建走 `POST /api/wiki/reindex-vectors?force=1`，状态 `GET /api/wiki/vectors/stats`。新加 embedding provider 需在模块内白名单 + `__setConfigProvider(getFullConfig)` 已在启动时注入。
+- **Vector Retrieval (`lib/vectors.js`)** — 独立模块，`server.js` 加载。导出 `callEmbedding / buildVectorIndex / vectorSearch / vectorStats / isVectorReady / getBuildStatus`。索引落 `data/vectors/index.jsonl`（每行一个 chunk：`{path, chunkId, vec, heading, byteRange}`）+ `data/vectors/meta.json`（`{embedModel, dim, lastBuildAt, coverage}`）。**写策略**：先写 `.tmp` 再 `fs.renameSync` 原子替换，并发经 `__vectorWriteLock` 链式 Promise 串行化，不写 `.lock` 文件。**Provider 限制**：embedding 仅支持 `bailian / openai / custom`，其它（anthropic / deepseek / local / openrouter）抛 `NoEmbeddingProviderError`；`retrieveContext` 捕获后 fallback 到纯 lex。**增量索引**：`runCompilePipeline` 持久化后 fire-and-forget 调 `vectors.buildVectorIndex({paths:[relPath]})`；全量重建走 `POST /api/wiki/reindex-vectors?force=1`，状态 `GET /api/wiki/vectors/stats` 返回 `{..., build: {running, startedAt, finishedAt, error, result}}`，fire-and-forget 构建失败可通过此字段感知。新加 embedding provider 需在模块内白名单 + `__setConfigProvider(getFullConfig)` 已在启动时注入。
 - **Ingest Pipeline** — Single-task queue. Accepts text/URL/PDF/image/audio/video/ZIP. Multi-format extraction: pdf-parse for PDF, Readability+jsdom for URL, LLM Vision for images, OpenAI Whisper or local ffmpeg+whisper for audio/video. Batch mode with progress tracking via `batchProgress` object polled by frontend.
-- **Automated Tasks (AI 研究助手)** — 任务模型 v3：`{intent (NL 描述用户想要什么), sources[] (从 catalog 选), preferences{topics, deny}, feedback[] (up/down 历史)}`。Source 适配器在 `lib/sources.js`，五种类型：rss / changelog / aggregator (spawn `python3 fetch_news.py`) / webpage / api。**SSRF 防护** (`assertSafeUrl()`)：协议白名单 (http/https) + DNS 解析 + 私网/loopback/link-local/IPv4-mapped-IPv6/bracketed-IPv6 全拦截 + 重定向重新校验 + 响应硬上限 10 MB。**9 阶段 pipeline**: fetch → 跨源 URL 规范化去重 (`dedup.json` 30 天窗口) → 关键词预过滤 → LLM relevance gate (qwen-turbo / 廉价快速模型) → smart_fill (前 3 天补抓机制) → process (compile per item) → brief (LLM 生成本次简报 .md，写入 `data/wiki/`)。Item dedup 用复合键 `(url||title)+sourceId`，避免同一 URL 在不同 source 下被错杀。`history.json` 写入用 `withAutotaskWriteLock(fn)` 链式 Promise 串行化。Scheduler 每 5 min `setInterval`，支持 daily(HH:MM)/hourly/manual。
+- **Automated Tasks (AI 研究助手)** — 任务模型 v3：`{intent (NL 描述用户想要什么), sources[] (从 catalog 选), preferences{topics, deny}, feedback[] (up/down 历史)}`。Source 适配器在 `lib/sources.js`，五种类型：rss / changelog / aggregator (spawn `python3 fetch_news.py`) / webpage / api。**SSRF 防护** (`assertSafeUrl()`)：协议白名单 (http/https) + DNS 解析 + 私网/loopback/link-local/IPv4-mapped-IPv6/bracketed-IPv6 全拦截 + 重定向重新校验 + 响应硬上限 10 MB。assertSafeUrl 抛的 Error 带 `err.code='BLOCKED_URL'`，`isBlockedUrlError(e)` 辅助判别，`/api/autotask/test-source` 在 catch 中识别后返回 **HTTP 400** + 可读原因（如 `blocked private ip: 10.0.0.1`），非 BLOCKED_URL 错误仍走 500 脱敏。**覆盖范围**：rss / webpage / changelog / api 入口均显式 `await assertSafeUrl(url)`；aggregator 通过 `VALID_SUBSOURCES` 白名单 + python 脚本参数化，无 user-controlled URL。**9 阶段 pipeline**: fetch → 跨源 URL 规范化去重 (`dedup.json` 30 天窗口) → 关键词预过滤 → LLM relevance gate → smart_fill (前 3 天补抓机制) → process (compile per item) → brief (LLM 生成本次简报 .md，写入 `data/wiki/`)。**Relevance gate 已不再硬编码 bailian/qwen-turbo**：读 `config.provider` + `pickModelByUse(provider, 'fast', cfg)`，fallback 到 `config.model`。Item dedup 用复合键 `(url||title)+sourceId`，避免同一 URL 在不同 source 下被错杀。`history.json` 写入用 `withAutotaskWriteLock(fn)` 链式 Promise 串行化。Scheduler 每 5 min `setInterval`，支持 daily(HH:MM)/hourly/manual。
 - **Autotask API** — `POST /api/autotask/configure` (envelope `{ok, config, warnings[]}` 创建/更新任务)、`POST /api/autotask/feedback` (action 映射：前端 `up`/`down` → 后端持久化为 `keep`/`drop`，喂 LLM gate)、`GET /api/autotask/sources` (列 catalog)、`POST /api/autotask/run/:id` (手动触发)、`GET /api/autotask/history` (含 sourceStatus / topGatedReasons / items[].confidence)。
 - **system-sources.json** — `data/system-sources.json` 是 51 个内置源 catalog (arxiv RSS, github changelogs, news aggregators 等)，`.gitignore` 用 `data/* + !data/system-sources.json` 例外放行（**唯一被 git 跟踪的 data/ 文件**）。新建任务 UI 从这里挑源；新增源直接编辑这个 JSON。
-- **Static Files** — Serves `app/` directory. Path: `GET / → app/index.html`, `GET /css/base.css → app/css/base.css`, etc.
+- **Static Files** — Serves `app/` directory. Path: `GET / → app/index.html`, `GET /css/base.css → app/css/base.css`, etc. `/login.html` 显式匿名可访问（即使 auth 启用）。
+- **Auth & Hardening 中间件** — 主 request handler 入口（路由分派前）依次穿三层：**(1) CSRF**：`method !== 'GET'` 且 `Origin` 头存在时，要求 `Origin` host 与 `Host` header 一致，否则 403 `CSRF: Origin mismatch`。`Origin` 缺失不拦（允许同源无 Origin 的 fetch）。**(2) Rate limit**：按 `IP + 路径归一化键` 分桶（`conv_xxx` 之类的可变 id 段归一化为 `:id`），默认 30 req/min；`EXPENSIVE_PREFIXES` 命中（`/api/chat/:id/{message,regenerate}`、`/api/ingest*`、`/api/settings/test`、`/api/autotask/run/*`、`/api/auth/login`）10 req/min，超限 429。bucket Map 超 2000 条时清理。**(3) Auth**：顶部模块常量 `AUTH_ENABLED = (process.env.WIKI_ADMIN_TOKEN||'').trim().length >= 16`。启用后所有 `method !== 'GET'` 的 `/api/*` 以及敏感 GET（`/api/settings`、`/api/autotask/*`、`/api/wiki/backfill-tags`）要求 `Authorization: Bearer <ADMIN_TOKEN>` 或 `Cookie: wiki_admin_token=<ADMIN_TOKEN>`，否则 401。白名单：`/api/auth/login` `/api/auth/status` `/api/auth/logout` `/login.html`。启动时若 `WIKI_ADMIN_TOKEN` 未设置或 <16 字符，两条独立 `console.warn` 区分，视同未启用。**Auth 端点**：`POST /api/auth/login {token}` → 200 + `Set-Cookie: wiki_admin_token=...; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000`；`POST /api/auth/logout` 清 cookie；`GET /api/auth/status` 匿名可访问，返回 `{authRequired, authenticated}`。**前端闭环**：`app/js/utils.js` 的 `api()` 捕获 401 后跳 `/login.html`（避免在登录页自身递归跳）；`app/login.html` 极简登录页，无模块依赖。
 
 ### Frontend (`app/`)
 
@@ -104,18 +112,19 @@ data/uploads/       → Uploaded files
 
 ## Secrets — 安全红线
 
-**API Key 只从环境变量 `WIKI_API_KEY` 读取，绝不落盘。**
+**API Key 只从环境变量 `WIKI_API_KEY` 读取，绝不落盘。**（代码实现已与此声明对齐，`saveApiKey` 函数和 `.api-key` 文件读取路径都已删除）
 
-- `loadApiKey()` → 只读 `process.env.WIKI_API_KEY`，没有文件读取
-- `loadConfig()` → 只读 `config.json` 里的 provider/model，不碰密钥
+- `loadApiKey()` → `return process.env.WIKI_API_KEY || ''`，**无任何文件读取**
+- `loadConfig()` → 只读 `config.json` 里的 provider/model/customBaseUrl/wikiLang/providers 等，不碰密钥
 - `getFullConfig()` → 合并以上两者
 - `GET /api/settings` → 只返回 `hasKey: true/false`，绝不返回密钥内容
-- `PUT /api/settings` → 只保存 provider/model，不接受密钥参数
+- `PUT /api/settings` → 只保存 provider/model/customBaseUrl 等配置字段，**静默忽略请求体里的 apiKey 字段**（即使前端传了也不持久化）
 
 **绝对不能做的事：**
 - 把密钥写入任何文件（config.json、.env、.api-key 都不行）
 - 在 API 响应里返回密钥的任何部分（包括 mask 后的）
 - 把 data/、config.json、profile.json、start.sh 加入 git
+- 把 `err.message` / stack trace 回传到 5xx 响应体（通用 500 一律返回 `{error: '服务端错误'}`，详细信息只进 `console.error`；业务错误如"文件不存在""配置缺失"可保留具体文案）
 
 `.gitignore` 排除: `config.json`, `profile.json`, `.api-key`, `data/*` (但 `!data/system-sources.json` 例外), `node_modules/`, `start.sh`, `.claude/` (运行时 lock 目录)
 
@@ -136,6 +145,8 @@ data/uploads/       → Uploaded files
 - **Article API 写入校验**：`POST /api/wiki/article` (新建) 会拒绝空 content（400）和同名已存在（409）。`PUT` (编辑) 允许覆盖但同样拒绝空 content。任何绕过这两个接口直接 `fs.writeFileSync` 到 `data/wiki/` 的代码都要自己做相同的防御。
 - **向量索引写入不走 fs.writeFileSync**：`data/vectors/index.jsonl` 和 `meta.json` 的写入必须经 `lib/vectors.js` 导出的 API（`buildVectorIndex` 内部已用 `.tmp → rename` + `__vectorWriteLock` 串行化）。手动 `fs.writeFileSync` 会撕裂与 `meta.json` 的一致性且可能造成部分写。手删索引想强制重建用 `POST /api/wiki/reindex-vectors?force=1`，不要 rm 文件。
 - **Contenteditable paste 清洗**：`app/js/pages/article.js` 里 `.article-title` 走 `setupTitlePlainPaste()` 强制纯文本粘贴（`innerText` 保存时会丢 HTML，但编辑态若带 inline style 会出现"首字母大其余小"的混排）；`.article-body` 走 `setupBodyPasteSanitize()` 通过 `sanitizeBodyHtml()` 按白/灰/黑三张表清洗（KEEP 标签 + 剥属性 / UNWRAP span·font / DROP script·style），只保留结构语义、剥所有 inline style / class / 颜色，并防 `javascript:` 协议。新增 contenteditable 区域要走同款处理。
+- **`safe(base, rel)` 路径穿越校验**：所有拼 `data/wiki/<path>` 之类的文件操作必须过 `safe()`。实现用 `path.resolve(base, rel)` 得到绝对路径后，校验 `full === baseResolved || full.startsWith(baseResolved + path.sep)`；拒 `path.isAbsolute(rel)` 和空值。不要用朴素 `startsWith(base)` 防穿越（`/data/wiki` vs `/data/wiki-backup` 边界会被误判放行）。
+- **新增会改服务器状态的路由**：默认自动进 auth / CSRF / rate limit 三层中间件。如果新路由需要**绕过鉴权**（例如公开只读端点），加到 auth 白名单数组里；如果是**高成本 LLM 端点**，加到 `EXPENSIVE_PREFIXES` 让它吃 10 req/min 的严格配额；路径归一化键若含可变 id（conv_xxx / at-xxx 等）确保被归一化，否则等于不限速。
 
 ## Conventions
 

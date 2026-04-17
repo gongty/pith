@@ -56,7 +56,18 @@ export function typeEffect(el, html, cb) {
   step();
 }
 
-export async function api(p, o) { const r = await fetch(p, o); if (!r.ok) throw new Error('' + r.status); return r.json(); }
+export async function api(p, o) {
+  const r = await fetch(p, o);
+  if (r.status === 401) {
+    // 未登录或 token 过期：跳登录页（登录页自身不会触发递归，静态资源直达）
+    if (typeof location !== 'undefined' && location.pathname !== '/login.html') {
+      location.href = '/login.html';
+    }
+    throw new Error('401');
+  }
+  if (!r.ok) throw new Error('' + r.status);
+  return r.json();
+}
 export async function post(p, b) { return api(p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); }
 export async function put(p, b) { return api(p, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); }
 export async function apiDel(p) { return api(p, { method: 'DELETE' }); }

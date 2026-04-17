@@ -15,6 +15,8 @@ export function buildComposer(ctx) {
   return s;
 }
 
+// 每个 ctx 只允许一个 placeholder 轮换定时器；重新 init 时先清掉老的，避免路由切换累积
+const __phTimers = {};
 export function initComposer(ctx, sendFn, override) {
   loadModels(ctx + 'ModelDD', ctx + 'ModelTag', override);
   const inp = $(ctx + 'In'), btn = $(ctx + 'SendBtn');
@@ -23,7 +25,9 @@ export function initComposer(ctx, sendFn, override) {
   inp.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
   inp.oninput = () => { inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 160) + 'px'; btn.disabled = !inp.value.trim(); };
   btn.onclick = send;
-  rotatePH(ctx + 'In'); setInterval(() => rotatePH(ctx + 'In'), 5000);
+  if (__phTimers[ctx]) clearInterval(__phTimers[ctx]);
+  rotatePH(ctx + 'In');
+  __phTimers[ctx] = setInterval(() => rotatePH(ctx + 'In'), 5000);
 }
 
 export async function loadModels(ddId, tagId, override) {

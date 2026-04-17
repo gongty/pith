@@ -14,12 +14,15 @@ export async function rDash(c) {
     s += '<div class="chat-area">';
     s += '<div class="chat-greeting">基于知识库提问</div>';
     s += '<div class="chat-sub">已积累 <strong>' + stats.articles + '</strong> 篇文章 · <strong>' + stats.topics + '</strong> 个主题 · 持续生长中</div>';
-    s += '<div class="suggestion-cards">';
-    s += '<div class="suggestion-card" onclick="dashAsk(this)" data-q="知识库里有什么？"><div class="suggestion-card-icon" style="background:var(--accent-bg);color:var(--accent)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg></div><div><div class="suggestion-card-title">知识库里有什么？</div><div class="suggestion-card-desc">浏览所有收录的内容</div></div></div>';
-    s += '<div class="suggestion-card" onclick="dashAsk(this)" data-q="总结最近内容"><div class="suggestion-card-icon" style="background:rgba(68,131,97,0.08);color:var(--green)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div><div class="suggestion-card-title">总结最近内容</div><div class="suggestion-card-desc">了解最新收录的知识</div></div></div>';
-    s += '<div class="suggestion-card" onclick="dashAsk(this)" data-q="有哪些主题？"><div class="suggestion-card-icon" style="background:rgba(144,101,176,0.08);color:var(--purple)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div><div><div class="suggestion-card-title">有哪些主题？</div><div class="suggestion-card-desc">探索知识库的结构</div></div></div>';
-    s += '</div>';
     s += buildComposer('dash');
+    const chips = buildSuggestChips(stats, graph, recent);
+    if (chips.length) {
+      s += '<div class="suggestion-chips">';
+      for (const c of chips) {
+        s += '<button class="suggestion-chip" onclick="dashAsk(this)" data-q="' + h(c.q) + '" title="' + h(c.q) + '">' + h(c.label) + '</button>';
+      }
+      s += '</div>';
+    }
     s += '</div>';
 
     // Graph
@@ -44,6 +47,49 @@ export async function rDash(c) {
     initComposer('dash', dashSend);
     if (graph.nodes.length >= 2) requestAnimationFrame(() => { const cv = document.getElementById('dgCanvas'); if (cv) initFG(cv, graph, false); });
   } catch (e) { c.innerHTML = '<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败: ' + h(e.message) + '</div>'; }
+}
+
+// 基于实际知识库数据生成推荐气泡
+// 每个 chip 有 label（显示用，短）和 q（点击发送的完整问题）
+function buildSuggestChips(stats, graph, recent) {
+  const out = [];
+  const seen = new Set();
+  const push = (label, q) => { if (label && q && !seen.has(q)) { seen.add(q); out.push({ label, q }); } };
+
+  const nodes = (graph && graph.nodes) || [];
+  // 两层图谱：concept 节点已在后端聚合，articleCount 直接可用
+  const concepts = nodes.filter(n => n.kind === 'concept');
+  const articleNodes = nodes.filter(n => n.kind === 'article');
+  const entries = (recent && recent.entries) || [];
+
+  // 1) 最新收录的文章：short label，点击发送带标题的完整问题
+  const latest = entries.find(e => e.type === 'ingest' && e.title);
+  if (latest) push('最近一篇讲了什么', '《' + latest.title + '》讲了什么？');
+
+  // 2) 最热 concept (tag)：用 articleCount 聚合
+  const topConcept = concepts.slice().sort((a, b) => (b.articleCount || 0) - (a.articleCount || 0))[0];
+  if (topConcept && (topConcept.articleCount || 0) >= 2) {
+    const label = topConcept.label || topConcept.name || '';
+    if (label) push(label, label + ' 相关的内容总结一下');
+  }
+
+  // 3) 最大主题：从 article 节点（每篇文章有 topic）统计
+  const topicCount = {};
+  for (const n of articleNodes) if (n.topic) topicCount[n.topic] = (topicCount[n.topic] || 0) + 1;
+  // fallback：若文章节点没有 topic，就用 concept 节点的 topic 字段计 article 加权
+  if (!Object.keys(topicCount).length) {
+    for (const c of concepts) if (c.topic) topicCount[c.topic] = (topicCount[c.topic] || 0) + (c.articleCount || 1);
+  }
+  const topTopic = Object.entries(topicCount).sort((a, b) => b[1] - a[1])[0];
+  if (topTopic) push(topTopic[0] + ' 主题', topTopic[0] + ' 主题下有哪些文章？');
+
+  // 数据不足兜底
+  if (out.length < 2) {
+    push('知识库里有什么', '知识库里有什么？');
+    push('有哪些主题', '有哪些主题？');
+  }
+
+  return out.slice(0, 3);
 }
 
 export async function dashAsk(el) { $('dashIn').value = el.dataset.q || el.textContent; $('dashSendBtn').disabled = false; dashSend(); }

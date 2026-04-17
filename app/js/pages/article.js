@@ -540,18 +540,41 @@ function setupSlashMenu() {
 }
 
 let delPath = '';
-function showDel() { delPath = state.artPath; $('delConfirm').classList.add('open'); }
+let delTitle = '';
+function showDel() { delPath = state.artPath; delTitle = ''; $('delConfirmTitle').textContent = ''; $('delConfirm').classList.add('open'); }
+// 从侧边栏等处发起删除：显式传入 path（当前不一定就是这篇）
+export function requestDelArticle(path, title) {
+  if (!path) return;
+  delPath = path;
+  delTitle = title || '';
+  const tEl = $('delConfirmTitle');
+  if (tEl) tEl.textContent = delTitle ? '《' + delTitle + '》' : path;
+  $('delConfirm').classList.add('open');
+}
 export function closeDel() { $('delConfirm').classList.remove('open'); }
 export async function doDel() {
   closeDel();
   const path = delPath;
-  let savedContent = state.artMd;
+  if (!path) return;
+  const isCurrent = path === state.artPath;
+  // 当前文章：content 已在内存里，undo 走内存；否则先抓一份，供 undo 恢复
+  let savedContent = isCurrent ? state.artMd : null;
+  if (!isCurrent) {
+    try {
+      const res = await api('/api/wiki/article?path=' + encodeURIComponent(path));
+      savedContent = res.content || '';
+    } catch { savedContent = null; }
+  }
   try {
     await apiDel('/api/wiki/article?path=' + encodeURIComponent(path)); state.td = null;
-    go('#/browse');
-    toast('已删除', async () => {
+    if (isCurrent) go('#/browse');
+    // 不是当前文章：留在原页面，只刷新侧边栏
+    const { updSidebarPages } = await import('../sidebar.js');
+    updSidebarPages();
+    const restore = savedContent == null ? null : async () => {
       try { await put('/api/wiki/article', { path, content: savedContent }); state.td = null; toast('已恢复'); go('#/article/' + path); } catch { toast('恢复失败'); }
-    });
+    };
+    toast('已删除', restore);
   } catch (e) { toast('删除失败'); }
 }
 

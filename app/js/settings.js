@@ -58,6 +58,8 @@ async function loadSett() {
     if (s.providers) for (const [k, v] of Object.entries(s.providers)) { const o = document.createElement('option'); o.value = k; o.textContent = v.name; prov.appendChild(o); }
     prov.value = s.provider || 'local'; $('sKey').value = ''; $('sKey').placeholder = s.hasKey ? '已配置 (输入覆盖)' : '输入 API Key...';
     $('sLang').value = s.wikiLang || 'zh';
+    // customBaseUrl 回填：仅 custom provider 才显示该字段，其它 provider 保持值但隐藏
+    const cbu = $('sCustomBaseUrl'); if (cbu) cbu.value = s.customBaseUrl || '';
     onProvChange();
     wireProviderSection();
   } catch {}
@@ -81,6 +83,8 @@ export function onProvChange() {
     ms.appendChild(o);
   });
   if (state.sCache && state.sCache.model) ms.value = state.sCache.model;
+  // custom provider 才露出 Base URL 输入框；其它 provider 隐藏不删（保留已填值）
+  const row = $('sCustomBaseUrlRow'); if (row) row.style.display = (p === 'custom') ? '' : 'none';
   renderModelList();
 }
 
@@ -194,6 +198,8 @@ async function doSave({ silent = false } = {}) {
   const prov = $('sProv').value;
   const body = { provider: prov, model: $('sModel').value, wikiLang: $('sLang').value };
   const k = $('sKey').value; if (k) body.apiKey = k;
+  // customBaseUrl 始终带上（后端只在 provider=custom 时生效，保留值在其它 provider 下也 OK）
+  const cbu = $('sCustomBaseUrl'); if (cbu) body.customBaseUrl = (cbu.value || '').trim();
   if (state.sModels && Object.keys(state.sModels).length) {
     body.providers = {};
     for (const [pk, models] of Object.entries(state.sModels)) {

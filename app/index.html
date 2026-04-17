@@ -194,6 +194,7 @@
     <div class="settings-tab-content" id="settingsTabProvider" style="display:none">
       <div class="modal-form">
         <div><label class="field-label">提供商</label><select class="field-select" id="sProv" onchange="onProvChange()"></select></div>
+        <div id="sCustomBaseUrlRow" style="display:none"><label class="field-label">自定义 Base URL</label><input class="field-input" id="sCustomBaseUrl" placeholder="https://your-endpoint/v1"></div>
         <div><label class="field-label">API Key</label><input class="field-input" type="password" id="sKey" placeholder="输入 API Key..."></div>
         <div><label class="field-label">当前主模型</label><select class="field-select" id="sModel"></select></div>
         <div class="settings-section">
@@ -236,7 +237,9 @@
 <!-- Delete confirm -->
 <div class="confirm-bg" id="delConfirm" onclick="if(event.target===this)closeDel()">
   <div class="confirm-card">
-    <h3>确认删除</h3><p>删除后无法恢复</p>
+    <h3>确认删除</h3>
+    <p id="delConfirmTitle" class="confirm-target"></p>
+    <p>删除后可在 6 秒内撤销</p>
     <div class="confirm-btns"><button class="btn-cancel" onclick="closeDel()">取消</button><button class="btn-delete" onclick="doDel()">删除</button></div>
   </div>
 </div>

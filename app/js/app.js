@@ -11,9 +11,9 @@ import { initIngestQueue, toggleIngestQueue } from './ingest-queue.js';
 import { render } from './router.js';
 import { dashAsk } from './pages/dashboard.js';
 import { chatSend, delChat, archiveChat, precipitateMsg, precipitateConv, closePrecipModal } from './pages/chat.js';
-import { toggleToc, scrollToH, onArtChange, fmtCmd, closeDel, doDel, newArticle, pickSlash, closeSlashMenu, imgAlign, imgSize, deselectImg } from './pages/article.js';
+import { toggleToc, scrollToH, onArtChange, fmtCmd, closeDel, doDel, requestDelArticle, newArticle, pickSlash, closeSlashMenu, imgAlign, imgSize, deselectImg } from './pages/article.js';
 import { gZoom, applyGF } from './pages/graph.js';
-import { openAutotaskModal, closeAutotaskModal, closeAutotaskDetail, runAutotask, toggleAutotaskEnabled, deleteAutotask, switchAutotaskTab, switchHistoryRange, backToWizardStep1, toggleWizardAdvanced, submitConfigureIntent, pickAutotaskIntentPreset, confirmCreateTask, openSourcePicker, closeSourcePicker, confirmSourcePicker, submitFeedback, addSourceToDraft, removeSourceFromDraft, removeMustExclude, toggleRunExpand } from './pages/autotask.js';
+import { openAutotaskModal, closeAutotaskModal, closeAutotaskDetail, runAutotask, toggleAutotaskEnabled, deleteAutotask, switchAutotaskTab, switchHistoryRange, backToWizardStep1, toggleWizardAdvanced, submitConfigureIntent, pickAutotaskIntentPreset, confirmCreateTask, openSourcePicker, closeSourcePicker, confirmSourcePicker, submitFeedback, addSourceToDraft, removeSourceFromDraft, removeMustExclude, toggleRunExpand, toggleTaskExpand } from './pages/autotask.js';
 
 /* ── Expose functions to inline onclick handlers ── */
 window.go = go;
@@ -42,6 +42,7 @@ window.onArtChange = onArtChange;
 window.fmtCmd = fmtCmd;
 window.closeDel = closeDel;
 window.doDel = doDel;
+window.requestDelArticle = requestDelArticle;
 window.newArticle = newArticle;
 window.pickSlash = pickSlash;
 window.closeSlashMenu = closeSlashMenu;
@@ -83,6 +84,7 @@ window.addSourceToDraft = addSourceToDraft;
 window.removeSourceFromDraft = removeSourceFromDraft;
 window.removeMustExclude = removeMustExclude;
 window.toggleRunExpand = toggleRunExpand;
+window.toggleTaskExpand = toggleTaskExpand;
 
 /* ── Sidebar resize ── */
 (function () {

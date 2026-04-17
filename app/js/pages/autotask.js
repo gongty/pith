@@ -27,6 +27,7 @@ let sourcePickerOpen = false;
 
 /* ── Per-run expansion state ── */
 let expandedRuns = new Set();
+let expandedTasks = new Set();
 let feedbackPending = new Set(); // `${runId}:${itemUrl}` keys disabled after submit
 
 let wizardAdvancedOpen = false;
@@ -186,78 +187,99 @@ function renderTaskList() {
   }
   let s = '<div class="autotask-cards">';
   tasks.forEach(t => {
-    s += '<div class="autotask-card">';
-    s += '<div class="autotask-card-head">';
-    s += statusDot(t.enabled !== false);
-    s += '<span class="autotask-card-name">' + h(t.name || '未命名任务') + '</span>';
-    s += '<label class="autotask-toggle" onclick="event.stopPropagation()">';
-    s += '<input type="checkbox"' + (t.enabled !== false ? ' checked' : '') + ' onchange="toggleAutotaskEnabled(\'' + h(t.id) + '\')">';
-    s += '<span class="autotask-toggle-slider"></span>';
-    s += '</label>';
-    s += '</div>';
-
-    // Intent line (or fallback to URL for old tasks)
-    const intent = t.intent || (t.sourceConfig && t.sourceConfig.url) || '';
-    if (intent) {
-      const label = t.intent ? '意图' : '源';
-      s += '<div class="autotask-card-intent"><span class="autotask-card-intent-label">' + label + ':</span> ' + h(truncate(intent, 80)) + '</div>';
-    }
-
-    // Source chips: count + first 3 unique tags
     const sources = Array.isArray(t.sources) ? t.sources : [];
     const tagSet = new Set();
     sources.forEach(src => {
       const tags = Array.isArray(src && src.tags) ? src.tags : [];
       tags.forEach(tg => tagSet.add(tg));
     });
-    const tagsArr = Array.from(tagSet).slice(0, 3);
-    if (sources.length || tagsArr.length) {
-      s += '<div class="autotask-card-sources">';
-      if (sources.length) {
-        s += '<span class="autotask-source-chip autotask-source-chip-count">' + sources.length + ' 个源</span>';
-      }
-      tagsArr.forEach(tg => {
-        s += '<span class="autotask-source-chip">' + h(tg) + '</span>';
-      });
-      s += '</div>';
+    const tagsArr = Array.from(tagSet);
+    const recent = lastRunIngested(t.id, 3);
+    const hasExpandable = recent.length || tagsArr.length || (t.provider && t.model);
+    const isExpanded = expandedTasks.has(t.id);
+    const intent = t.intent || (t.sourceConfig && t.sourceConfig.url) || '';
+
+    s += '<div class="autotask-card' + (isExpanded ? ' expanded' : '') + '">';
+
+    // Head: 状态点 / 名字 / 源数 / 开关
+    s += '<div class="autotask-card-head">';
+    s += statusDot(t.enabled !== false);
+    s += '<span class="autotask-card-name">' + h(t.name || '未命名任务') + '</span>';
+    if (sources.length) {
+      s += '<span class="autotask-card-srcbadge" title="' + sources.length + ' 个源">' + sources.length + ' 源</span>';
     } else if (t.sourceType) {
-      // Old-schema fallback
-      s += '<div class="autotask-card-sources"><span class="autotask-source-chip">' + h(SOURCE_LABELS[t.sourceType] || t.sourceType) + '</span><span class="autotask-source-chip">' + h(scheduleText(t)) + '</span></div>';
-    } else {
-      s += '<div class="autotask-card-sources"><span class="autotask-source-chip">' + h(scheduleText(t)) + '</span></div>';
+      s += '<span class="autotask-card-srcbadge">' + h(SOURCE_LABELS[t.sourceType] || t.sourceType) + '</span>';
+    }
+    s += '<label class="autotask-toggle" onclick="event.stopPropagation()">';
+    s += '<input type="checkbox"' + (t.enabled !== false ? ' checked' : '') + ' onchange="toggleAutotaskEnabled(\'' + h(t.id) + '\')">';
+    s += '<span class="autotask-toggle-slider"></span>';
+    s += '</label>';
+    s += '</div>';
+
+    // Intent（单行 ellipsis，不加"意图："前缀，留给 CSS truncate）
+    if (intent) {
+      s += '<div class="autotask-card-intent" title="' + h(intent) + '">' + h(intent) + '</div>';
     }
 
-    if (t.provider && t.model) {
-      s += '<div class="autotask-card-modelrow"><span class="autotask-model-badge" title="此任务使用独立模型">' + h(t.model) + '</span></div>';
-    }
-    if (t.lastRunAt) {
-      const stColor = t.lastRunStatus === 'success' ? 'var(--green)' : t.lastRunStatus === 'error' ? 'var(--red)' : t.lastRunStatus === 'partial' ? 'var(--yellow)' : 'var(--fg-tertiary)';
-      const stLabel = t.lastRunStatus === 'success' ? '成功' : t.lastRunStatus === 'error' ? '失败' : t.lastRunStatus === 'partial' ? '部分成功' : (t.lastRunStatus || '');
-      s += '<div class="autotask-card-status">';
-      s += '最近执行: ' + relTime(t.lastRunAt) + ' · <span style="color:' + stColor + '">' + h(stLabel) + '</span>';
-      s += '</div>';
-    }
-    const recent = lastRunIngested(t.id, 3);
-    if (recent.length) {
-      s += '<div class="autotask-card-preview">';
-      s += '<div class="autotask-card-preview-label">上次抓到 ' + recent.length + ' 篇</div>';
-      s += '<ul class="autotask-card-preview-list">';
-      recent.forEach(it => {
-        const title = h(it.title || '无标题');
-        if (it.articlePath) {
-          s += '<li><a href="#/article/' + h(it.articlePath) + '" onclick="event.stopPropagation()">' + title + '</a></li>';
-        } else {
-          s += '<li>' + title + '</li>';
-        }
-      });
-      s += '</ul>';
-      s += '</div>';
-    }
+    // Health line: [● 状态] 时间 · 下次 xxx（或 仅手动）
     const nr = computeNextRun(t);
-    if (nr) {
-      s += '<div class="autotask-card-nextrun">下次执行: ' + h(formatNextRun(nr)) + '</div>';
+    const nextText = nr ? '下次 ' + formatNextRun(nr)
+      : (t.schedule === 'manual' ? '仅手动' : (t.enabled === false ? '已停用' : ''));
+    if (t.lastRunAt || nextText) {
+      s += '<div class="autotask-card-health">';
+      if (t.lastRunAt) {
+        const stColor = t.lastRunStatus === 'success' ? 'var(--green)' : t.lastRunStatus === 'error' ? 'var(--red)' : t.lastRunStatus === 'partial' ? 'var(--yellow)' : 'var(--fg-tertiary)';
+        const stLabel = t.lastRunStatus === 'success' ? '成功' : t.lastRunStatus === 'error' ? '失败' : t.lastRunStatus === 'partial' ? '部分成功' : (t.lastRunStatus || '未知');
+        s += '<span class="autotask-card-health-run"><span class="autotask-card-health-dot" style="background:' + stColor + '"></span>'
+          + h(stLabel) + ' · ' + h(relTime(t.lastRunAt)) + '</span>';
+      } else {
+        s += '<span class="autotask-card-health-run autotask-card-health-idle">从未执行</span>';
+      }
+      if (nextText) {
+        s += '<span class="autotask-card-health-sep">·</span>';
+        s += '<span class="autotask-card-health-next">' + h(nextText) + '</span>';
+      }
+      s += '</div>';
     }
+
+    // Expand area (默认折叠)：上次抓到的文章 / tags / model
+    if (hasExpandable) {
+      s += '<div class="autotask-card-expand">';
+      if (recent.length) {
+        s += '<div class="autotask-card-preview">';
+        s += '<div class="autotask-card-preview-label">上次抓到 ' + recent.length + ' 篇</div>';
+        s += '<ul class="autotask-card-preview-list">';
+        recent.forEach(it => {
+          const title = h(it.title || '无标题');
+          if (it.articlePath) {
+            s += '<li><a href="#/article/' + h(it.articlePath) + '" onclick="event.stopPropagation()">' + title + '</a></li>';
+          } else {
+            s += '<li>' + title + '</li>';
+          }
+        });
+        s += '</ul>';
+        s += '</div>';
+      }
+      if (tagsArr.length) {
+        s += '<div class="autotask-card-expand-row"><span class="autotask-card-expand-label">标签</span>';
+        tagsArr.forEach(tg => { s += '<span class="autotask-source-chip">' + h(tg) + '</span>'; });
+        s += '</div>';
+      }
+      if (t.provider && t.model) {
+        s += '<div class="autotask-card-expand-row"><span class="autotask-card-expand-label">模型</span>'
+          + '<span class="autotask-model-badge" title="此任务使用独立模型">' + h(t.model) + '</span></div>';
+      }
+      s += '</div>';
+    }
+
+    // Actions
     s += '<div class="autotask-card-actions">';
+    if (hasExpandable) {
+      s += '<button class="autotask-action-btn autotask-action-expand' + (isExpanded ? ' is-open' : '') + '" onclick="toggleTaskExpand(\'' + h(t.id) + '\')" title="' + (isExpanded ? '收起' : '展开') + '">'
+        + (isExpanded ? '收起' : '详情')
+        + '<svg class="autotask-action-expand-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+        + '</button>';
+    }
     s += '<button class="autotask-action-btn" onclick="runAutotask(\'' + h(t.id) + '\')" title="立即执行">执行</button>';
     s += '<button class="autotask-action-btn" onclick="openAutotaskModal(\'' + h(t.id) + '\')" title="编辑">编辑</button>';
     s += '<button class="autotask-action-btn autotask-action-del" onclick="deleteAutotask(\'' + h(t.id) + '\')" title="删除">删除</button>';
@@ -266,6 +288,13 @@ function renderTaskList() {
   });
   s += '</div>';
   return s;
+}
+
+export function toggleTaskExpand(taskId) {
+  if (expandedTasks.has(taskId)) expandedTasks.delete(taskId);
+  else expandedTasks.add(taskId);
+  const c = $('content');
+  if (c) renderPage(c);
 }
 
 /* ── History list ── */

@@ -1,24 +1,53 @@
 /* ── Page: Dashboard ── */
-.page-dashboard{max-width:var(--content-w);margin:0 auto;padding:40px 48px 120px;animation:fadeIn 150ms ease}
+.page-dashboard{max-width:1040px;margin:0 auto;padding:40px 48px 120px;animation:fadeIn 150ms ease}
 
 /* Chat area (dashboard) */
-.chat-area{margin-bottom:48px}
+.chat-area{margin-bottom:72px}
 .chat-greeting{font-size:22px;font-weight:600;letter-spacing:-0.02em;margin-bottom:6px;text-align:center;padding-top:32px;color:var(--fg)}
 .chat-sub{font-size:14px;color:var(--fg-tertiary);text-align:center;margin-bottom:24px}
 .chat-sub strong{color:var(--fg-secondary);font-weight:600}
-.suggestion-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
-.suggestion-card{
-  padding:12px 14px;border-radius:var(--radius);border:1px solid var(--border);
-  cursor:pointer;transition:all var(--t);display:flex;align-items:center;gap:10px;
+/* 推荐问题小气泡：贴在 composer 下方，居中，尽量单行 */
+.suggestion-chips{
+  display:flex;flex-wrap:wrap;align-items:center;
+  gap:8px;margin:14px auto 0;padding:0 4px;
+  max-width:60%;justify-content:center;
 }
-.suggestion-card:hover{border-color:var(--accent-border);background:var(--accent-bg);transform:translateY(-1px);box-shadow:0 2px 8px rgba(91,91,214,0.06)}
-.suggestion-card-icon{
-  width:36px;height:36px;border-radius:var(--radius);flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;
+.suggestion-chip{
+  font-size:12.5px;color:var(--fg-secondary);font-family:inherit;line-height:1.4;
+  padding:5px 12px;border-radius:999px;
+  border:1px solid transparent;background:rgba(0,0,0,0.04);
+  cursor:pointer;transition:background var(--t),color var(--t);
+  max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
-.suggestion-card-title{font-size:13px;font-weight:600;color:var(--fg);margin-bottom:1px}
-.suggestion-card-desc{font-size:12px;color:var(--fg-tertiary)}
-@media(max-width:768px){.suggestion-cards{grid-template-columns:1fr 1fr}.suggestion-card{padding:10px 12px}.suggestion-card-icon{width:30px;height:30px}.chat-suggest-cards{grid-template-columns:1fr}}
+.suggestion-chip:hover{background:rgba(0,0,0,0.08);color:var(--fg)}
+[data-theme="dark"] .suggestion-chip{background:rgba(255,255,255,0.06);color:var(--fg-secondary)}
+[data-theme="dark"] .suggestion-chip:hover{background:rgba(255,255,255,0.10);color:var(--fg)}
+
+/* dashboard 页的 composer 强化：黑色边 + 投影 + 更高的写作区，仅限 dashboard 作用域，不影响 chat 页 */
+.page-dashboard .chat-composer{
+  border-color:rgba(28,28,28,0.4);background:#fff;
+  border-radius:14px;
+  box-shadow:none;
+}
+.page-dashboard .chat-composer:focus-within{
+  border-color:rgba(28,28,28,0.4);
+  box-shadow:0 18px 40px -12px rgba(0,0,0,0.20), 0 3px 10px -3px rgba(0,0,0,0.08);
+}
+.page-dashboard .chat-composer-wrap{max-width:60%;margin:0 auto}
+.page-dashboard .chat-textarea{min-height:72px;max-height:180px;padding:16px 22px 8px}
+.page-dashboard .chat-toolbar{padding:6px 14px 12px}
+[data-theme="dark"] .page-dashboard .chat-composer{
+  border-color:rgba(255,255,255,0.4);background:var(--bg);
+  box-shadow:none;
+}
+[data-theme="dark"] .page-dashboard .chat-composer:focus-within{
+  border-color:rgba(255,255,255,0.4);
+  box-shadow:0 18px 40px -12px rgba(0,0,0,0.70), 0 3px 10px -3px rgba(0,0,0,0.45);
+}
+@media(max-width:768px){
+  .suggestion-chips{gap:4px 14px;padding:0 4px}
+  .chat-suggest-cards{grid-template-columns:1fr}
+}
 
 /* Section headers */
 .section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;margin-top:12px}
@@ -28,11 +57,16 @@
 
 /* Graph (dashboard card) */
 .graph-card{border-radius:var(--radius-lg);background:var(--bg-sidebar);overflow:hidden;margin-bottom:32px;border:1px solid var(--border)}
-.graph-card canvas{display:block;width:100%;height:220px;cursor:grab}
+.graph-card canvas{display:block;width:100%;height:440px;cursor:grab}
 .graph-card canvas:active{cursor:grabbing}
-.graph-footer{display:flex;gap:12px;padding:6px 12px;font-size:11px;color:var(--fg-tertiary)}
+.graph-footer{display:flex;gap:12px;padding:6px 12px;font-size:11px;color:var(--fg-tertiary);flex-wrap:wrap;align-items:center}
 .graph-footer-item{display:flex;align-items:center;gap:4px}
 .graph-footer-dot{width:6px;height:6px;border-radius:50%}
+.graph-orphan-hint{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;color:var(--fg-tertiary);font-size:11px;margin-left:6px;padding-left:10px;border-left:1px solid var(--border)}
+.graph-orphan-label{opacity:0.8}
+.graph-orphan-chip{color:var(--fg-tertiary);text-decoration:none;border-bottom:1px dotted var(--fg-tertiary);transition:color var(--t),border-color var(--t)}
+.graph-orphan-chip:hover{color:var(--accent);border-bottom-color:var(--accent)}
+.graph-orphan-more{opacity:0.6}
 .graph-empty-msg{height:220px;display:flex;align-items:center;justify-content:center;color:var(--fg-tertiary);font-size:13px}
 
 /* Activity */
@@ -349,8 +383,6 @@
 [data-theme="dark"] .chat-msg.assistant .chat-msg-body{background:rgba(255,255,255,0.05)}
 [data-theme="dark"] .chat-msg-body code{background:rgba(255,255,255,0.08)}
 [data-theme="dark"] .chat-msg-body pre{background:#1e1e2e;border:1px solid rgba(255,255,255,0.06)}
-[data-theme="dark"] .suggestion-card{border-color:var(--border)}
-[data-theme="dark"] .suggestion-card:hover{border-color:var(--accent-border);background:var(--accent-bg)}
 [data-theme="dark"] .chat-suggest-card{border-color:var(--border)}
 [data-theme="dark"] .chat-suggest-card:hover{border-color:var(--accent-border);background:var(--accent-bg)}
 

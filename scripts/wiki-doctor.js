@@ -16,6 +16,30 @@ const path = require('path');
 const WIKI = path.join(__dirname, '..', 'data', 'wiki');
 const RAW = path.join(__dirname, '..', 'data', 'raw');
 
+// 概念映射：如果 data/concepts.json 存在，就用它做 canonical 校验
+let conceptsMod = null;
+try { conceptsMod = require('../lib/concepts.js'); } catch { conceptsMod = null; }
+
+// 极简 frontmatter 解析（与 server.js 同口径，避免 require server.js）
+function parseFrontmatterLocal(content) {
+  if (!content) return { data: {}, body: '' };
+  const m = content.match(/^\uFEFF?\s*---\s*\n([\s\S]*?)\n---\s*\n?/);
+  if (!m) return { data: {}, body: content };
+  const block = m[1];
+  const data = {};
+  for (const line of block.split('\n')) {
+    const kv = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$/);
+    if (!kv) continue;
+    const key = kv[1], val = kv[2].trim();
+    if (/^\[.*\]$/.test(val)) {
+      data[key] = val.slice(1, -1).split(',').map(s => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+    } else {
+      data[key] = val.replace(/^["']|["']$/g, '');
+    }
+  }
+  return { data, body: content.slice(m[0].length) };
+}
+
 function walk(d) {
   const o = [];
   if (!fs.existsSync(d)) return o;
@@ -103,6 +127,30 @@ for (const f of wikiFiles) {
   if (!/^---\n[\s\S]*?\n---\n/.test(t)) noFm.push(path.relative(WIKI, f));
 }
 if (noFm.length) push('info', 'legacy 文章缺 frontmatter（走 extractKeywords fallback）', noFm, 'curl -X POST "http://localhost:3456/api/wiki/backfill-tags?useModel=main"');
+
+// ── [warning] concept 漂移：frontmatter tags 里有非 canonical 形式 ──
+if (conceptsMod) {
+  try {
+    const conceptsObj = conceptsMod.loadConcepts();
+    const drift = [];
+    for (const f of wikiFiles) {
+      let content;
+      try { content = fs.readFileSync(f, 'utf-8'); } catch { continue; }
+      const { data } = parseFrontmatterLocal(content);
+      const tags = Array.isArray(data.tags) ? data.tags : [];
+      for (const t of tags) {
+        const c = conceptsMod.normalizeTag(t, conceptsObj);
+        if (c && c !== t) {
+          drift.push(`${path.relative(WIKI, f)}  :  "${t}" -> "${c}"`);
+        }
+      }
+    }
+    if (drift.length) {
+      push('warning', 'concept 漂移（frontmatter tags 非 canonical）', drift,
+        '运行 POST /api/wiki/concepts/rebuild 后重新编译或手动改 frontmatter');
+    }
+  } catch {}
+}
 
 // ── [info] index/log 残留 emoji ──
 const EMOJI = /[\u2600-\u27BF\u2B00-\u2BFF\uFE0F]|[\u{1F000}-\u{1FFFF}]|→/u;

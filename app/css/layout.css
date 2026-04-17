@@ -77,7 +77,7 @@
 .sidebar-chat-list.is-scrolling,
 .sidebar-pages.is-scrolling{scrollbar-width:thin;scrollbar-color:rgba(0,0,0,0.15) transparent}
 .sidebar-page{
-  display:flex;align-items:center;padding:8px 10px 8px 12px;
+  display:flex;align-items:center;gap:6px;padding:8px 10px 8px 12px;
   border-radius:var(--radius);font-size:14.5px;color:var(--fg);
   cursor:pointer;transition:all var(--t);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
@@ -85,7 +85,16 @@
 .sidebar-page.active{background:var(--accent-bg);color:var(--accent);font-weight:500}
 .sidebar-page svg{width:15px;height:15px;flex-shrink:0;opacity:0.4}
 .sidebar-page.active svg{opacity:0.7;color:var(--accent)}
-.sidebar-page .page-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.sidebar-page .page-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.sidebar-page-del{
+  width:24px;height:24px;border-radius:var(--radius);display:flex;
+  align-items:center;justify-content:center;color:var(--fg-tertiary);
+  background:none;border:none;cursor:pointer;flex-shrink:0;
+  opacity:0;transition:all var(--t);
+}
+.sidebar-page:hover .sidebar-page-del{opacity:1}
+.sidebar-page-del:hover{background:var(--bg-hover);color:var(--red,#dc2626)}
+.sidebar-page-del svg{width:14px;height:14px;opacity:1}
 .sidebar-page-date{margin-left:8px;font-size:11px;color:var(--fg-tertiary);flex-shrink:0;font-variant-numeric:tabular-nums;letter-spacing:0.02em}
 .sidebar-page.active .sidebar-page-date{color:var(--accent);opacity:0.7}
 .sidebar-preview{

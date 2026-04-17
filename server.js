@@ -361,7 +361,7 @@ function resolvePresetForProvider(presetKey, providerKey, cfg) {
 
 function loadConfig() {
   let cfg = {
-    provider: 'local',
+    provider: 'bailian',
     model: '',
     customBaseUrl: '',
     wikiLang: 'zh',
@@ -371,7 +371,7 @@ function loadConfig() {
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const saved = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
-      cfg.provider = saved.provider || 'local';
+      cfg.provider = saved.provider || 'bailian';
       cfg.model = saved.model || '';
       cfg.customBaseUrl = saved.customBaseUrl || '';
       cfg.wikiLang = saved.wikiLang || 'zh';
@@ -435,15 +435,9 @@ function saveConfig(cfg) {
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(toSave, null, 2), 'utf-8');
 }
 
-// apiKey 单独存储到 .api-key 文件（不进 git）
-const API_KEY_PATH = path.join(ROOT, '.api-key');
-function saveApiKey(key) {
-  fs.writeFileSync(API_KEY_PATH, key, 'utf-8');
-  fs.chmodSync(API_KEY_PATH, 0o600); // 仅 owner 可读写
-}
+// apiKey 只从环境变量读取，绝不落盘。
 function loadApiKey() {
-  if (process.env.WIKI_API_KEY) return process.env.WIKI_API_KEY;
-  try { return fs.readFileSync(API_KEY_PATH, 'utf-8').trim(); } catch { return ''; }
+  return process.env.WIKI_API_KEY || '';
 }
 
 function getFullConfig() {
@@ -631,8 +625,10 @@ async function callLLM(systemPrompt, messages, overrides, opts = {}) {
   const apiKey = config.apiKey;
 
   if (providerBuiltin.format === 'cli') {
-    const combined = msgArray.map(m => `${m.role}: ${m.content}`).join('\n\n');
-    return callLocalCLI(systemPrompt + '\n\n' + combined);
+    throw new Error(
+      `当前 provider (${providerKey}) 是本地 CLI 模式，云端部署不可用；` +
+      `请在设置中切换到 bailian/openai/anthropic/deepseek/openrouter/custom 之一`
+    );
   }
 
   if (!apiKey) throw new Error('未配置 API Key，请在设置中配置');
@@ -714,8 +710,14 @@ async function compileArticle(topicDir, filename, filePath, task, overrides) {
 
   const beforeFiles = new Set(walkMd(WIKI).map(f => path.relative(WIKI, f)));
 
-  // 本地 CLI 模式
+  // 本地 CLI 模式：全面弃用（rework 前的调用路径曾从这里 spawn claude 去写文件，
+  // 与云端 API pipeline 行为完全不一致，且会把产物写在 CLI 用户身份下）。
+  // 下方 spawn 保留但不可达，保守做法以防有其它入口复用。
   if (provider.format === 'cli') {
+    throw new Error('文章编译不支持本地 CLI 模式，请在设置中切换到云端 provider (bailian/openai/anthropic/deepseek/openrouter/custom)');
+  }
+  // 死代码保留段：原 CLI 分支实现。任何新增调用都禁止走到这里。
+  if (false) {
     return new Promise((resolve) => {
       const memCtxCli = buildMemoryContext();
       const bioPart = memCtxCli ? ` ${memCtxCli}。请根据用户背景调整文章深度和侧重点。` : (() => { const profile = loadProfile(); return profile && profile.bio ? ` 用户背景：${profile.bio}。请根据用户背景调整文章深度和侧重点。` : ''; })();
@@ -1143,7 +1145,10 @@ ${existingTagsStr}
         // 从正文移除 tags 注释（避免显示在正文里）
         articleContent = articleContent.replace(/<!--\s*tags\s*:\s*[^>]+?\s*-->\s*/gi, '').trimEnd() + '\n';
       }
-      // 去重
+      // canonical 归一化：把 "AI-Safety" / "AI 安全" 等同义写法收敛到 concepts.json 的 canonical 形式
+      const conceptsObj = concepts.loadConcepts();
+      articleTags = articleTags.map(t => concepts.normalizeTag(t, conceptsObj)).filter(Boolean);
+      // 去重（normalize 后可能出现重复）
       articleTags = [...new Set(articleTags)];
       if (articleTags.length > 0) {
         doneStage(s, { detail: articleTags.join('、') });
@@ -1299,6 +1304,30 @@ ${existingTagsStr}
     if (!articleContent || articleContent.trim().length < MIN_ARTICLE_BYTES) {
       throw new Error(`refusing to write near-empty article (content ${articleContent ? articleContent.length : 0} bytes < ${MIN_ARTICLE_BYTES}); upstream pipeline bug`);
     }
+    // 相似度预警（P2）：持久化前做一次向量检索，如果 top hit 相似度 > 0.85 且同 topic，
+    // 挂一个 similarityWarning 字段让上游 UI 感知"你可能在重复造轮子"。不阻塞写入。
+    try {
+      if (typeof vectors.isVectorReady === 'function' && vectors.isVectorReady()) {
+        const probeText = `${articleTitle}\n${articleSummary || ''}`.trim();
+        if (probeText) {
+          const hits = await vectors.vectorSearch(probeText, { topK: 3 });
+          if (Array.isArray(hits) && hits.length > 0) {
+            const top = hits[0];
+            const topTopic = (top && top.path) ? String(top.path).split('/')[0] : '';
+            if (top && typeof top.score === 'number' && top.score > 0.85 && topTopic === articleTopic) {
+              task.similarityWarning = {
+                path: top.path,
+                score: top.score,
+                title: top.title || top.heading || top.path
+              };
+            }
+          }
+        }
+      }
+    } catch (_e) {
+      // no-op: 无 embedding provider / 索引未 ready / 调用异常一律吞掉，不影响 persist
+    }
+
     fs.writeFileSync(articlePath, fileContent, 'utf-8');
     relPath = `${articleTopic}/${articleFilename}`;
     // 异步触发向量索引增量更新，失败不阻塞编译
@@ -1357,7 +1386,12 @@ ${existingTagsStr}
     return;
   }
 
-  task.created = [{ path: relPath, title: articleTitle, tags: articleTags }];
+  task.created = [{
+    path: relPath,
+    title: articleTitle,
+    tags: articleTags,
+    ...(task.similarityWarning ? { similarityWarning: task.similarityWarning } : {})
+  }];
   if (contentErrored) {
     task.status = 'partial';
     task.message = '编译完成（正文降级为原文）';
@@ -1369,16 +1403,8 @@ ${existingTagsStr}
 
 async function queryWiki(question) {
   const config = getFullConfig();
-  const providerKey = config.provider || 'local';
-  const provider = PROVIDERS[providerKey] || PROVIDERS.local;
 
   const memCtx = buildMemoryContext();
-  const bioPart = memCtx ? ` ${memCtx}` : (() => { const profile = loadProfile(); return profile && profile.bio ? ` 用户背景：${profile.bio}。请根据用户背景调整回答的深度和专业程度。` : ''; })();
-
-  // 本地 CLI 模式
-  if (provider.format === 'cli') {
-    return callLocalCLI(`读取 data/wiki/index.md，然后阅读相关文章来回答以下问题: ${question}。引用来源时使用 [文章标题](路径) 格式。用中文回答。${bioPart}`);
-  }
 
   // API 模式：服务端收集上下文
   let indexContent = ''; try { indexContent = fs.readFileSync(path.join(WIKI, 'index.md'), 'utf-8'); } catch {}
@@ -1399,7 +1425,10 @@ async function queryWiki(question) {
 
   const userMessage = `## 知识库索引\n\n${indexContent}\n\n## 相关文章内容\n\n${articleContents.join('\n\n---\n\n')}\n\n## 用户问题\n\n${question}`;
 
-  return await callLLM(systemPrompt, userMessage);
+  const overrides = {};
+  const mainModel = pickModelByUse(config.provider, 'main', config);
+  if (mainModel) overrides.model = mainModel;
+  return await callLLM(systemPrompt, userMessage, overrides, { stream: false });
 }
 
 const MIME = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
@@ -1412,9 +1441,11 @@ function json(res, code, data) {
 }
 
 function safe(base, rel) {
-  if (!rel || rel.includes('..') || path.isAbsolute(rel)) return null;
-  const full = path.join(base, rel);
-  if (!full.startsWith(base)) return null;
+  if (!rel || typeof rel !== 'string') return null;
+  if (path.isAbsolute(rel)) return null;
+  const baseResolved = path.resolve(base);
+  const full = path.resolve(baseResolved, rel);
+  if (full !== baseResolved && !full.startsWith(baseResolved + path.sep)) return null;
   return full;
 }
 
@@ -2927,12 +2958,15 @@ async function extractContent(type, content, filename, urlVal, rawDir) {
 
 // ── 自动化任务 ──
 
-const { fetchSource: fetchSourceAdapter, AGGREGATOR_SCRIPT: AGG_SCRIPT_PATH } = require('./lib/sources.js');
+const { fetchSource: fetchSourceAdapter, AGGREGATOR_SCRIPT: AGG_SCRIPT_PATH, assertSafeUrl, isBlockedUrlError } = require('./lib/sources.js');
 const SYSTEM_SOURCES_PATH = path.join(ROOT, 'data', 'system-sources.json');
 
 // ── 向量索引（团队 A / M1） ──
 const vectors = require('./lib/vectors.js');
 vectors.__setConfigProvider(getFullConfig);
+
+// ── 概念映射（canonical tag 表）──
+const concepts = require('./lib/concepts.js');
 
 function loadSystemSources() {
   try {
@@ -3047,6 +3081,8 @@ function markIngested(url, content, runId) {
 }
 
 async function fetchRSS(url) {
+  // SSRF guard: protocol + DNS + private-IP block, re-run on redirect.
+  await assertSafeUrl(url);
   const xml = await new Promise((resolve, reject) => {
     const mod = url.startsWith('https') ? https : http;
     const req = mod.get(url, { headers: { 'User-Agent': 'WikiBot/1.0' } }, r => {
@@ -3088,6 +3124,7 @@ async function fetchRSS(url) {
 }
 
 async function fetchWebpageLinks(url, selector) {
+  await assertSafeUrl(url);
   const html = await new Promise((resolve, reject) => {
     const mod = url.startsWith('https') ? https : http;
     const req = mod.get(url, { headers: { 'User-Agent': 'Mozilla/5.0 WikiBot/1.0' } }, r => {
@@ -3199,8 +3236,11 @@ ${feedbackStr}
 摘要: ${(item.summary || '').slice(0, 500)}
 来源: ${item.sourceId || 'unknown'}`;
 
-  // Use qwen-turbo for cheap gating
-  const overrides = { provider: 'bailian', model: 'qwen-turbo' };
+  // Use the configured provider's fast model for cheap gating.
+  const cfg = getFullConfig();
+  const overrides = { provider: cfg.provider };
+  const fastModel = pickModelByUse(cfg.provider, 'fast', cfg);
+  overrides.model = fastModel || cfg.model || '';
   try {
     const raw = await Promise.race([
       callLLM(systemPrompt, userPrompt, overrides, { temperature: 0, maxTokens: 256 }),
@@ -3639,6 +3679,143 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
   }
 }
 
+// ── Auth middleware ──
+// 云端部署：设置环境变量 WIKI_ADMIN_TOKEN 后，所有非 GET/HEAD 请求以及若干敏感 GET 端点
+// 都需要携带 Authorization: Bearer <token> 或 Cookie: wiki_admin_token=<token>。
+// 未设置时，所有端点匿名可访问（仅限本地开发）。
+//
+// 启动时把 WIKI_ADMIN_TOKEN 固化为模块常量 ADMIN_TOKEN，运行时所有判定都用它。
+// 陷阱规避：
+//   1) WIKI_ADMIN_TOKEN= 空串 会让 !process.env.WIKI_ADMIN_TOKEN 判定为"未设置"（正确），
+//      但如果直接用 process.env.WIKI_ADMIN_TOKEN 做 safeTokenEq 对比又会"空串==空串"通过，
+//      即用户"以为上了鉴权其实没上"。统一走 ADMIN_TOKEN 常量 + AUTH_ENABLED 开关消除分叉。
+//   2) WIKI_ADMIN_TOKEN=abc 这种过短 token 视同未设置，降级 + 警告，别让用户误以为安全。
+const RAW_ADMIN_TOKEN = (process.env.WIKI_ADMIN_TOKEN || '').trim();
+const AUTH_ENABLED = RAW_ADMIN_TOKEN.length >= 16;
+const ADMIN_TOKEN = AUTH_ENABLED ? RAW_ADMIN_TOKEN : '';
+
+if (!process.env.WIKI_ADMIN_TOKEN || !process.env.WIKI_ADMIN_TOKEN.trim()) {
+  console.warn('[auth] WIKI_ADMIN_TOKEN 未设置，所有端点匿名可访问（仅限本地开发），云端部署必须设置此环境变量');
+} else if (!AUTH_ENABLED) {
+  console.warn(`[auth] WIKI_ADMIN_TOKEN 长度 < 16 字符，视为未设置；生产环境请使用至少 16 字符的强随机 token`);
+}
+
+// Constant-time-ish string compare to avoid trivial timing oracles.
+function safeTokenEq(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const ba = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ba.length !== bb.length) return false;
+  try { return crypto.timingSafeEqual(ba, bb); } catch { return false; }
+}
+
+function parseAdminToken(req) {
+  // 1) Bearer header
+  const auth = req.headers['authorization'] || '';
+  if (auth.toLowerCase().startsWith('bearer ')) {
+    return auth.slice(7).trim();
+  }
+  // 2) Cookie
+  const cookie = req.headers['cookie'] || '';
+  for (const part of cookie.split(';')) {
+    const [k, ...rest] = part.trim().split('=');
+    if (k === 'wiki_admin_token') {
+      try { return decodeURIComponent(rest.join('=')); } catch { return rest.join('='); }
+    }
+  }
+  return '';
+}
+
+function isAdminAuthenticated(req) {
+  if (!AUTH_ENABLED) return true; // auth disabled → everyone is "authed"
+  return safeTokenEq(parseAdminToken(req), ADMIN_TOKEN);
+}
+
+// Sensitive GET endpoints that leak instance info (hasKey / task list / history) —
+// protect them even though they don't mutate.
+const SENSITIVE_GET_PREFIXES = [
+  '/api/settings',
+  '/api/autotask',
+  '/api/wiki/backfill-tags'
+];
+
+// Returns true if the request may proceed; false means this function wrote a 401
+// (or similar) and the caller should return immediately.
+function requireAdminAuth(req, res, p) {
+  if (!AUTH_ENABLED) return true;
+
+  // Whitelist: login/status endpoints are always reachable (otherwise you can't log in).
+  if (p === '/api/auth/login' || p === '/api/auth/status' || p === '/api/auth/logout') return true;
+
+  // Static assets (login.html, its CSS/JS) must be anonymously reachable so the
+  // login page can actually render. All other static files fall through to auth too?
+  // The brief says: "静态文件路由：login.html 要能匿名访问". We only expose login.html
+  // (and nothing else) to anon. Other static files (app shell) also need to render
+  // for the UI to work — but the UI's API calls will still 401 and redirect.
+  // So we allow all static files to load (no auth on non-/api paths).
+  if (!p.startsWith('/api/')) return true;
+
+  const method = req.method;
+  const needsAuth =
+    (method !== 'GET' && method !== 'HEAD') ||
+    SENSITIVE_GET_PREFIXES.some(pref => p === pref || p.startsWith(pref + '/') || p.startsWith(pref + '?'));
+
+  if (!needsAuth) return true;
+
+  if (isAdminAuthenticated(req)) return true;
+
+  res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify({ error: '未授权，请携带 Authorization Bearer token 或登录' }));
+  return false;
+}
+
+// ── Rate limit ──
+// 极简内存实现：Map<clientIp+'|'+endpointPrefix, {count, resetAt}>。
+// 普通端点 30 req/60s，LLM 相关端点 10 req/60s。超限返回 429。
+const rateLimitBuckets = new Map();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_DEFAULT = 30;
+const RATE_LIMIT_EXPENSIVE = 10;
+// 任一条命中前缀就按昂贵桶算
+const EXPENSIVE_PREFIXES = [
+  '/api/ingest',
+  '/api/settings/test',
+  '/api/autotask/run/',
+  '/api/auth/login'
+];
+function isExpensiveEndpoint(p) {
+  if (EXPENSIVE_PREFIXES.some(x => p === x || p.startsWith(x))) return true;
+  // /api/chat/:id/message and /api/chat/:id/regenerate
+  if (/^\/api\/chat\/[^/]+\/(message|regenerate)$/.test(p)) return true;
+  return false;
+}
+function clientIp(req) {
+  const xf = req.headers['x-forwarded-for'];
+  if (typeof xf === 'string' && xf.trim()) return xf.split(',')[0].trim();
+  return (req.socket && req.socket.remoteAddress) || 'unknown';
+}
+function rateLimitAllow(req, p) {
+  const ip = clientIp(req);
+  // 归并到 endpoint 维度：去掉路径末端的可变 id 段
+  const ep = p.replace(/\/[a-z0-9_-]{8,}$/i, '/:id');
+  const key = ip + '|' + ep;
+  const now = Date.now();
+  const limit = isExpensiveEndpoint(p) ? RATE_LIMIT_EXPENSIVE : RATE_LIMIT_DEFAULT;
+  let bucket = rateLimitBuckets.get(key);
+  if (!bucket || bucket.resetAt <= now) {
+    bucket = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
+    rateLimitBuckets.set(key, bucket);
+  }
+  bucket.count += 1;
+  // 定期清理（避免 map 无界膨胀）：每 500 次调用扫一遍
+  if (rateLimitBuckets.size > 2000) {
+    for (const [k, b] of rateLimitBuckets) {
+      if (b.resetAt <= now) rateLimitBuckets.delete(k);
+    }
+  }
+  return bucket.count <= limit;
+}
+
 // ── 服务器 ──
 
 const server = http.createServer(async (req, res) => {
@@ -3676,6 +3853,69 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(413, { 'Content-Type': 'application/json; charset=utf-8' });
       return res.end(JSON.stringify({ error: '请求体过大' }));
     }
+  }
+
+  // ── CSRF: for non-GET requests, if Origin header is present, verify it matches Host.
+  // Same-origin fetches may omit Origin (allowed). Prevents cross-site form/JS from
+  // triggering mutating requests even if the admin session cookie is set.
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    const origin = req.headers['origin'];
+    const host = req.headers['host'];
+    if (origin && host) {
+      let originHost = '';
+      try { originHost = new URL(origin).host; } catch {}
+      if (originHost && originHost !== host) {
+        res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+        return res.end(JSON.stringify({ error: 'CSRF: Origin mismatch' }));
+      }
+    }
+  }
+
+  // ── Rate limit: per IP per endpoint per 60s window.
+  // Default bucket: 30 req/min. Expensive endpoints: 10 req/min.
+  if (p.startsWith('/api/') && !rateLimitAllow(req, p)) {
+    res.writeHead(429, { 'Content-Type': 'application/json; charset=utf-8' });
+    return res.end(JSON.stringify({ error: '请求过于频繁，请稍后再试' }));
+  }
+
+  // ── Auth: admin token gate (skipped when WIKI_ADMIN_TOKEN unset). Writes 401 itself
+  // if unauthorized; returns true to allow the request to proceed.
+  if (!requireAdminAuth(req, res, p)) return;
+
+  // ── Auth endpoints (always available; login itself cannot require auth). ──
+  if (p === '/api/auth/status' && req.method === 'GET') {
+    return json(res, 200, {
+      authRequired: AUTH_ENABLED,
+      authenticated: isAdminAuthenticated(req)
+    });
+  }
+  if (p === '/api/auth/login' && req.method === 'POST') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      if (!AUTH_ENABLED) {
+        return json(res, 400, { error: '服务端未启用 admin token' });
+      }
+      let parsed = {};
+      try { parsed = JSON.parse(body || '{}'); } catch {}
+      const token = typeof parsed.token === 'string' ? parsed.token : '';
+      if (!safeTokenEq(token, ADMIN_TOKEN)) {
+        return json(res, 401, { error: 'token 错误' });
+      }
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Set-Cookie': `wiki_admin_token=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000`
+      });
+      return res.end(JSON.stringify({ ok: true }));
+    });
+    return;
+  }
+  if (p === '/api/auth/logout' && req.method === 'POST') {
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Set-Cookie': 'wiki_admin_token=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'
+    });
+    return res.end(JSON.stringify({ ok: true }));
   }
 
   // ── Chat API ──
@@ -3808,7 +4048,7 @@ const server = http.createServer(async (req, res) => {
             const overrides = { provider: conv.provider, model: conv.model };
             const assistantMsg = await handleChatMessage(conv, content, overrides);
             return json(res, 200, { message: assistantMsg });
-          } catch (e) { return json(res, 500, { error: `对话失败: ${e.message}` }); }
+          } catch (e) { console.error('[chat] 对话失败:', e && e.stack || e); return json(res, 500, { error: '服务端错误' }); }
         });
         return;
       }
@@ -3835,7 +4075,7 @@ const server = http.createServer(async (req, res) => {
             const overrides = { provider: conv.provider, model: conv.model };
             const assistantMsg = await handleChatMessage(conv, lastUserContent, overrides);
             return json(res, 200, { message: assistantMsg });
-          } catch (e) { return json(res, 500, { error: `重新生成失败: ${e.message}` }); }
+          } catch (e) { console.error('[chat] 重新生成失败:', e && e.stack || e); return json(res, 500, { error: '服务端错误' }); }
         });
         return;
       }
@@ -3895,7 +4135,8 @@ const server = http.createServer(async (req, res) => {
                 return json(res, 500, { error: task.message || '编译失败' });
               }
             } catch (e) {
-              return json(res, 500, { error: `沉淀失败: ${e.message}` });
+              console.error('[chat] 沉淀失败:', e && e.stack || e);
+              return json(res, 500, { error: '服务端错误' });
             }
           } catch (e) { return json(res, 400, { error: e.message }); }
         });
@@ -4059,103 +4300,215 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (p === '/api/wiki/graph') {
+    // 双层图谱：concept 节点（canonical tag / topic）+ article 节点。
+    //  - co-concept 边：两个 concept 在 >=2 篇文章共现，权重 = 共现次数 × IDF
+    //  - contains 边：article -> parent concept（topic 同名优先；否则用该文章最高频 tag）
+    //  - link 边：existing markdown-link 解析（article -> article），see-also / reference 两类
+    // 破宽泛概念：出现在 >50% 文章里的 concept 不参与 co-concept 边（同旧逻辑）。
     const excluded = new Set(['index.md', 'log.md']);
     const allFiles = walkMd(WIKI).filter(f => !excluded.has(path.basename(f)));
-    const nodes = [];
-    const edges = [];
-    const edgeSet = new Set();
+    const conceptsObj = concepts.loadConcepts();
 
+    // ── 1. 先收集所有文章的基础信息 ──
+    const articleInfos = []; // { rel, topic, title, rawTags, tags (canonical), keywords0, content }
     for (const f of allFiles) {
       const rel = path.relative(WIKI, f);
       const parts = rel.split(path.sep);
       const topic = parts.length > 1 ? parts[0] : '';
       const title = extractTitle(f);
-      const tags = extractTags(f);
-      // 图谱节点显示的标签：优先用 LLM 生成的 tags[0]；老文章走兜底 regex 切词
-      let keyword;
-      if (tags.length > 0) {
-        keyword = tags[0];
-      } else {
-        const genericKw = new Set(['概述', '总结', '背景', '简介', '引言', '正文', '结论', '附录', '参考', '说明', '定义', '目标', '方法', '结果', '讨论', '核心', '架构', '总览']);
-        const cnSegments = title.split(/[^一-\u9fff]+|[与和的及或从到在]+/).filter(s => s.length >= 2);
-        const prefixChars = '非不无多';
-        const titleKw = cnSegments.map(s => {
-          if (s.length <= 4) return s;
-          return (s.length >= 3 && prefixChars.includes(s[0])) ? s.slice(0, 3) : s.slice(0, 2);
-        }).filter(w => !genericKw.has(w));
-        const kwArr = [...extractKeywords(f)];
-        const bodyKw = kwArr.filter(w => !genericKw.has(w) && w.length >= 2 && w.length <= 4 && !/^[a-z]{1,3}$/i.test(w));
-        keyword = titleKw[0] || bodyKw[0] || title.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '').slice(0, 4) || topic;
-      }
-      nodes.push({ id: rel, name: title, topic, keyword, tags });
-
-      // Read file content to distinguish See Also links from inline references
+      const rawTags = extractTags(f);
+      // 即使 frontmatter 已被 compile 阶段 normalize，老文章 / 手改的 md 可能还有原始写法
+      const tags = [...new Set(rawTags.map(t => concepts.normalizeTag(t, conceptsObj)).filter(Boolean))];
+      // 尝试读 frontmatter 里的 keywords[0]（label 规则用）
+      let fmKeyword0 = '';
       let content = '';
-      try { content = fs.readFileSync(f, 'utf-8'); } catch { continue; }
-      const lines = content.split('\n');
+      try {
+        content = fs.readFileSync(f, 'utf-8');
+        const { data } = parseFrontmatter(content);
+        if (Array.isArray(data.keywords) && data.keywords.length && typeof data.keywords[0] === 'string') {
+          fmKeyword0 = data.keywords[0].trim();
+        }
+      } catch { content = ''; }
+      articleInfos.push({ rel, topic, title, rawTags, tags, fmKeyword0, content, filePath: f });
+    }
 
-      // Find See Also section start
+    // ── 2. 概念 & 频次统计 ──
+    const conceptArticles = new Map(); // conceptLabel -> Set<articleRel>
+    const conceptIsTopic = new Map();  // conceptLabel -> topicDirName | null
+    const tagGlobalFreq = new Map();   // canonical tag -> total count across articles
+
+    function touchConcept(label, articleRel, topicDirIfAny) {
+      if (!label) return;
+      if (!conceptArticles.has(label)) conceptArticles.set(label, new Set());
+      conceptArticles.get(label).add(articleRel);
+      if (topicDirIfAny && !conceptIsTopic.has(label)) {
+        conceptIsTopic.set(label, topicDirIfAny);
+      }
+    }
+
+    // 收集 topic 目录：一个 topic 目录（含 >=1 篇文章）就是一个 implicit concept
+    const topicToConcept = new Map(); // topicDir -> canonicalLabel
+    for (const info of articleInfos) {
+      if (!info.topic) continue;
+      if (!topicToConcept.has(info.topic)) {
+        const canon = concepts.normalizeTag(info.topic, conceptsObj);
+        topicToConcept.set(info.topic, canon);
+      }
+    }
+
+    // 给每篇文章登记 concepts
+    for (const info of articleInfos) {
+      const set = new Set(info.tags);
+      // 加上 topic 概念
+      if (info.topic && topicToConcept.has(info.topic)) {
+        set.add(topicToConcept.get(info.topic));
+      }
+      info.conceptsOnThisArticle = [...set];
+      for (const t of info.tags) tagGlobalFreq.set(t, (tagGlobalFreq.get(t) || 0) + 1);
+      for (const c of info.conceptsOnThisArticle) {
+        const topicMatch = [...topicToConcept.entries()].find(([, v]) => v === c);
+        touchConcept(c, info.rel, topicMatch ? topicMatch[0] : null);
+      }
+    }
+
+    const totalArticles = articleInfos.length || 1;
+
+    // ── 3. 生成 concept 节点 ──
+    const conceptNodes = [];
+    const conceptIdByLabel = new Map();
+    for (const [label, articleSet] of conceptArticles.entries()) {
+      const id = concepts.conceptIdFromLabel(label);
+      conceptIdByLabel.set(label, id);
+      conceptNodes.push({
+        id,
+        kind: 'concept',
+        label,
+        articleCount: articleSet.size,
+        topic: conceptIsTopic.get(label) || null
+      });
+    }
+
+    // ── 4. article node label 规则 ──
+    function labelForArticle(info, parentConceptLabel) {
+      // (1) frontmatter.keywords[0] <= 12 chars
+      if (info.fmKeyword0 && info.fmKeyword0.length <= 12) return info.fmKeyword0;
+      // (2) strip common prefix
+      let t = info.title || '';
+      if (parentConceptLabel) {
+        const stripped = t.replace(new RegExp('^\\s*' + parentConceptLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*[的之\\-:：]\\s*'), '');
+        if (stripped && stripped !== t) t = stripped;
+      }
+      // (3) fallback: full title （已完成）
+      // (4) truncate to 14
+      if (t.length > 14) t = t.slice(0, 14) + '…';
+      return t || info.title || info.rel;
+    }
+
+    // ── 5. 生成 article 节点 + parent concept 选择 ──
+    const articleNodes = [];
+    const articleParentConcept = new Map(); // articleRel -> parentConceptLabel | null
+    for (const info of articleInfos) {
+      let parentLabel = null;
+      const topicCanon = info.topic ? topicToConcept.get(info.topic) : '';
+      if (topicCanon && conceptArticles.has(topicCanon)) {
+        parentLabel = topicCanon;
+      } else if (info.tags && info.tags.length) {
+        // 选文章 tag 里全局频次最高者
+        let best = null, bestFreq = -1;
+        for (const t of info.tags) {
+          const f = tagGlobalFreq.get(t) || 0;
+          if (f > bestFreq) { best = t; bestFreq = f; }
+        }
+        parentLabel = best;
+      }
+      articleParentConcept.set(info.rel, parentLabel);
+
+      const label = labelForArticle(info, parentLabel);
+      articleNodes.push({
+        id: info.rel,
+        kind: 'article',
+        label,
+        topic: info.topic,
+        tags: info.tags,
+        parent: parentLabel ? conceptIdByLabel.get(parentLabel) || null : null,
+        path: info.rel
+      });
+    }
+
+    // ── 6. edges ──
+    const edges = [];
+    const edgeSet = new Set();
+    function addEdge(src, tgt, payload) {
+      const key = `${src}|${tgt}|${payload.kind || ''}`;
+      if (edgeSet.has(key)) return;
+      edgeSet.add(key);
+      edges.push({ source: src, target: tgt, ...payload });
+    }
+
+    // 6a. contains 边：article -> parent concept
+    for (const info of articleInfos) {
+      const parentLabel = articleParentConcept.get(info.rel);
+      if (!parentLabel) continue;
+      const parentId = conceptIdByLabel.get(parentLabel);
+      if (!parentId) continue;
+      addEdge(parentId, info.rel, { kind: 'contains', weight: 1 });
+    }
+
+    // 6b. co-concept 边：两概念在 >=2 篇文章共现，权重 = 共现次数 × IDF（丢弃 >50% 覆盖的概念）
+    const labelList = [...conceptArticles.keys()];
+    const conceptCoverage = new Map();
+    for (const [label, set] of conceptArticles.entries()) conceptCoverage.set(label, set.size / totalArticles);
+    for (let i = 0; i < labelList.length; i++) {
+      const a = labelList[i];
+      if ((conceptCoverage.get(a) || 0) > 0.5) continue;
+      const setA = conceptArticles.get(a);
+      for (let j = i + 1; j < labelList.length; j++) {
+        const b = labelList[j];
+        if ((conceptCoverage.get(b) || 0) > 0.5) continue;
+        const setB = conceptArticles.get(b);
+        let co = 0;
+        for (const x of setA) if (setB.has(x)) co++;
+        if (co < 2) continue;
+        // IDF 用其中频次较低者（稀有概念权重高）
+        const freq = Math.max(setA.size, setB.size);
+        const idf = Math.log((totalArticles + 1) / (freq + 1));
+        const weight = Math.round((co * Math.max(0.1, idf)) * 100) / 100;
+        const idA = conceptIdByLabel.get(a);
+        const idB = conceptIdByLabel.get(b);
+        if (!idA || !idB) continue;
+        addEdge(idA, idB, { kind: 'co-concept', weight });
+      }
+    }
+
+    // 6c. link 边：existing markdown-link 解析 article -> article
+    for (const info of articleInfos) {
+      const content = info.content;
+      if (!content) continue;
+      const lines = content.split('\n');
       let seeAlsoStart = -1;
       for (let i = 0; i < lines.length; i++) {
         if (/^##\s+See\s+Also/i.test(lines[i])) { seeAlsoStart = i; break; }
       }
-
       const linkRe = /\[([^\]]*)\]\(([^)]+)\)/g;
       for (let i = 0; i < lines.length; i++) {
         let m;
         while ((m = linkRe.exec(lines[i])) !== null) {
           const linkPath = m[2];
-          // Skip external URLs
           if (/^https?:\/\//.test(linkPath)) continue;
-          // Skip frontend hash routes like #/article/xxx.md（LLM 有时会错写）
           if (linkPath.startsWith('#')) continue;
-          // Skip raw/ links
           if (/(?:^|\/)raw\//.test(linkPath)) continue;
-          // Only .md files
           if (!linkPath.endsWith('.md')) continue;
-
-          const resolved = resolveLink(f, linkPath);
+          const resolved = resolveLink(info.filePath, linkPath);
           if (!resolved) continue;
           if (excluded.has(path.basename(resolved))) continue;
-          // 确认目标文件真实存在，避免悬空边（LLM 有时会引用不存在的文章）
           if (!fs.existsSync(path.join(WIKI, resolved))) continue;
-
-          const key = `${rel}|${resolved}`;
-          if (edgeSet.has(key)) continue;
-          edgeSet.add(key);
-
-          const edgeType = (seeAlsoStart >= 0 && i > seeAlsoStart) ? 'see-also' : 'reference';
-          edges.push({ source: rel, target: resolved, type: edgeType });
+          const subKind = (seeAlsoStart >= 0 && i > seeAlsoStart) ? 'see-also' : 'reference';
+          addEdge(info.rel, resolved, { kind: 'link', weight: 1, variant: subKind });
         }
       }
     }
 
-    // Layer 2: tag 共现边 — 两篇文章若共享至少 1 个 tag 则连边
-    // 权重由 IDF 打分：稀有 tag 权重高；全部通过"过宽泛"tag（>50% 文章覆盖）连起来的丢弃
-    const totalArticles = nodes.length || 1;
-    const tagFreq = {};
-    for (const n of nodes) for (const t of (n.tags || [])) tagFreq[t] = (tagFreq[t] || 0) + 1;
-    for (let i = 0; i < nodes.length; i++) {
-      const a = nodes[i];
-      if (!a.tags || !a.tags.length) continue;
-      for (let j = i + 1; j < nodes.length; j++) {
-        const b = nodes[j];
-        if (!b.tags || !b.tags.length) continue;
-        const shared = a.tags.filter(t => b.tags.includes(t));
-        if (!shared.length) continue;
-        const allTooCommon = shared.every(t => (tagFreq[t] || 0) / totalArticles > 0.5);
-        if (allTooCommon) continue;
-        const key = `${a.id}|${b.id}`;
-        const keyRev = `${b.id}|${a.id}`;
-        if (edgeSet.has(key) || edgeSet.has(keyRev)) continue;
-        edgeSet.add(key);
-        const idf = shared.reduce((s, t) => s + Math.log((totalArticles + 1) / ((tagFreq[t] || 1) + 1)), 0);
-        const weight = Math.min(0.9, 0.25 + idf * 0.15);
-        edges.push({ source: a.id, target: b.id, type: 'tag', weight, keywords: shared.slice(0, 5) });
-      }
-    }
-
-    return json(res, 200, { nodes, edges });
+    return json(res, 200, { nodes: [...conceptNodes, ...articleNodes], edges });
   }
 
   if (p === '/api/wiki/stats') {
@@ -4332,6 +4685,52 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, backfillProgress);
   }
 
+  // 概念（canonical tag）映射重建 — 等价于跑 scripts/seed-concepts.js --apply
+  if (p === '/api/wiki/concepts/rebuild' && req.method === 'POST') {
+    try {
+      const excluded = new Set(['index.md', 'log.md']);
+      const allFiles = walkMd(WIKI).filter(f => !excluded.has(path.basename(f)));
+      const freq = new Map();
+      const rawByCluster = new Map();
+      function clusterKey(tag) {
+        return String(tag || '').toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '');
+      }
+      const { canonicalizeKey } = concepts._internal;
+      for (const f of allFiles) {
+        let content;
+        try { content = fs.readFileSync(f, 'utf-8'); } catch { continue; }
+        const { data } = parseFrontmatter(content);
+        const tags = Array.isArray(data.tags) ? data.tags : [];
+        for (const raw of tags) {
+          const t = String(raw).trim();
+          if (!t) continue;
+          freq.set(t, (freq.get(t) || 0) + 1);
+          const ck = clusterKey(t);
+          if (!ck) continue;
+          if (!rawByCluster.has(ck)) rawByCluster.set(ck, new Set());
+          rawByCluster.get(ck).add(t);
+        }
+      }
+      const aliasesOut = {};
+      let clusters = 0;
+      for (const [ck, set] of rawByCluster.entries()) {
+        const variants = [...set].map(t => ({ tag: t, count: freq.get(t) || 0 }));
+        variants.sort((a, b) => (b.count - a.count) || (b.tag.length - a.tag.length) || a.tag.localeCompare(b.tag));
+        const canonical = variants[0].tag;
+        let interesting = variants.length >= 2 || canonicalizeKey(canonical) !== canonical;
+        if (!interesting) continue;
+        clusters++;
+        for (const v of variants) aliasesOut[canonicalizeKey(v.tag)] = canonical;
+        aliasesOut[ck] = canonical;
+      }
+      const existing = concepts.loadConcepts();
+      const saved = concepts.saveConcepts({ version: existing.version || 1, aliases: aliasesOut });
+      return json(res, 200, { ok: true, aliases: saved.aliases, added: Object.keys(saved.aliases).length, clusters });
+    } catch (e) {
+      return json(res, 500, { ok: false, error: e.message });
+    }
+  }
+
   // 向量索引：触发重建（异步 fire-and-forget，返回任务起始 meta）
   if (p === '/api/wiki/reindex-vectors' && req.method === 'POST') {
     const force = params.get('force') === '1' || params.get('force') === 'true';
@@ -4346,7 +4745,13 @@ const server = http.createServer(async (req, res) => {
 
   // 向量索引状态
   if (p === '/api/wiki/vectors/stats' && req.method === 'GET') {
-    return json(res, 200, { ok: true, ready: vectors.isVectorReady(), stats: vectors.vectorStats() });
+    return json(res, 200, {
+      ok: true,
+      ready: vectors.isVectorReady(),
+      stats: vectors.vectorStats(),
+      // build = 最近一次 buildVectorIndex 的运行态，供前端轮询 fire-and-forget 重建的错误
+      build: typeof vectors.getBuildStatus === 'function' ? vectors.getBuildStatus() : null
+    });
   }
 
   if (p === '/api/wiki/search-suggest') {
@@ -4671,7 +5076,8 @@ const server = http.createServer(async (req, res) => {
         const answer = await queryWiki(question);
         return json(res, 200, { answer });
       } catch (e) {
-        return json(res, 500, { error: `查询失败: ${e.message}` });
+        console.error('[wiki] 查询失败:', e && e.stack || e);
+        return json(res, 500, { error: '服务端错误' });
       }
     });
     return;
@@ -4886,7 +5292,7 @@ const server = http.createServer(async (req, res) => {
       }
       const content = fs.readFileSync(path.join(REPORTS_DIR, files[0]), 'utf-8');
       return json(res, 200, JSON.parse(content));
-    } catch (e) { return json(res, 500, { error: '读取报告失败: ' + e.message }); }
+    } catch (e) { console.error('[reports] 读取报告失败:', e && e.stack || e); return json(res, 500, { error: '服务端错误' }); }
   }
 
   // GET /api/reports/:date — 指定日期报告
@@ -4950,7 +5356,8 @@ const server = http.createServer(async (req, res) => {
     req.on('end', () => {
       try {
         const parsed = JSON.parse(body);
-        const { provider, apiKey, model, customBaseUrl, wikiLang, providers, pipeline } = parsed;
+        // apiKey 字段若前端误发一律忽略；密钥只允许通过环境变量 WIKI_API_KEY 注入，绝不落盘。
+        const { provider, model, customBaseUrl, wikiLang, providers, pipeline } = parsed;
         const config = loadConfig();
         if (provider) config.provider = provider;
         if (typeof model === 'string') config.model = model;
@@ -4971,8 +5378,6 @@ const server = http.createServer(async (req, res) => {
           config.pipeline = merged;
         }
         saveConfig(config);
-        // apiKey 单独存储到 .api-key 文件
-        if (typeof apiKey === 'string' && apiKey.trim()) saveApiKey(apiKey.trim());
         return json(res, 200, { ok: true });
       } catch (e) { return json(res, 400, { error: e.message }); }
     });
@@ -5064,7 +5469,8 @@ const server = http.createServer(async (req, res) => {
         }
         return json(res, 200, sources);
       } catch (e) {
-        return json(res, 500, { error: 'Failed to load sources: ' + e.message });
+        console.error('[autotask] Failed to load sources:', e && e.stack || e);
+        return json(res, 500, { error: '服务端错误' });
       }
     }
 
@@ -5110,6 +5516,7 @@ const server = http.createServer(async (req, res) => {
           } else if (sourceType === 'webpage') {
             items = await fetchWebpageLinks(sourceConfig.url, sourceConfig.selector);
           } else if (sourceType === 'api') {
+            await assertSafeUrl(sourceConfig.url);
             const raw = await new Promise((resolve, reject) => {
               const mod = sourceConfig.url.startsWith('https') ? https : http;
               const r = mod.get(sourceConfig.url, { headers: { 'User-Agent': 'WikiBot/1.0' } }, resp => {
@@ -5130,7 +5537,15 @@ const server = http.createServer(async (req, res) => {
           }
           const maxItems = (sourceConfig && sourceConfig.maxItems) || 10;
           return json(res, 200, { items: items.slice(0, maxItems), total: items.length });
-        } catch (e) { return json(res, 500, { error: e.message }); }
+        } catch (e) {
+          // URL 合法性 / SSRF 拦截 → 400（err.message 形如 "blocked private ip: ..." / "invalid url"，
+          // 对用户可见且不泄露内部路径）
+          if (isBlockedUrlError(e)) {
+            return json(res, 400, { error: e.message });
+          }
+          console.error('[autotask] test-source failed:', e && e.stack || e);
+          return json(res, 500, { error: '服务端错误' });
+        }
       });
       return;
     }
