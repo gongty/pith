@@ -22,6 +22,8 @@ const state = {
   foldedDates: new Set(),
   batchFiles: [], // [{name,content,checked}]
   gs: null,       // graph state
+  pendingModel: null,        // {provider, model} 暂存用户切换，尚未创建会话时
+  currentConvOverride: null, // {provider, model} 当前会话覆盖，用于 composer 展示
 };
 
 export default state;

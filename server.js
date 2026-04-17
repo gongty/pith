@@ -180,15 +180,15 @@ const BUILTIN_PROVIDERS = {
     name: '百炼 (阿里云)',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     format: 'openai',
-    defaultModel: 'qwen3.6-plus',
-    // 精简为 5 个主力模型（strong ×2 + main ×2 + fast ×1）
+    defaultModel: 'qwen-plus',
+    // 使用 dashscope 真实存在的模型 ID（OpenAI 兼容模式）
     // 视觉 qwen-vl-max-latest 在 compileArticle 里硬编码兜底，无需列在这里
     models: [
-      { id: 'qwen3-max',        label: 'Qwen3 Max',        use: 'strong', thinkingCapable: true, defaultThinking: false },
-      { id: 'glm-5.1',          label: 'GLM-5.1',          use: 'strong', thinkingCapable: true, defaultThinking: true  },
-      { id: 'qwen3.6-plus',     label: 'Qwen 3.6 Plus',    use: 'main',   thinkingCapable: true, defaultThinking: false },
-      { id: 'kimi-k2.5',        label: 'Kimi K2.5',        use: 'main',   thinkingCapable: true, defaultThinking: false },
-      { id: 'qwen-plus-latest', label: 'Qwen Plus (快/省)', use: 'fast',   thinkingCapable: true, defaultThinking: false }
+      { id: 'qwen-max',         label: 'Qwen Max (强)',     use: 'strong' },
+      { id: 'qwen-max-latest',  label: 'Qwen Max Latest',   use: 'strong' },
+      { id: 'qwen-plus',        label: 'Qwen Plus (主力)',  use: 'main'   },
+      { id: 'qwen-plus-latest', label: 'Qwen Plus Latest',  use: 'main'   },
+      { id: 'qwen-turbo',       label: 'Qwen Turbo (快/省)', use: 'fast'  }
     ]
   },
   openrouter: {
@@ -687,13 +687,20 @@ async function callLLM(systemPrompt, messages, overrides, opts = {}) {
 
 function callLocalCLI(prompt) {
   return new Promise((resolve, reject) => {
-    const child = spawn('claude', ['-p', prompt, '--allowedTools', 'Read,Write,Edit,Glob,Grep'], { cwd: ROOT });
-    let output = '';
-    child.stdout.on('data', d => output += d);
-    child.stderr.on('data', d => output += d);
+    // stdio:['ignore',...] 等价于 `< /dev/null`：Claude CLI 未指定 stdin 时会等 3s 并往
+    // stderr 打一行 "Warning: no stdin data received in 3s..."，原实现把 stderr 合进
+    // stdout，于是 JSON 解析场景（autotask/configure 等）会被这段 warning 污染导致失败。
+    const child = spawn('claude', ['-p', prompt, '--allowedTools', 'Read,Write,Edit,Glob,Grep'], {
+      cwd: ROOT,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', d => stdout += d);
+    child.stderr.on('data', d => stderr += d);
     child.on('close', code => {
-      if (code === 0) resolve(output.trim());
-      else reject(new Error(`CLI exited ${code}: ${output.slice(-300)}`));
+      if (code === 0) resolve(stdout.trim());
+      else reject(new Error(`CLI exited ${code}: ${(stderr || stdout).slice(-300)}`));
     });
   });
 }
@@ -713,10 +720,15 @@ async function compileArticle(topicDir, filename, filePath, task, overrides) {
       const memCtxCli = buildMemoryContext();
       const bioPart = memCtxCli ? ` ${memCtxCli}。请根据用户背景调整文章深度和侧重点。` : (() => { const profile = loadProfile(); return profile && profile.bio ? ` 用户背景：${profile.bio}。请根据用户背景调整文章深度和侧重点。` : ''; })();
       const prompt = `你是知识库编译助手。${COMPILE_RULES}\n\n请对刚存入的原始素材 data/raw/${topicDir}/${filename} 执行编译：\n1. 读取素材内容\n2. 读取 data/wiki/index.md 了解已有文章\n3. 编译成文章写入 data/wiki/ 对应主题目录\n4. 更新 data/wiki/index.md 和 data/wiki/log.md\nWiki 语言使用中文。${bioPart}`;
-      const child = spawn('claude', ['-p', prompt, '--allowedTools', 'Read,Write,Edit,Glob,Grep'], { cwd: ROOT });
-      let output = '';
-      child.stdout.on('data', d => output += d);
-      child.stderr.on('data', d => output += d);
+      // 同 callLocalCLI：stdin 必须 ignore，否则 CLI 会等 3s 并把 warning 打到 stderr。
+      const child = spawn('claude', ['-p', prompt, '--allowedTools', 'Read,Write,Edit,Glob,Grep'], {
+        cwd: ROOT,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', d => stdout += d);
+      child.stderr.on('data', d => stderr += d);
       child.on('close', code => {
         if (code === 0) {
           const afterFiles = walkMd(WIKI).map(f => path.relative(WIKI, f));
@@ -726,7 +738,7 @@ async function compileArticle(topicDir, filename, filePath, task, overrides) {
           indexCache.invalidate('index');
           wikiCache.invalidate();
         } else {
-          task.status = 'error'; task.message = `编译失败: ${output.slice(-200)}`;
+          task.status = 'error'; task.message = `编译失败: ${(stderr || stdout).slice(-200)}`;
         }
         resolve();
       });
@@ -739,12 +751,44 @@ async function compileArticle(topicDir, filename, filePath, task, overrides) {
 
 // ── 编译管线（API 模式） ──
 
+// 显示层文本脱敏：标题/摘要在写 index.md / log.md 之前要过一遍。
+// 用户红线"严禁 emoji（包括文档）"覆盖到 index.md，LLM 生成的英文新闻标题常
+// 自带 emoji / 箭头 / 弯引号，不过一遍会污染全站 UI。不处理中文标点和 `-`。
+function sanitizeDisplayText(text) {
+  if (!text) return '';
+  let s = String(text);
+  // Emoji 三块 + VS/ZWJ
+  s = s.replace(/[\u2600-\u27BF\u2B00-\u2BFF\uFE0E\uFE0F\u200D]/g, '');
+  s = s.replace(/[\u{1F000}-\u{1FFFF}]/gu, '');
+  // 箭头块（→ ← ↔ 等）换成空格，保持断句
+  s = s.replace(/[\u2190-\u21FF]/g, ' ');
+  // 弯引号 → 直引号（不删，保留阅读）
+  s = s.replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"');
+  // 折叠多余空格
+  s = s.replace(/\s+/g, ' ').trim();
+  // markdown 表格里 `|` 是分隔符，emoji 清掉后可能残留 trailing `|`，这里顺手转义
+  s = s.replace(/\|/g, '\\|');
+  return s;
+}
+
 // 简单中英文 slug 化：去符号、空格→'-'、转小写（保留中文字符）
 function slugifyTitle(title) {
   if (!title) return `article-${Date.now()}`;
   let s = String(title).trim();
-  // 去掉常见符号
-  s = s.replace(/[\/\\:*?"<>|#`~!@$%^&()+=\[\]{};,.]/g, ' ');
+  // 1) 先干掉会击穿前端 inline onclick JS 字符串的字符（直引号/弯引号/反引号）
+  //    以及一切 emoji / 图形符号（用户红线："严禁 emoji"，包括文件名）。
+  //    Unicode 范围覆盖：Misc Symbols & Dingbats (U+2600-27BF),
+  //    Supplemental Symbols (U+2B00-2BFF), Emoji 主体 (U+1F000-1FFFF)，
+  //    Variation Selectors (U+FE0F / U+FE0E)，Zero-Width Joiner (U+200D).
+  s = s.replace(/[\u2018\u2019\u201C\u201D\u2014\u2013'"`]/g, ' ');
+  s = s.replace(/[\u2600-\u27BF\u2B00-\u2BFF\uFE0E\uFE0F\u200D]/g, '');
+  s = s.replace(/[\u{1F000}-\u{1FFFF}]/gu, '');
+  // Arrows block (→ ← ↔ 等)；新闻标题里常被当分隔符用
+  s = s.replace(/[\u2190-\u21FF]/g, ' ');
+  // 2) 常见 ASCII 符号
+  s = s.replace(/[\/\\:*?<>|#~!@$%^&()+=\[\]{};,.]/g, ' ');
+  // 3) 兜底白名单：只保留 ASCII 字母数字 + CJK + 空格 + 连字符，其余一律去掉
+  s = s.replace(/[^a-zA-Z0-9\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af\s-]/g, '');
   s = s.replace(/\s+/g, '-');
   s = s.replace(/-+/g, '-');
   s = s.replace(/^-|-$/g, '');
@@ -1255,7 +1299,10 @@ ${existingTagsStr}
     await (writeLock = writeLock.catch(() => {}).then(() => {
       const indexPath = path.join(WIKI, 'index.md');
       let idx = ''; try { idx = fs.readFileSync(indexPath, 'utf-8'); } catch { idx = '# Knowledge Base Index\n'; }
-      const newEntry = `| [${articleTitle}](${articleTopic}/${articleFilename}) | ${articleSummary || ''} | ${today} |`;
+      // 显示文本走脱敏（emoji/箭头/弯引号/管道符），路径保持原样
+      const displayTitle = sanitizeDisplayText(articleTitle);
+      const displaySummary = sanitizeDisplayText(articleSummary || '');
+      const newEntry = `| [${displayTitle}](${articleTopic}/${articleFilename}) | ${displaySummary} | ${today} |`;
       const topicHeader = `### ${articleTopic}`;
       if (idx.includes(topicHeader)) {
         const lines = idx.split('\n');
@@ -1280,7 +1327,7 @@ ${existingTagsStr}
 
       const logPath = path.join(WIKI, 'log.md');
       let log = ''; try { log = fs.readFileSync(logPath, 'utf-8'); } catch { log = '# Wiki Log\n'; }
-      log += `\n## [${today}] ingest | ${articleTitle}\n`;
+      log += `\n## [${today}] ingest | ${sanitizeDisplayText(articleTitle)}\n`;
       fs.writeFileSync(logPath, log, 'utf-8');
 
       indexCache.invalidate('index');
@@ -2672,6 +2719,21 @@ async function extractURLReadability(url, rawDir) {
     }
     // 2) HTML：原有流程
     const html = buf.toString('utf-8');
+
+    // Bot / Cloudflare challenge 页识别：这类页面正文很短但不为空，Readability
+    // 仍能抽出几句"Enable JavaScript and cookies / Just a moment ..."，被当作
+    // 有效内容喂给 LLM 后会编出占位式空壳文章。直接判为抓取失败。
+    const headSnippet = html.slice(0, 6000).toLowerCase();
+    const challengeHit =
+      /just a moment/.test(headSnippet) ||
+      /enable javascript and cookies/.test(headSnippet) ||
+      /checking your browser/.test(headSnippet) ||
+      /cf-(chl|browser-verification|challenge|ray)/.test(headSnippet) ||
+      (/cloudflare/.test(headSnippet) && /(challenge|verify|attention)/.test(headSnippet));
+    if (challengeHit) {
+      return `[Fetch failed: 反爬虫验证页（Cloudflare/Bot challenge），未抓到实质内容]\n\nURL: ${url}`;
+    }
+
     if (Readability && JSDOM) {
       try {
         const dom = new JSDOM(html, { url });
@@ -3198,10 +3260,26 @@ ${itemBlocks || '(空)'}`;
   }
 }
 
+// In-process guard: 防止同一 task 被 scheduler / 手动触发并发执行。
+// 根因：scheduler 仅在 run 结束后才写 lastRunAt，若 run 时长 > 5 分钟 scheduler tick 间隔，
+// 下一轮 tick 仍会再触发一次；三个并发 run 各自读到旧的 dedup snapshot，
+// 最终同一 URL 被 compileArticle 处理多次，产生多篇指向同一原文的文章。
+const runningAutotasks = new Set();
+
 async function executeAutotask(taskId, isManual = false, presetRunId = null) {
   const tasks = loadAutotasks();
   const rawTask = tasks.find(t => t.id === taskId);
   if (!rawTask) throw new Error('任务不存在');
+
+  // 原子互斥：若该 task 已在执行，直接拒绝。
+  if (runningAutotasks.has(taskId)) {
+    const err = new Error('该任务已在执行中，跳过重复触发');
+    err.code = 'AUTOTASK_ALREADY_RUNNING';
+    throw err;
+  }
+  runningAutotasks.add(taskId);
+
+  try {
   const task = normalizeTask(rawTask);
 
   const modelOverrides = (task.provider && task.model) ? { provider: task.provider, model: task.model } : null;
@@ -3426,6 +3504,28 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
 
         const extractedText = await extractContent('url', null, null, item.url, rawDir);
 
+        // 内容质量守卫：抓取失败/反爬拦截/内容过短时不入库。
+        // 背景：extractURLReadability 在失败路径上不 throw，而是返回形如
+        // "[Fetch failed: ...]" 的占位字符串。以前这串字符也被当作"有效素材"
+        // 塞给 compileArticle，LLM 被迫按"结构化"要求硬编出"采集状态说明"这类
+        // 空壳文章入库，污染知识库。
+        const extractedTrim = (extractedText || '').trim();
+        const EXTRACT_FAIL_PREFIXES = ['[Fetch failed:', '[Fetched content too short]', '[PDF 文本提取为空'];
+        const isFailMarker = EXTRACT_FAIL_PREFIXES.some(m => extractedTrim.startsWith(m));
+        // 300 字符阈值：正常文章至少一段话，低于此量的网页基本只能是拦截页 / 纯导航 / 404。
+        const tooShort = extractedTrim.length < 300;
+        if (!extractedTrim || isFailMarker || tooShort) {
+          if (rec) {
+            rec.status = 'fetch_error';
+            rec.reason = isFailMarker
+              ? extractedTrim.split('\n')[0].slice(0, 120)
+              : (tooShort ? `抓取内容过短 (${extractedTrim.length} 字符)` : '抓取内容为空');
+          }
+          run.itemsSkipped++;
+          persistRun();
+          continue;
+        }
+
         // Content-level dedup
         if (extractedText) {
           const hash = contentHash(extractedText);
@@ -3519,6 +3619,9 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
 
   persistRun();
   return run;
+  } finally {
+    runningAutotasks.delete(taskId);
+  }
 }
 
 // ── 服务器 ──
@@ -3653,6 +3756,25 @@ const server = http.createServer(async (req, res) => {
             saveChat(conv);
             updateChatIndex(conv);
             return json(res, 200, { ok: true });
+          } catch (e) { return json(res, 400, { error: e.message }); }
+        });
+        return;
+      }
+
+      // PUT /api/chat/:id/model — 切换会话使用的模型/提供方
+      if (subPath === 'model' && req.method === 'PUT') {
+        let body = '';
+        req.on('data', c => body += c);
+        req.on('end', () => {
+          try {
+            const { provider, model } = JSON.parse(body);
+            const conv = loadChat(convId);
+            if (!conv) return json(res, 404, { error: '对话不存在' });
+            if (typeof provider === 'string' && provider) conv.provider = provider;
+            if (typeof model === 'string' && model) conv.model = model;
+            saveChat(conv);
+            updateChatIndex(conv);
+            return json(res, 200, { ok: true, provider: conv.provider, model: conv.model });
           } catch (e) { return json(res, 400, { error: e.message }); }
         });
         return;
@@ -5214,10 +5336,19 @@ ${JSON.stringify(libBrief, null, 2)}`;
             return json(res, 502, { error: 'LLM 调用失败', detail: e.message });
           }
 
-          let cleaned = String(raw || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-          let parsed;
-          try { parsed = JSON.parse(cleaned); }
-          catch { return json(res, 502, { error: 'AI 解析失败', raw: String(raw || '').slice(0, 500) }); }
+          // 鲁棒抽取：先剥 markdown 围栏；解析失败则从首个 '{' 到末尾 '}' 再试一次
+          // （处理 LLM/CLI 前后附带的说明文字、stderr 警告等杂质）。
+          const cleaned0 = String(raw || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+          let parsed = null;
+          try { parsed = JSON.parse(cleaned0); } catch {}
+          if (!parsed) {
+            const first = cleaned0.indexOf('{');
+            const last = cleaned0.lastIndexOf('}');
+            if (first >= 0 && last > first) {
+              try { parsed = JSON.parse(cleaned0.slice(first, last + 1)); } catch {}
+            }
+          }
+          if (!parsed) return json(res, 502, { error: 'AI 解析失败', raw: String(raw || '').slice(0, 500) });
 
           const libIds = new Set(library.map(s => s.id));
           let selected = Array.isArray(parsed.selectedSourceIds) ? parsed.selectedSourceIds : [];
@@ -5573,11 +5704,20 @@ if (require.main === module) setInterval(() => {
       }
 
       if (shouldRun) {
+        // 防并发：长任务跨越 scheduler tick 时避免重复触发。
+        if (runningAutotasks.has(task.id)) {
+          console.log(`[AutoTask] 跳过调度（已在运行）: ${task.name}`);
+          return;
+        }
         console.log(`[AutoTask] 执行任务: ${task.name}`);
         __diagAppend(CRASH_LOG, `[${new Date().toISOString()}] AUTOTASK_START id=${task.id} name=${task.name} schedule=${task.schedule}`);
         executeAutotask(task.id, false)
           .then(() => __diagAppend(CRASH_LOG, `[${new Date().toISOString()}] AUTOTASK_DONE id=${task.id} name=${task.name}`))
           .catch(e => {
+            if (e && e.code === 'AUTOTASK_ALREADY_RUNNING') {
+              console.log(`[AutoTask] 跳过重复触发: ${task.name}`);
+              return;
+            }
             console.error(`[AutoTask] 任务失败: ${task.name}`, e.message);
             crashLog(`AUTOTASK_REJECT id=${task.id} name=${task.name}`, e);
           });

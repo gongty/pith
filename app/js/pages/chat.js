@@ -1,4 +1,4 @@
-import { $, h, api, post, put, apiDel, toast, go, skelLines, typeEffect } from '../utils.js';
+import { $, h, api, post, put, apiDel, toast, go, skelLines, typeEffect, jsAttr } from '../utils.js';
 import state from '../state.js';
 import { buildComposer, initComposer } from '../composer.js';
 import { fmtChat } from '../markdown.js';
@@ -16,10 +16,10 @@ export async function rChatList(c) {
     } else {
       list.forEach(ch => {
         const d = ch.updatedAt ? new Date(ch.updatedAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) : '';
-        s += '<div class="chat-list-item" onclick="go(\'#/chat/' + h(ch.id) + '\')">';
+        s += '<div class="chat-list-item" onclick="go(\'#/chat/' + jsAttr(ch.id) + '\')">';
         s += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>';
         s += '<div class="chat-list-item-info"><div class="chat-list-item-title">' + h(ch.title) + '</div><div class="chat-list-item-date">' + d + '</div></div>';
-        s += '<button class="chat-list-item-del" onclick="event.stopPropagation();delChat(\'' + h(ch.id) + '\')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>';
+        s += '<button class="chat-list-item-del" onclick="event.stopPropagation();delChat(\'' + jsAttr(ch.id) + '\')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>';
         s += '</div>';
       });
     }
@@ -35,6 +35,8 @@ export { delChat as archiveChat };
 export async function rChat(c, id) {
   if (!id) {
     state.convId = null;
+    // 新会话没有持久化 override，清掉以免串色到 composer
+    state.currentConvOverride = null;
     if (state.pendingChat) {
       const text = state.pendingChat;
       state.pendingChat = null;
@@ -48,12 +50,18 @@ export async function rChat(c, id) {
     return;
   }
   c.innerHTML = '<div class="page-chat"><div class="chat-messages"><div class="chat-messages-inner">' + skelLines(6) + '</div></div></div>';
+  // 切会话时必须先对比再覆盖 convId：原先是 `state.convId = id; if (state.convId !== id)`，
+  // 条件恒为 false，一旦有过消息就再也不重新拉，导致所有对话显示同一份内容（必须刷新页面才恢复）。
+  const sameConv = state.convId === id && state.msgs.length > 0;
   state.convId = id;
   try {
-    if (!state.msgs.length || state.convId !== id) {
+    if (!sameConv) {
       const conv = await api('/api/chat/' + id);
       state.msgs = conv.messages || [];
-      state.convId = id;
+      // 记录本会话偏好模型，供 composer loadModels 展示
+      state.currentConvOverride = (conv && (conv.provider || conv.model))
+        ? { provider: conv.provider, model: conv.model }
+        : null;
     }
     renderChatPage(c);
   } catch (e) { c.innerHTML = '<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败: ' + h(e.message) + '</div>'; }
@@ -87,7 +95,7 @@ function renderChatPage(c) {
   }
 
   c.innerHTML = s;
-  initComposer('cp', chatSend);
+  initComposer('cp', chatSend, state.currentConvOverride);
   const msgsEl = $('chatMsgs'); if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
   updSidebarChats();
 }
@@ -123,13 +131,17 @@ export async function chatSend() {
   const inp = $('cpIn'); const t = inp.value.trim(); if (!t || state.chatBusy) return;
   state.chatBusy = true; $('cpSendBtn').disabled = true;
   const emptyState = document.querySelector('.chat-empty-state'); if (emptyState) emptyState.remove();
+  // 为本次发送生成唯一 id，占位符 / AI body 目标 dom id 都带 uid，避免叠发时 getElementById 拿到先前的元素。
+  const uid = 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+  const typId = 'chatTyp_' + uid;
+  const aiTypId = 'aiTyp_' + uid;
   state.msgs.push({ role: 'user', content: t });
   const msgsEl = $('chatMsgs');
   if (msgsEl) {
     const inner = msgsEl.querySelector('.chat-messages-inner');
     if (inner) {
       inner.innerHTML += renderMsg({ role: 'user', content: t });
-      inner.innerHTML += '<div class="chat-msg assistant" id="chatTyp"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body"><div class="chat-thinking"><span class="thinking-icon">🔍</span> 检索知识库…</div></div></div>';
+      inner.innerHTML += '<div class="chat-msg assistant" id="' + typId + '"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body"><div class="chat-thinking"><span class="thinking-icon">🔍</span> 检索知识库…</div></div></div>';
       msgsEl.scrollTop = msgsEl.scrollHeight;
     }
   }
@@ -138,7 +150,7 @@ export async function chatSend() {
   try {
     const sr = await api('/api/search?q=' + encodeURIComponent(t));
     const hits = (Array.isArray(sr) ? sr : sr.results || []).filter(r => !r.path.endsWith('index.md') && !r.path.endsWith('log.md')).slice(0, 5);
-    const typ0 = document.getElementById('chatTyp');
+    const typ0 = document.getElementById(typId);
     if (typ0 && hits.length > 0) {
       const body = typ0.querySelector('.chat-msg-body');
       if (body) {
@@ -154,63 +166,68 @@ export async function chatSend() {
   } catch {}
   try {
     if (!state.convId) {
-      const newRes = await post('/api/chat/new', { firstMessage: t });
+      const body = { firstMessage: t };
+      if (state.pendingModel) { Object.assign(body, state.pendingModel); }
+      const newRes = await post('/api/chat/new', body);
+      state.pendingModel = null;
       state.convId = newRes.conversation.id;
       state.msgs = [{ role: 'user', content: t }, newRes.message];
       state.chatList = null;
       history.replaceState(null, '', '#/chat/' + state.convId);
       updSidebarChats();
-      const typ = document.getElementById('chatTyp'); if (typ) typ.remove();
+      const typ = document.getElementById(typId); if (typ) typ.remove();
       if (msgsEl) { const inner = msgsEl.querySelector('.chat-messages-inner'); if (inner) { inner.innerHTML = state.msgs.map(m => renderMsg(m)).join(''); msgsEl.scrollTop = msgsEl.scrollHeight; } }
       state.chatBusy = false; $('cpSendBtn').disabled = false;
       return;
     }
     const res = await post('/api/chat/' + state.convId + '/message', { content: t });
     state.msgs.push(res.message);
-    const typ = document.getElementById('chatTyp'); if (typ) typ.remove();
-    if (msgsEl) {
-      const inner = msgsEl.querySelector('.chat-messages-inner');
-      if (inner) {
-        const msgEl = document.createElement('div');
-        msgEl.className = 'chat-msg assistant';
-        msgEl.innerHTML = '<div class="chat-msg-avatar">AI</div><div class="chat-msg-body" id="aiTypeTarget"></div>';
-        // Add actions placeholder
-        const actionsEl = document.createElement('div');
-        actionsEl.className = 'chat-msg-actions';
-        actionsEl.style.opacity = '0';
-        msgEl.appendChild(actionsEl);
-        inner.appendChild(msgEl);
-        const target = document.getElementById('aiTypeTarget');
-        const finalHtml = fmtChat(res.message.content);
-        const msg = res.message;
-        typeEffect(target, finalHtml, () => {
-          target.removeAttribute('id');
-          // Append references
-          if (msg.references && msg.references.length > 0) {
-            let refsHtml = '<div class="chat-refs">';
-            msg.references.forEach(r => { refsHtml += '<a class="chat-ref" href="#/article/' + h(r.path) + '" title="' + h(r.path) + '">' + h(r.title || r.path) + '</a>'; });
-            refsHtml += '</div>';
-            target.insertAdjacentHTML('beforeend', refsHtml);
-          }
-          // Show precipitate button
-          if (msg.id) {
-            actionsEl.innerHTML = '<button class="precip-btn" onclick="precipitateMsg(\'' + h(msg.id) + '\')" title="沉淀为知识"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg></button>';
-            actionsEl.style.opacity = '';
-          }
-          msgsEl.scrollTop = msgsEl.scrollHeight;
-        });
+    const typ = document.getElementById(typId);
+    if (typ && msgsEl) {
+      const msgEl = document.createElement('div');
+      msgEl.className = 'chat-msg assistant';
+      msgEl.innerHTML = '<div class="chat-msg-avatar">AI</div><div class="chat-msg-body" id="' + aiTypId + '"></div>';
+      // Add actions placeholder
+      const actionsEl = document.createElement('div');
+      actionsEl.className = 'chat-msg-actions';
+      actionsEl.style.opacity = '0';
+      msgEl.appendChild(actionsEl);
+      // 原地替换占位符，保证 AI 回复落在它本次发送对应的位置（叠发时不会串位）。
+      typ.replaceWith(msgEl);
+      const target = document.getElementById(aiTypId);
+      const finalHtml = fmtChat(res.message.content);
+      const msg = res.message;
+      typeEffect(target, finalHtml, () => {
+        target.removeAttribute('id');
+        // Append references
+        if (msg.references && msg.references.length > 0) {
+          let refsHtml = '<div class="chat-refs">';
+          msg.references.forEach(r => { refsHtml += '<a class="chat-ref" href="#/article/' + h(r.path) + '" title="' + h(r.path) + '">' + h(r.title || r.path) + '</a>'; });
+          refsHtml += '</div>';
+          target.insertAdjacentHTML('beforeend', refsHtml);
+        }
+        // Show precipitate button
+        if (msg.id) {
+          actionsEl.innerHTML = '<button class="precip-btn" onclick="precipitateMsg(\'' + h(msg.id) + '\')" title="沉淀为知识"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg></button>';
+          actionsEl.style.opacity = '';
+        }
         msgsEl.scrollTop = msgsEl.scrollHeight;
-      }
+        // 打字效果结束后再释放 busy 锁，防止期间叠发造成消息顺序错乱。
+        state.chatBusy = false;
+        const sb = $('cpSendBtn'); if (sb) sb.disabled = false;
+      });
+      msgsEl.scrollTop = msgsEl.scrollHeight;
     }
     state.chatList = null; updSidebarChats();
   } catch (e) {
-    const typ = document.getElementById('chatTyp'); if (typ) typ.remove();
+    const typ = document.getElementById(typId); if (typ) typ.remove();
     if (msgsEl) {
       const inner = msgsEl.querySelector('.chat-messages-inner');
       if (inner) inner.innerHTML += '<div class="chat-msg assistant"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body" style="color:var(--red)">错误: ' + h(e.message) + '</div></div>';
     }
+    // 出错分支同步释放，否则按钮永远灰
+    state.chatBusy = false; $('cpSendBtn').disabled = false;
   }
-  state.chatBusy = false; $('cpSendBtn').disabled = false;
 }
 
 /* ── Send new chat (from dashboard/search, already navigated) ── */
@@ -219,11 +236,14 @@ async function sendNewChat(text) {
   const sendBtn = document.getElementById('cpSendBtn');
   if (sendBtn) sendBtn.disabled = true;
   const msgsEl = $('chatMsgs');
+  const uid = 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+  const typId = 'chatTyp_' + uid;
+  const aiTypId = 'aiTyp_' + uid;
   // Show retrieval indicator
   if (msgsEl) {
     const inner = msgsEl.querySelector('.chat-messages-inner');
     if (inner) {
-      inner.innerHTML += '<div class="chat-msg assistant" id="chatTyp"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body"><div class="chat-thinking"><span class="thinking-icon">🔍</span> 检索知识库…</div></div></div>';
+      inner.innerHTML += '<div class="chat-msg assistant" id="' + typId + '"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body"><div class="chat-thinking"><span class="thinking-icon">🔍</span> 检索知识库…</div></div></div>';
       msgsEl.scrollTop = msgsEl.scrollHeight;
     }
   }
@@ -231,7 +251,7 @@ async function sendNewChat(text) {
   try {
     const sr = await api('/api/search?q=' + encodeURIComponent(text));
     const hits = (Array.isArray(sr) ? sr : sr.results || []).filter(r => !r.path.endsWith('index.md') && !r.path.endsWith('log.md')).slice(0, 5);
-    const typ0 = document.getElementById('chatTyp');
+    const typ0 = document.getElementById(typId);
     if (typ0 && hits.length > 0) {
       const body = typ0.querySelector('.chat-msg-body');
       if (body) {
@@ -246,52 +266,57 @@ async function sendNewChat(text) {
     }
   } catch {}
   try {
-    const res = await post('/api/chat/new', { firstMessage: text });
+    const body = { firstMessage: text };
+    if (state.pendingModel) { Object.assign(body, state.pendingModel); }
+    const res = await post('/api/chat/new', body);
+    state.pendingModel = null;
     state.convId = res.conversation.id;
     state.msgs = [{ role: 'user', content: text }, res.message];
     state.chatList = null;
     history.replaceState(null, '', '#/chat/' + state.convId);
     updSidebarChats();
-    const typ = document.getElementById('chatTyp'); if (typ) typ.remove();
-    if (msgsEl) {
-      const inner = msgsEl.querySelector('.chat-messages-inner');
-      if (inner) {
-        const msgEl = document.createElement('div');
-        msgEl.className = 'chat-msg assistant';
-        msgEl.innerHTML = '<div class="chat-msg-avatar">AI</div><div class="chat-msg-body" id="aiTypeTarget"></div>';
-        const actionsEl = document.createElement('div');
-        actionsEl.className = 'chat-msg-actions'; actionsEl.style.opacity = '0';
-        msgEl.appendChild(actionsEl);
-        inner.appendChild(msgEl);
-        const target = document.getElementById('aiTypeTarget');
-        const finalHtml = fmtChat(res.message.content);
-        const msg = res.message;
-        typeEffect(target, finalHtml, () => {
-          target.removeAttribute('id');
-          if (msg.references && msg.references.length > 0) {
-            let refsHtml = '<div class="chat-refs">';
-            msg.references.forEach(r => { refsHtml += '<a class="chat-ref" href="#/article/' + h(r.path) + '" title="' + h(r.path) + '">' + h(r.title || r.path) + '</a>'; });
-            refsHtml += '</div>';
-            target.insertAdjacentHTML('beforeend', refsHtml);
-          }
-          if (msg.id) {
-            actionsEl.innerHTML = '<button class="precip-btn" onclick="precipitateMsg(\'' + h(msg.id) + '\')" title="沉淀为知识"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg></button>';
-            actionsEl.style.opacity = '';
-          }
-          msgsEl.scrollTop = msgsEl.scrollHeight;
-        });
+    const typ = document.getElementById(typId);
+    if (typ && msgsEl) {
+      const msgEl = document.createElement('div');
+      msgEl.className = 'chat-msg assistant';
+      msgEl.innerHTML = '<div class="chat-msg-avatar">AI</div><div class="chat-msg-body" id="' + aiTypId + '"></div>';
+      const actionsEl = document.createElement('div');
+      actionsEl.className = 'chat-msg-actions'; actionsEl.style.opacity = '0';
+      msgEl.appendChild(actionsEl);
+      // 原地替换占位符，保证 AI 回复落在占位符的位置
+      typ.replaceWith(msgEl);
+      const target = document.getElementById(aiTypId);
+      const finalHtml = fmtChat(res.message.content);
+      const msg = res.message;
+      typeEffect(target, finalHtml, () => {
+        target.removeAttribute('id');
+        if (msg.references && msg.references.length > 0) {
+          let refsHtml = '<div class="chat-refs">';
+          msg.references.forEach(r => { refsHtml += '<a class="chat-ref" href="#/article/' + h(r.path) + '" title="' + h(r.path) + '">' + h(r.title || r.path) + '</a>'; });
+          refsHtml += '</div>';
+          target.insertAdjacentHTML('beforeend', refsHtml);
+        }
+        if (msg.id) {
+          actionsEl.innerHTML = '<button class="precip-btn" onclick="precipitateMsg(\'' + h(msg.id) + '\')" title="沉淀为知识"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg></button>';
+          actionsEl.style.opacity = '';
+        }
         msgsEl.scrollTop = msgsEl.scrollHeight;
-      }
+        // 打字效果结束后再释放 busy 锁
+        state.chatBusy = false;
+        const sb = document.getElementById('cpSendBtn'); if (sb) sb.disabled = false;
+      });
+      msgsEl.scrollTop = msgsEl.scrollHeight;
     }
   } catch (e) {
-    const typ = document.getElementById('chatTyp'); if (typ) typ.remove();
+    const typ = document.getElementById(typId); if (typ) typ.remove();
     if (msgsEl) {
       const inner = msgsEl.querySelector('.chat-messages-inner');
       if (inner) inner.innerHTML += '<div class="chat-msg assistant"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body" style="color:var(--red)">错误: ' + h(e.message) + '</div></div>';
     }
+    // 出错分支同步释放
+    state.chatBusy = false;
+    if (sendBtn) sendBtn.disabled = false;
   }
-  state.chatBusy = false;
-  if (sendBtn) sendBtn.disabled = false;
 }
 
 /* ── Precipitate (沉淀) ── */
