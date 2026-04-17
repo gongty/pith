@@ -545,6 +545,8 @@ function renderRunItems(run) {
   let s = '<div class="autotask-run-items">';
   items.forEach(it => {
     const status = it.status || 'unknown';
+    const isBrief = status === 'brief' || it.type === 'brief';
+    const isCompileError = status === 'compile_error';
     const isPending = status === 'kept_pending' || status === 'smart_fill_pending';
     // Treat as smart_fill (terminal/visible row) only when actually finalized,
     // not while still pending — otherwise the pending-branch below is unreachable
@@ -553,19 +555,55 @@ function renderRunItems(run) {
     const isGated = status === 'skipped' || status === 'gated_out';
     const isIngested = status === 'ingested';
     const titleStr = h(it.title || '无标题');
-    const titleHtml = it.articlePath
-      ? '<a href="#/article/' + h(it.articlePath) + '">' + titleStr + '</a>'
-      : (it.url ? '<a href="' + h(it.url) + '" target="_blank" rel="noopener">' + titleStr + '</a>' : titleStr);
+    // Brief row: title 指向简报文章; compile_error: 可点原 URL; 其他沿用现有逻辑
+    let titleHtml;
+    if (isBrief && it.articlePath) {
+      titleHtml = '<a href="#/article/' + h(it.articlePath) + '">' + titleStr + '</a>';
+    } else if (isCompileError) {
+      titleHtml = it.url
+        ? '<a href="' + h(it.url) + '" target="_blank" rel="noopener">' + titleStr + '</a>'
+        : titleStr;
+    } else {
+      titleHtml = it.articlePath
+        ? '<a href="#/article/' + h(it.articlePath) + '">' + titleStr + '</a>'
+        : (it.url ? '<a href="' + h(it.url) + '" target="_blank" rel="noopener">' + titleStr + '</a>' : titleStr);
+    }
     const itemKey = (taskId || '') + ':' + (runId || '') + ':' + (it.url || it.title || '');
     const fbKey = runId + ':' + (it.url || it.title || '');
     const fbDisabled = feedbackPending.has(fbKey);
     const upKey = fbDisabled ? ' disabled' : '';
 
     let rowClass = 'autotask-run-item';
-    if (isGated) rowClass += ' gated';
-    if (isSmartFill) rowClass += ' smart-fill';
+    if (isBrief) rowClass += ' brief';
+    else if (isCompileError) rowClass += ' error';
+    else if (isGated) rowClass += ' gated';
+    else if (isSmartFill) rowClass += ' smart-fill';
 
     s += '<div class="' + rowClass + '">';
+
+    // Brief 分支最优先:只渲染 badge + title,不走任何反馈/后续逻辑
+    if (isBrief) {
+      s += '<span class="autotask-run-item-badge-brief">简报</span>';
+      s += '<span class="autotask-run-item-title">' + titleHtml + '</span>';
+      s += '</div>';
+      void itemKey;
+      return;
+    }
+
+    // compile_error:红字错误文案 + 可选原始素材链接,不渲染反馈按钮
+    if (isCompileError) {
+      s += '<span class="autotask-run-item-title">' + titleHtml + '</span>';
+      let errText = '内容生成失败';
+      if (it.reason) errText += '：' + truncate(it.reason, 60);
+      s += '<span class="autotask-run-item-reason" style="color:var(--red)">' + h(errText) + '</span>';
+      if (it.rawArchivePath) {
+        s += '<a class="autotask-run-item-raw" href="/data/raw/' + h(it.rawArchivePath) + '" target="_blank" rel="noopener">查看原始素材</a>';
+      }
+      s += '</div>';
+      void itemKey;
+      return;
+    }
+
     if (isSmartFill) s += '<span class="autotask-item-badge">前 3 天</span>';
     s += '<span class="autotask-run-item-title">' + titleHtml + '</span>';
 

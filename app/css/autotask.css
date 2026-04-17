@@ -702,6 +702,18 @@
 .autotask-history-brief a:hover{text-decoration:underline}
 .autotask-run-item-pending{color:var(--fg-tertiary);font-style:italic}
 
+/* ── Run item: compile_error / brief 分支 ── */
+.autotask-run-item.error{border-left:3px solid var(--red)}
+.autotask-run-item.brief{border-left:3px solid var(--purple)}
+.autotask-run-item-raw{
+  margin-left:8px;color:var(--fg-tertiary);font-size:12px;text-decoration:underline;
+}
+.autotask-run-item-raw:hover{color:var(--fg-secondary)}
+.autotask-run-item-badge-brief{
+  display:inline-block;padding:2px 6px;border-radius:4px;
+  background:var(--purple);color:#fff;font-size:11px;margin-right:6px;
+}
+
 /* ── Responsive ── */
 @media(max-width:768px){
   .page-autotask{padding:20px 16px 120px}

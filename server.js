@@ -1022,6 +1022,8 @@ ${existingTagsStr}
 - 输出语言：${langInstruction}
 - 已有主题：${existingTopics.join(', ') || '（暂无）'}${bioContext}`;
 
+  // 记录 content 阶段的最后一条错误 message，供失败时拼入 throw。
+  let contentErrMsg = null;
   const contentP = (async () => {
     const s = startStage(task, 'content', '编译正文', { model: cfgC.model });
     let chosenModel = cfgC.model;
@@ -1051,10 +1053,12 @@ ${existingTagsStr}
           doneStage(s, { detail: `retry ok (${cfgC.retryModel}), ${(resp2 || '').length} chars`, model: cfgC.retryModel });
           return resp2;
         } catch (e2) {
+          contentErrMsg = (e2 && e2.message) || String(e2);
           errorStage(s, e2);
           return null;
         }
       } else {
+        contentErrMsg = (e && e.message) || String(e);
         errorStage(s, e);
         return null;
       }
@@ -1090,22 +1094,23 @@ ${existingTagsStr}
 
   let articleContent = contentResp;
   let articleTitle = '';
-  let contentErrored = !articleContent;
 
-  // 如果 content 彻底失败，用 rawBody 作为 fallback（截断 + 去二进制）
+  // content 阶段彻底失败：不再构造占位正文，而是把 rawBody 归档到
+  // data/raw/<topicDir>/failed/ 供用户事后排障，然后 throw 让主流程走 error 分支。
   if (!articleContent) {
-    const MAX_FALLBACK = 10000;
-    // 去掉控制字符（PDF/二进制残留），保留常见空白
-    let safeRaw = String(rawBody || '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-    // 如果出现 PDF magic 或大段非文本，视为不可用
-    const looksBinary = /%PDF-|stream\s*\n.{500,}endstream/.test(safeRaw) || (safeRaw.length > 0 && (safeRaw.match(/[\u4e00-\u9fff\w\s]/g) || []).length / safeRaw.length < 0.5);
-    if (looksBinary) {
-      safeRaw = '[原始素材为二进制/无法识别的内容，已省略。请检查素材来源或改用其他格式重试]';
-    } else if (safeRaw.length > MAX_FALLBACK) {
-      safeRaw = safeRaw.slice(0, MAX_FALLBACK) + `\n\n[已截断：原始素材共 ${safeRaw.length} 字，仅保留前 ${MAX_FALLBACK} 字]`;
+    try {
+      const topicDirForArchive = articleTopic || topicDir || 'general';
+      const failedDir = path.join(RAW, topicDirForArchive, 'failed');
+      fs.mkdirSync(failedDir, { recursive: true });
+      const slugTitle = slugifyTitle(fallbackTitle || 'untitled').replace(/\.md$/, '');
+      const archiveFile = `${Date.now()}-${slugTitle}.raw.md`;
+      const archiveAbs = path.join(failedDir, archiveFile);
+      fs.writeFileSync(archiveAbs, String(rawBody || ''), 'utf-8');
+      task.rawArchivePath = path.relative(RAW, archiveAbs);
+    } catch (archiveErr) {
+      console.warn('[compile] archive failed raw body failed:', archiveErr && archiveErr.message);
     }
-    articleTitle = fallbackTitle;
-    articleContent = `# ${articleTitle}\n\n> 注意：正文编译失败，以下为原始素材（已清理截断）。\n\n${safeRaw}`;
+    throw new Error('content-stage-failed: ' + (contentErrMsg || 'LLM empty'));
   } else {
     articleContent = stripOuterCodeFences(articleContent);
     // 从 content 第一行 "#..#### ..." 提取 LLM 生成的标题（优先 H1，兜底 H2-H6）
@@ -1383,7 +1388,7 @@ ${existingTagsStr}
     errorStage(persistStage, e);
     task.status = 'error';
     task.message = `编译失败: ${e.message}`;
-    return;
+    throw e;
   }
 
   task.created = [{
@@ -1392,13 +1397,8 @@ ${existingTagsStr}
     tags: articleTags,
     ...(task.similarityWarning ? { similarityWarning: task.similarityWarning } : {})
   }];
-  if (contentErrored) {
-    task.status = 'partial';
-    task.message = '编译完成（正文降级为原文）';
-  } else {
-    task.status = 'done';
-    task.message = '编译完成';
-  }
+  task.status = 'done';
+  task.message = '编译完成';
 }
 
 async function queryWiki(question) {
@@ -4605,6 +4605,10 @@ const server = http.createServer(async (req, res) => {
     }
 
     // ── 8. article node label ──
+    // 文章节点当前只在 focus popup 的列表里渲染（不画到 canvas 上），
+    // 过去在这里截到 14 字 + "…" 是给节点标签留的，现在留着反而让 popup
+    // 里永远显示被截断的标题 —— CSS 怎么改 white-space: normal 都救不回来，
+    // 因为字符串本身就带了"…"。保留去前缀逻辑，但不再截断长度。
     function labelForArticle(info, parentConceptLabel) {
       if (info.fmKeyword0 && info.fmKeyword0.length <= 12) return info.fmKeyword0;
       let t = info.title || '';
@@ -4612,7 +4616,6 @@ const server = http.createServer(async (req, res) => {
         const stripped = t.replace(new RegExp('^\\s*' + parentConceptLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*[的之\\-:：]\\s*'), '');
         if (stripped && stripped !== t) t = stripped;
       }
-      if (t.length > 14) t = t.slice(0, 14) + '…';
       return t || info.title || info.rel;
     }
 
@@ -5744,6 +5747,14 @@ const server = http.createServer(async (req, res) => {
           // 对用户可见且不泄露内部路径）
           if (isBlockedUrlError(e)) {
             return json(res, 400, { error: e.message });
+          }
+          // Source-level fetch failures（HTTP 404/5xx/timeout/too-many-redirects / RSS 解析失败）
+          // 对用户是有意义的诊断信息（"这条源坏了"），归 422 而不是 500，UI 能显示具体原因。
+          // 只有真正的内部异常（文件 IO / 未知错误）才吃 500。
+          const msg = (e && e.message) || '';
+          const sourceLevel = /^(HTTP \d+|Fetch timeout|too many redirects|invalid redirect target)/i.test(msg);
+          if (sourceLevel) {
+            return json(res, 422, { error: msg });
           }
           console.error('[autotask] test-source failed:', e && e.stack || e);
           return json(res, 500, { error: '服务端错误' });

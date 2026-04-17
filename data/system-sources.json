@@ -100,6 +100,26 @@
     "cadence": "daily"
   },
   {
+    "id": "arxiv-cs-sd",
+    "type": "rss",
+    "url": "http://export.arxiv.org/rss/cs.SD",
+    "label": "arXiv cs.SD",
+    "description": "arXiv Sound section: audio / music / speech processing preprints. Where most TTS, voice cloning, music generation papers land.",
+    "tags": ["ai", "papers", "research", "english", "preprint", "audio", "music"],
+    "lang": "en",
+    "cadence": "daily"
+  },
+  {
+    "id": "arxiv-eess-as",
+    "type": "rss",
+    "url": "http://export.arxiv.org/rss/eess.AS",
+    "label": "arXiv eess.AS",
+    "description": "arXiv Audio and Speech Processing (EE): DSP-heavy audio/speech work, often overlapping with cs.SD but includes more signal-processing papers.",
+    "tags": ["ai", "papers", "research", "english", "preprint", "audio", "speech"],
+    "lang": "en",
+    "cadence": "daily"
+  },
+  {
     "id": "the-gradient",
     "type": "rss",
     "url": "https://thegradient.pub/rss/",
@@ -158,16 +178,6 @@
     "tags": ["ai", "blog", "english", "long-form"],
     "lang": "en",
     "cadence": "irregular"
-  },
-  {
-    "id": "yannic-kilcher-yt",
-    "type": "rss",
-    "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCZHmQk67mSJgfCCTn7xBfew",
-    "label": "Yannic Kilcher (YouTube)",
-    "description": "Paper-walkthrough videos from researcher Yannic Kilcher, RSS via YouTube channel feed. Useful for tracking notable ML papers with video commentary.",
-    "tags": ["ai", "papers", "english", "video", "research"],
-    "lang": "en",
-    "cadence": "weekly"
   },
   {
     "id": "claude-code-changelog",
@@ -317,9 +327,9 @@
   {
     "id": "ifanr",
     "type": "rss",
-    "url": "https://www.ifanr.com/feed",
+    "url": "https://feeds.feedburner.com/ifanr",
     "label": "爱范儿 (ifanr)",
-    "description": "Chinese consumer tech and design publication: Apple-leaning hardware coverage, AI product reviews, lifestyle gadgets.",
+    "description": "Chinese consumer tech and design publication: Apple-leaning hardware coverage, AI product reviews, lifestyle gadgets. Using FeedBurner mirror; origin feed fails TLS from our IP.",
     "tags": ["china", "tech-news", "blog", "chinese", "consumer"],
     "lang": "zh",
     "cadence": "daily"
@@ -444,16 +454,6 @@
     "label": "UX Collective",
     "description": "Curated Medium publication on UX/product design. Mix of practitioner essays, case studies, design leadership pieces.",
     "tags": ["english", "design", "ux", "product"],
-    "lang": "en",
-    "cadence": "daily"
-  },
-  {
-    "id": "dribbble-popular",
-    "type": "rss",
-    "url": "https://dribbble.com/shots/popular.rss",
-    "label": "Dribbble Popular Shots",
-    "description": "Trending visual design shots: UI explorations, illustration, branding. Useful for visual inspiration sourcing.",
-    "tags": ["english", "design", "visual", "inspiration"],
     "lang": "en",
     "cadence": "daily"
   },
