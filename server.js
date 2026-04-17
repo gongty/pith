@@ -1241,6 +1241,15 @@ ${existingTagsStr}
     const fileContent = frontmatter ? `${frontmatter}${articleContent}` : articleContent;
     fs.writeFileSync(articlePath, fileContent, 'utf-8');
     relPath = `${articleTopic}/${articleFilename}`;
+    // 异步触发向量索引增量更新，失败不阻塞编译
+    setImmediate(() => {
+      try {
+        vectors.buildVectorIndex({ paths: [relPath] })
+          .catch(e => console.error('[vectors] post-compile reindex failed:', e && e.message));
+      } catch (e) {
+        console.error('[vectors] post-compile reindex threw:', e && e.message);
+      }
+    });
     const today = new Date().toISOString().slice(0, 10);
 
     await (writeLock = writeLock.catch(() => {}).then(() => {
@@ -1312,7 +1321,7 @@ async function queryWiki(question) {
   let indexContent = ''; try { indexContent = fs.readFileSync(path.join(WIKI, 'index.md'), 'utf-8'); } catch {}
 
   // Use shared retrieval
-  const { articleContents } = retrieveContext(question);
+  const { articleContents } = await retrieveContext(question);
 
   const bioQueryContext = memCtx ? `\n6. ${memCtx}` : (() => { const profile = loadProfile(); return profile && profile.bio ? `\n6. 用户背景：${profile.bio}。请根据用户背景调整回答的深度和专业程度` : ''; })();
 
@@ -1563,29 +1572,141 @@ function extractKeywords(filePath) {
 
 // ── Context Retrieval ──
 
-function retrieveContext(question) {
-  const searchResults = searchWiki(question);
+// 把一组 vector chunks 按 path 聚合为类 lexResults 的结构
+// 输入: Array<{path, title, chunkId, chunkText, score, heading, byteRange}>
+// 输出: Array<{title, path, matches}>（matches 为伪 match，兼容 lex shape）
+function aggregateByArticle(chunks) {
+  if (!Array.isArray(chunks) || chunks.length === 0) return [];
+  const byPath = new Map();
+  for (const c of chunks) {
+    if (!c || !c.path) continue;
+    const sc = Number.isFinite(c.score) ? c.score : 0;
+    let entry = byPath.get(c.path);
+    if (!entry) {
+      entry = {
+        path: c.path,
+        title: c.title || c.path,
+        score: sc,
+        hits: 1,
+        bestChunk: c
+      };
+      byPath.set(c.path, entry);
+    } else {
+      entry.hits += 1;
+      if (sc > entry.score) entry.score = sc;
+      if (!entry.bestChunk || sc > (entry.bestChunk.score || 0)) entry.bestChunk = c;
+    }
+  }
+  const out = [];
+  for (const entry of byPath.values()) {
+    const boosted = entry.score * (1 + Math.log(entry.hits) * 0.1);
+    const chunkText = (entry.bestChunk && entry.bestChunk.chunkText) || '';
+    const snippet = chunkText.slice(0, 200);
+    out.push({
+      title: entry.title,
+      path: entry.path,
+      matches: [{ line: 0, text: snippet, context: [chunkText] }],
+      __score: boosted,
+      __source: 'vec'
+    });
+  }
+  out.sort((a, b) => (b.__score || 0) - (a.__score || 0));
+  return out;
+}
+
+// Reciprocal Rank Fusion：两路 list 按 rank 融合，同 path 分数叠加
+// lex / vec 两路均为 [{title, path, matches, ...}]；输出同 shape 合并后按 RRF 降序
+function rrfFuse(lexResults, vecResults, k = 60) {
+  const K = Number.isFinite(k) && k > 0 ? k : 60;
+  const fused = new Map();
+  function addList(list, source) {
+    if (!Array.isArray(list)) return;
+    for (let i = 0; i < list.length; i++) {
+      const r = list[i];
+      if (!r || !r.path) continue;
+      const add = 1 / (K + (i + 1));
+      const existing = fused.get(r.path);
+      if (!existing) {
+        fused.set(r.path, {
+          title: r.title || r.path,
+          path: r.path,
+          matches: r.matches || [],
+          __rrf: add,
+          __sources: new Set([source]),
+          __lex: source === 'lex' ? r : null,
+          __vec: source === 'vec' ? r : null
+        });
+      } else {
+        existing.__rrf += add;
+        existing.__sources.add(source);
+        if (source === 'lex' && !existing.__lex) existing.__lex = r;
+        if (source === 'vec' && !existing.__vec) existing.__vec = r;
+        // 标题兜底：lex 没标题就用 vec 的
+        if (!existing.title && r.title) existing.title = r.title;
+      }
+    }
+  }
+  addList(lexResults, 'lex');
+  addList(vecResults, 'vec');
+
+  // 每篇文章择优 matches：优先 vec 的（语义更准），其次 lex
+  const merged = [];
+  for (const entry of fused.values()) {
+    const preferred = entry.__vec || entry.__lex;
+    const matches = (preferred && preferred.matches && preferred.matches.length > 0)
+      ? preferred.matches
+      : (entry.matches || []);
+    merged.push({
+      title: entry.title,
+      path: entry.path,
+      matches,
+      __rrf: entry.__rrf
+    });
+  }
+  merged.sort((a, b) => (b.__rrf || 0) - (a.__rrf || 0));
+  return merged;
+}
+
+// 把融合后的 top N 渲染成 {articleContents, references} 形状
+function buildContextShape(top) {
   const articleContents = [];
   const references = [];
   const seen = new Set();
-
-  // Only include actual articles (skip index.md / log.md), max 5
-  const filtered = searchResults.filter(r => !['index.md', 'log.md'].includes(r.path.split('/').pop()));
-  for (const r of filtered.slice(0, 5)) {
+  const filtered = (top || []).filter(r => r && r.path && !['index.md', 'log.md'].includes(r.path.split('/').pop()));
+  for (const r of filtered) {
     if (seen.has(r.path)) continue;
     seen.add(r.path);
     try {
       let content = wikiCache.get(r.path);
       if (!content) { content = fs.readFileSync(path.join(WIKI, r.path), 'utf-8'); wikiCache.set(r.path, content); }
-      // Truncate long articles to avoid blowing up the context
       const truncated = content.length > 4000 ? content.slice(0, 4000) + '\n\n...(内容已截断)' : content;
       articleContents.push(`### ${r.title} (${r.path})\n\n${truncated}`);
       references.push({ path: r.path, title: r.title });
     } catch {}
   }
-
-  // No fallback — if nothing matches, the AI answers from its own knowledge
   return { articleContents, references };
+}
+
+async function retrieveContext(question) {
+  const lexResults = searchWiki(question);
+  let vecResults = [];
+  try {
+    if (vectors && typeof vectors.isVectorReady === 'function' && vectors.isVectorReady()) {
+      const cfg = getFullConfig();
+      const topK = (cfg && cfg.ask && Number.isFinite(cfg.ask.topK)) ? cfg.ask.topK : 20;
+      const chunks = await vectors.vectorSearch(question, { topK });
+      vecResults = aggregateByArticle(chunks);
+    }
+  } catch (e) {
+    console.error('[retrieve] vector search failed, fallback to lex only:', e && e.message);
+  }
+
+  const cfg = getFullConfig();
+  const rrfK = (cfg && cfg.ask && Number.isFinite(cfg.ask.rrfK)) ? cfg.ask.rrfK : 60;
+  const fuseTopN = (cfg && cfg.ask && Number.isFinite(cfg.ask.fuseTopN)) ? cfg.ask.fuseTopN : 5;
+  const fused = rrfFuse(lexResults, vecResults, rrfK);
+  const top = fused.slice(0, fuseTopN);
+  return buildContextShape(top);
 }
 
 // ── Token Estimation ──
@@ -1701,7 +1822,7 @@ async function handleChatMessage(conv, userContent, overrides) {
   conv.messages.push(userMsg);
 
   // Retrieve wiki context
-  const { articleContents, references } = retrieveContext(userContent);
+  const { articleContents, references } = await retrieveContext(userContent);
 
   // Get wiki index (cached)
   let wikiIndex = indexCache.get('index');

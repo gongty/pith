@@ -6,3 +6,6 @@ data/*
 node_modules/
 start.sh
 .claude/
+test-vectors.sh
+test-ask.sh
+config.json.bak
