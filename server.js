@@ -1160,8 +1160,18 @@ ${existingTagsStr}
   {
     const s = startStage(task, 'filename', '生成文件名', { source: 'code' });
     try {
-      articleFilename = slugifyTitle(articleTitle);
-      doneStage(s, { detail: articleFilename });
+      let base = slugifyTitle(articleTitle);
+      // 防撞名：同 topic 下若文件已存在，追加 -2 / -3 ... 直到唯一，不覆盖他人的文章
+      const topicAbs = path.join(WIKI, articleTopic);
+      const stem = base.replace(/\.md$/, '');
+      let candidate = `${stem}.md`;
+      let n = 2;
+      while (fs.existsSync(path.join(topicAbs, candidate))) {
+        candidate = `${stem}-${n}.md`;
+        n += 1;
+      }
+      articleFilename = candidate;
+      doneStage(s, { detail: articleFilename + (n > 2 ? ` (撞名避让 ${n - 1} 次)` : '') });
     } catch (e) {
       errorStage(s, e);
       articleFilename = `article-${Date.now()}.md`;
@@ -3960,6 +3970,7 @@ const server = http.createServer(async (req, res) => {
           const fp = safe(WIKI, relPath);
           if (!fp) return json(res, 400, { error: '无效路径' });
           if (typeof content !== 'string' || !content.trim()) return json(res, 400, { error: '正文不能为空' });
+          if (fs.existsSync(fp)) return json(res, 409, { error: '同名文件已存在，改用 PUT 编辑或换个文件名' });
           fs.mkdirSync(path.dirname(fp), { recursive: true });
           fs.writeFileSync(fp, content, 'utf-8');
           return json(res, 200, { ok: true, path: relPath });

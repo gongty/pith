@@ -30,7 +30,7 @@ Default port: 3456. First run `npm install` to install dependencies (pdf-parse, 
 Single-file raw Node.js HTTP server (~5400 lines). Key subsystems:
 
 - **LLM Integration** — 7 providers (Bailian/阿里云, OpenRouter, Anthropic, OpenAI, DeepSeek, custom, local Claude CLI). `callLLM()` is the universal entry point. `getFullConfig()` merges `loadConfig()` (provider/model) + `loadApiKey()` (env var only). `pickModelByUse(provider, use, cfg)` resolves use-key ('fast' / 'main' / 'strong') to concrete model id with fallback.
-- **Compilation Engine** — `runCompilePipeline()` is the 7-stage pipeline: title → topic → content+summary(parallel) → tags → filename → seealso → persist. Each stage tracked via `startStage`/`doneStage`/`errorStage`. Tags are piggybacked: LLM content stage emits `<!-- tags: a, b, c -->` trailer, extracted after content, stripped from body. Two compile modes: local CLI (spawns `claude` with tools) and API (server-driven JSON generation). Embedded rules in `COMPILE_RULES` constant.
+- **Compilation Engine** — `runCompilePipeline()` is the 7-stage pipeline: title → topic → content+summary(parallel) → tags → filename → seealso → persist. Each stage tracked via `startStage`/`doneStage`/`errorStage`. Tags are piggybacked: LLM content stage emits `<!-- tags: a, b, c -->` trailer, extracted after content, stripped from body. Two compile modes: local CLI (spawns `claude` with tools) and API (server-driven JSON generation). Embedded rules in `COMPILE_RULES` constant. **Defensive guards at persist**: (1) `slugifyTitle()` 清洗 emoji / 弯引号 / 箭头 / 控制符，避免脏字符击穿前端 inline onclick；(2) filename 阶段若同 topic 下已存在同名文件，自动追加 `-2/-3/...` 避让，不覆盖他人文章；(3) persist 拒绝写入 `articleContent.trim().length < 40` 的近空文章（宁抛错也不留 0 字节僵尸）；(4) 写 index.md / log.md 的显示文本走 `sanitizeDisplayText()` 剥 emoji / 转义管道符。
 - **Tag System** — Articles store tags as YAML frontmatter: `---\ntags: [a, b, c]\n---\n`. Core functions around line 1290-1410: `parseFrontmatter(content)` / `serializeFrontmatter(data)` / `extractTitle(fp)` (skips fm) / `extractTags(fp)` (frontmatter first; falls back to `extractKeywords` with `TAG_FALLBACK_STOP` filter for legacy articles) / `collectExistingTags(limit)` (frequency-sorted, fed to LLM prompts for semantic convergence). `runBackfillTags({force, useModel})` regenerates tags for articles missing them; exposed via `POST /api/wiki/backfill-tags?force=1&useModel=main`. **Any code that writes .md files must preserve frontmatter** — use `parseFrontmatter` + `serializeFrontmatter`, never raw string concat.
 - **Chat System** — JSON file storage in `data/chats/`. Per-conversation files `conv_*.json` + `_index.json` index. Supports context retrieval from wiki for RAG.
 - **Wiki Data & Graph** — `searchWiki()` for full-text search. `retrieveContext()` for chat RAG. `/api/wiki/tree` returns topic → children with `{title, tags, mtime}`. `/api/wiki/graph` builds 2-layer graph: explicit markdown links (see-also / reference edges) + tag co-occurrence edges with IDF weighting (tags shared by >50% of articles are dropped as too-common; dangling targets filtered via `fs.existsSync`). The standalone `buildGraph()` function (line ~1703) is legacy — the live graph API has its own inline logic.
@@ -90,6 +90,16 @@ data/reports/       → Lint/health check reports
 data/uploads/       → Uploaded files
 ```
 
+## Maintenance Scripts (`scripts/`)
+
+一次性 / 按需运行的知识库维护脚本。全都是 `node scripts/xxx.js`，默认 dry-run，加 `--apply` 才落盘。跑之前和跑之后都建议走一遍 `wiki-doctor.js` 核对。
+
+- **`wiki-doctor.js`** — 统一健康体检，只读。按 critical / warning / info 分档扫 6 类问题：零字节僵尸、disk↔index.md 不同步、脏文件名、shell 文章（编译失败占位）、文章内死链（wiki 内 / `../../raw/` / `#/article/`）、legacy 缺 frontmatter。每项给出对应 fix 命令。退出码 = critical 数，可进 CI / cron。
+- **`dedupe-wiki.js`** — 两种模式：默认按 `> 原文：[...]` 聚合找重复（保留 mtime 最早的）；`--shells` 模式按关键词 regex (`/正文编译失败/`、`/采集状态说明/` 等) 扫编译失败占位。`--apply` 删文件并同步清 `index.md` 里指向它们的表格行。
+- **`clean-seealso.js`** — 扫文章 body 里的 markdown 链接，按 wiki 内 / `../../raw/` / `#/article/` 三路分类校验。dead 链接若在列表项里整行删，否则降级为纯文本 `[x]`；删完若 `## See Also` / `## 相关阅读` section 整段空了把标题也干掉。保留 frontmatter。
+- **`rename-dirty-wiki.js`** — 把文件名里含 `'` / `"` / emoji / 弯引号 / 长破折号等脏字符的 .md 重命名为 slug 化版本（与 `slugifyTitle` 同口径），同时更新 `index.md` / `log.md` / 所有文章 body 里的 markdown 链接引用。冲突时追加 `-2/-3/...`。
+- **`bench.js`** — 向量语义检索 vs BM25 关键词检索并发 A/B 测试（对照 commit `bench 脚本: 向量 vs 关键词并发 A/B 测试`）。
+
 ## Secrets — 安全红线
 
 **API Key 只从环境变量 `WIKI_API_KEY` 读取，绝不落盘。**
@@ -120,6 +130,8 @@ data/uploads/       → Uploaded files
 - **CSS overflow rule**: When `overflow-y` is non-`visible`, browsers force `overflow-x` from `visible` to `auto`. Always set `overflow-x:hidden` explicitly on scroll containers to prevent unwanted horizontal scrollbars.
 - **Article frontmatter 必须保留**：所有 `data/wiki/**/*.md` 都有 `---\ntags: [...]\n---\n` 开头。编辑代码（前后端）动 .md 内容时，先用 `parseFrontmatter` 拆分 → 改 body → 用 `serializeFrontmatter` + body 拼回。前端 `markdown.js` 也导出了 `parseFrontmatter`，`renderMd` 会自动剥离 fm。直接字符串拼接或 regex 截断会丢失元数据。
 - **Graph 端点 vs buildGraph**：`/api/wiki/graph` 端点有自己的内联边生成逻辑（line ~3737），不调用老的 `buildGraph()` 函数（line ~1703）。修边权重 / 边类型要改端点，不要改函数。
+- **inline `onclick` 字符串必须用 `jsAttr()` 不能用 `h()`**：`h()` 只转义 `& < > "`，**不转义 `'`**。HTML attribute 解码发生在 JS 解析之前，所以用 `&#39;` 之类 entity 也救不了 — 文件名里一个 `'` 就能击穿 `onclick="go('#/article/...')"` 的字符串字面量。`utils.js` 导出的 `jsAttr(s)` 用 JS 级 `\u0027 \u0022 \u2028 \u2029 ...` 转义，HTML 解码后仍是合法 JS 字符串。规则：**凡是要塞进 `onclick="foo('...')"` 里 `'` 或 `"` 之间的变量，全用 `jsAttr()`**。`h()` 只适合放在 HTML 内容或 `title="..."` / `data-x="..."` 这种纯 attribute 场景。机器生成的 ID（`genId` 前缀 + 时间戳 + 随机字母数字）是安全的，但文件路径 / 用户输入 / 标题 slug 一律走 jsAttr。
+- **Article API 写入校验**：`POST /api/wiki/article` (新建) 会拒绝空 content（400）和同名已存在（409）。`PUT` (编辑) 允许覆盖但同样拒绝空 content。任何绕过这两个接口直接 `fs.writeFileSync` 到 `data/wiki/` 的代码都要自己做相同的防御。
 
 ## Conventions
 
