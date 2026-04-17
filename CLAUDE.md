@@ -155,7 +155,7 @@ data/uploads/       → Uploaded files
 - Wiki articles written in Chinese; raw materials preserve original language
 - Design tokens use CSS custom properties — change colors/radius in `base.css :root`, they cascade everywhere
 - Dark mode: `[data-theme="dark"]` overrides in each CSS file. Token overrides in `base.css`.
-- **Submodule 双提交流程**：本仓库是父仓库 `BLANK_work` 的 git submodule。改动后需要两次提交：先在 `wiki-app/` 内 `commit && push`，再回到父仓库 `git add wiki-app && commit` 更新 submodule 指针。Remote: `https://github.com/gongty/wiki-app.git`，branch `main`。
+- **提交流程**：本仓库是父仓库 `BLANK_work` 的 git submodule，但日常只在 `wiki-app/` 内 `commit && push`，**不要**再回到父仓库 `git add wiki-app` 更新 submodule 指针（用户偏好：父仓库 submodule ref 允许滞后，需要时由用户手动对齐）。Remote: `https://github.com/gongty/wiki-app.git`，branch `main`。
 
 ## UI 设计原则（红线）
 
