@@ -94,6 +94,7 @@ export async function rArticle(c, p) {
       delBtn.title = '删除文章'; delBtn.onclick = showDel;
       topActs.insertBefore(delBtn, topActs.firstChild);
     }
+    setupTitlePlainPaste();
     setupFormatToolbar();
     initTocSpy();
     setupSlashMenu();
@@ -221,6 +222,31 @@ async function autoSave() {
     state.artMd = fullMd; state.td = null;
     if (ind) { ind.textContent = '已保存'; setTimeout(() => ind.classList.remove('show'), 2000); }
   } catch { if (ind) { ind.textContent = '保存失败'; ind.style.color = 'var(--red)'; } }
+}
+
+/* ── Title: 纯文本粘贴 ──
+   标题 div 是 contenteditable，浏览器默认粘贴会保留 inline style（font-size 等），
+   导致"首字母用 2.5em、粘入文字用源站小字号"的混排。标题本就只存 innerText，
+   这里直接拦截 paste，只取 text/plain 并把换行压成空格。 */
+function setupTitlePlainPaste() {
+  const el = $('artTitle'); if (!el) return;
+  el.addEventListener('paste', e => {
+    e.preventDefault();
+    const cd = e.clipboardData || window.clipboardData;
+    const text = (cd && cd.getData('text/plain')) || '';
+    const clean = text.replace(/[\r\n\t]+/g, ' ').trim();
+    if (!clean) return;
+    document.execCommand('insertText', false, clean);
+  });
+  // 阻止把富文本拖入标题造成同样混排
+  el.addEventListener('drop', e => {
+    const cd = e.dataTransfer;
+    const text = (cd && cd.getData('text/plain')) || '';
+    if (!text) return;
+    e.preventDefault();
+    const clean = text.replace(/[\r\n\t]+/g, ' ').trim();
+    document.execCommand('insertText', false, clean);
+  });
 }
 
 /* ── Format toolbar ── */
