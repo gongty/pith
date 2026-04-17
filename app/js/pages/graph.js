@@ -237,16 +237,6 @@ export function initFG(canvas, data, full) {
     positionFocusCard();
   }
 
-  // hover 驱动的 focus：延迟关闭，让鼠标有机会穿到 popup 上
-  let unfocusTimer = null;
-  function cancelUnfocus() {
-    if (unfocusTimer) { clearTimeout(unfocusTimer); unfocusTimer = null; }
-  }
-  function scheduleUnfocus(delay) {
-    cancelUnfocus();
-    unfocusTimer = setTimeout(() => { unfocusTimer = null; if (focused) setFocus(null); }, delay == null ? 180 : delay);
-  }
-
   // 取当前 focus 概念下所有相关文章（按 tags 包含 concept.label 匹配, 不只看 parent）
   function articlesForConcept(c) {
     if (!c) return [];
@@ -484,14 +474,34 @@ export function initFG(canvas, data, full) {
       canvas.style.cursor = found ? 'pointer' : 'grab';
       if (settled) { settled = false; if (!state.gaf) state.gaf = requestAnimationFrame(loop); }
     }
-    // hover-driven focus：鼠标压在 concept 上立刻弹，移到空白处延迟关闭
+    // hover-driven focus：光标落到 concept 上立刻弹；不在 concept 也不在"node+card 合体区"里才关。
+    // 合体区 = focused node 的 bbox 和 popup card bbox 的并集（就是用户截图里那个红框）。
     if (found && found.kind === 'concept') {
-      cancelUnfocus();
       if (focused !== found) setFocus(found);
-    } else if (!found && focused) {
-      scheduleUnfocus();
+    } else if (focused && !inFocusZone(mx, my)) {
+      setFocus(null);
     }
   };
+
+  // 判断屏幕坐标 (mx,my) 是否在 focused node + card 的并集 bbox 里
+  function inFocusZone(mx, my) {
+    if (!focused) return false;
+    const [vx, vy] = nodeVis(focused);
+    const nsx = vx * zoom + px, nsy = vy * zoom + py;
+    const nr = focused.radius * zoom;
+    const card = cardHost && cardHost.querySelector('.graph-focus-card');
+    if (!card || card.hidden) {
+      return (mx - nsx) ** 2 + (my - nsy) ** 2 < (nr + 10) ** 2;
+    }
+    const cl = parseFloat(card.style.left) || 0;
+    const ct = parseFloat(card.style.top) || 0;
+    const cw = card.offsetWidth, ch = card.offsetHeight;
+    const minX = Math.min(nsx - nr, cl);
+    const maxX = Math.max(nsx + nr, cl + cw);
+    const minY = Math.min(nsy - nr, ct);
+    const maxY = Math.max(nsy + nr, ct + ch);
+    return mx >= minX && mx <= maxX && my >= minY && my <= maxY;
+  }
 
   canvas.onmousedown = e => {
     const r = canvas.getBoundingClientRect();
@@ -515,26 +525,25 @@ export function initFG(canvas, data, full) {
       drag = null; canvas.style.cursor = hov ? 'pointer' : 'grab';
     }
     if (pan) {
-      // 空白点击立即退出 focus（不等 hover 超时）
+      // 空白点击立即退出 focus
       const r = canvas.getBoundingClientRect();
       const mx = e.clientX - r.left, my = e.clientY - r.top;
       const click = Math.sqrt((mx - psx) ** 2 + (my - psy) ** 2) < 4;
-      if (click && focused) { cancelUnfocus(); setFocus(null); }
+      if (click && focused) setFocus(null);
       pan = false; canvas.style.cursor = 'grab';
     }
   };
 
   canvas.onmouseleave = () => {
     hov = null; drag = null; pan = false;
-    if (focused) scheduleUnfocus();
+    // 注意：光标从 canvas 移到 card 也会触发这里（card 在 canvas 上面盖着，离开 canvas 不一定离开图谱区），
+    // 所以这里不关 popup。真正的"离开图谱区"用下面 cardHost 的 mouseleave 处理。
     if (settled) { settled = false; if (!state.gaf) state.gaf = requestAnimationFrame(loop); }
   };
 
-  // popup 自身也是 hover 敏感区 —— 鼠标移进去时撤销关闭，否则用户想点列表链接就被抢走了
-  const cardEl = cardHost && cardHost.querySelector('.graph-focus-card');
-  if (cardEl) {
-    cardEl.addEventListener('mouseenter', cancelUnfocus);
-    cardEl.addEventListener('mouseleave', () => scheduleUnfocus());
+  // 光标离开整个图谱容器（canvas + card 共同父）才算真正离开，立刻关 popup
+  if (cardHost) {
+    cardHost.addEventListener('mouseleave', () => { if (focused) setFocus(null); });
   }
 
   // ESC 退出 focus
