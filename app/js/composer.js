@@ -1,6 +1,15 @@
 import { $, h, api, put, toast, rotatePH } from './utils.js';
 import state from './state.js';
 
+// localStorage key for "尚未创建会话时用户选的模型"
+// convId 存在时模型存后端，无 convId 时持久化到这里，刷新后依然生效
+const ASK_MODEL_KEY = 'wiki.askModel';
+function loadAskModel() {
+  try { const raw = localStorage.getItem(ASK_MODEL_KEY); if (!raw) return null; const v = JSON.parse(raw); if (v && v.provider && v.model) return v; } catch {}
+  return null;
+}
+function saveAskModel(provider, model) { try { localStorage.setItem(ASK_MODEL_KEY, JSON.stringify({ provider, model })); } catch {} }
+
 export function buildComposer(ctx) {
   let s = '<div class="chat-composer-wrap"><div class="chat-composer">';
   s += '<textarea class="chat-textarea" id="' + ctx + 'In" placeholder="输入问题..." rows="1"></textarea>';
@@ -34,9 +43,16 @@ export async function loadModels(ddId, tagId, override) {
   try {
     const s = state.sCache || await api('/api/settings'); state.sCache = s;
     const dd = $(ddId); const tag = $(tagId); if (!dd || !tag) return;
-    // override 存在时用它决定 dropdown 的 active 项和 tag 文案；否则用全局默认
-    const effProv = (override && override.provider) || s.provider || 'local';
-    const effModel = (override && override.model) || s.model;
+    // override 存在时用它决定 dropdown 的 active 项和 tag 文案；
+    // 否则无 convId 时读 localStorage 里的 ask 模型；再 fallback 全局默认
+    let askSaved = null;
+    if (!override && !state.convId) {
+      askSaved = loadAskModel();
+      // 同步补回 state.pendingModel，让 chat.js 首条消息 body 带上这个模型
+      if (askSaved && !state.pendingModel) state.pendingModel = { provider: askSaved.provider, model: askSaved.model };
+    }
+    const effProv = (override && override.provider) || (askSaved && askSaved.provider) || s.provider || 'local';
+    const effModel = (override && override.model) || (askSaved && askSaved.model) || s.model;
     let html = '';
     const prov = s.providers && s.providers[effProv];
     if (prov) {
@@ -84,5 +100,7 @@ export function pickModel(el, ddId, tagId) {
     put('/api/chat/' + state.convId + '/model', { provider, model }).catch(() => toast('模型切换失败'));
   } else {
     state.pendingModel = { provider, model };
+    // 同时落盘，下次刷新 / 回到 dashboard 仍保留这个选择
+    saveAskModel(provider, model);
   }
 }
