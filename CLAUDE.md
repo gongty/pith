@@ -24,7 +24,18 @@ Default port: 3456. First run `npm install` to install dependencies (pdf-parse, 
 - `AGGREGATOR_SCRIPT`（可选）：覆盖 autotask `aggregator` 源类型调用的 python 脚本路径。默认 `path.resolve(__dirname, '../../plugins/news-skills/news-aggregator-skill/scripts/fetch_news.py')`。
 - `PORT`：默认 3456。
 
-`start.sh` gitignored，丢了就用上面手动命令。
+`start.sh` gitignored，丢了就用上面手动命令。现在 start.sh 固定从 `.api-key`（gitignored, chmod 600）读密钥并 `exec node server.js`，本身不含密钥，可以被任何 supervisor 直接调。
+
+**Process Supervision (macOS 本地开发)**
+
+LaunchAgent 位于 `~/Library/LaunchAgents/com.blank.wiki-app.plist`（仓库外，不跟踪），`RunAtLoad` 开机自启 + `KeepAlive.SuccessfulExit=false` 崩溃 10s 内自动拉起。plist 的 ProgramArguments 只指向 `start.sh`，**plist 里零密钥**，密钥统一从 `.api-key` 走。日志落 `data/logs/launchd.{stdout,stderr}.log`。
+
+常用命令：
+
+    launchctl kickstart -k gui/$(id -u)/com.blank.wiki-app   # 重启（改 server.js 后必做，server.js 无热加载）
+    launchctl print     gui/$(id -u)/com.blank.wiki-app      # 查 state + pid + last exit code
+    launchctl bootout   gui/$(id -u)/com.blank.wiki-app      # 完全停掉（launchd 不再管）
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.blank.wiki-app.plist  # 重新装
 
 **No tests, no lint, no CI.** `package.json` 只有 `start` 脚本，`npm test` 返回 `exit 1`。验证改动靠浏览器手测 + 服务端日志 + `node test-persist-retry.js`（持久层单测，22 个断言）。
 
@@ -138,7 +149,9 @@ data/uploads/       → Uploaded files
 - **Autotask execution** reuses the ingest pipeline (`extractContent()` + `compileArticle()`). Each task run records to `history.json`。**dedup 顺序**：`markIngestedTimed(url)` 只在 compile 成功之后调用，失败 URL **不进 dedup** 保留下次重试机会。**run 结束收口**：`persistRun({force:true})` 前后各 `await withAutotaskWriteLock(()=>{})` 一次，确保所有 pending 节流写完成后再 `__persistRunState.delete(runId)`。
 - **Autotask 写锁**：`history.json` 高频并发写（LLM gate / smart_fill / process 各阶段并发完成）必须经过 `withAutotaskWriteLock(fn)` 链式 Promise 串行化，**不要绕开直接 fs.writeFileSync**，否则会撕扯并发结果。
 - **Autotask persistRun 节流**：`persistRun()` 默认 1s debounce，频繁 progress tick（gate 每条完成、processing 每条完成）走节流；**phase 切换 / 初始化 / 终态必须 `persistRun({force:true})` 立即落盘**，否则前端进度条跳动不连贯或终态丢失。在 mapLimit worker 内部 persistRun 后追加 `await new Promise(r => setImmediate(r))`，避免连续同步写把 `setTimeout`（race timeout）饿死。
-- **server.js 无热加载** — 改 `server.js` 必须重启进程。`data/` 下 JSON 在进程内有内存缓存（如 autotasks 调度器、聊天索引），手改磁盘文件不会被感知，必须通过 API 改或重启。
+- **server.js 无热加载** — 改 `server.js` 必须重启进程（`launchctl kickstart -k gui/$(id -u)/com.blank.wiki-app`）。`data/` 下 JSON 在进程内有内存缓存（如 autotasks 调度器、聊天索引），手改磁盘文件不会被感知，必须通过 API 改或重启。
+- **监听失败必须 `process.exit(1)`** — `server.on('error', ...)` 只记 log 不退出会产生"活着但不听端口"的僵尸（event loop 被 scheduler 定时器挂住），supervisor 看 pid 还在就不拉起。server.js 在 `server.listen()` 的 error handler 里 `crashLog` 之后显式 `process.exit(1)`，让 launchd 在 `ThrottleInterval=10s` 窗口内自然重拉。新加 server-level 致命错误回调都要遵守这个"快死快生"模式。
+- **服务挂了的排查顺序** — (1) `lsof -i :3456 -sTCP:LISTEN` 看端口是否有人监听；(2) `launchctl print gui/$(id -u)/com.blank.wiki-app | grep -E "state|pid|last exit"` 看 launchd 自己的视角（`last exit code` 非 0 + 频繁重启 = 启动失败）；(3) `tail data/logs/launchd.stderr.log` 看 node 启动期错误（EADDRINUSE / 依赖缺失 / `.api-key` 缺失）；(4) `tail data/logs/crash.log` 看 ring buffer（server.js:64-95 的诊断基础设施：最近 30 条请求 + `uncaughtException` / `unhandledRejection` / signal handler 堆栈，崩溃现场在这里）。
 - **CSS overflow rule**: When `overflow-y` is non-`visible`, browsers force `overflow-x` from `visible` to `auto`. Always set `overflow-x:hidden` explicitly on scroll containers to prevent unwanted horizontal scrollbars.
 - **Article frontmatter 必须保留**：所有 `data/wiki/**/*.md` 都有 `---\ntags: [...]\n---\n` 开头。编辑代码（前后端）动 .md 内容时，先用 `parseFrontmatter` 拆分 → 改 body → 用 `serializeFrontmatter` + body 拼回。前端 `markdown.js` 也导出了 `parseFrontmatter`，`renderMd` 会自动剥离 fm。直接字符串拼接或 regex 截断会丢失元数据。
 - **Graph 端点 vs buildGraph**：`/api/wiki/graph` 端点有自己的内联 concept + 边生成逻辑（hapax + stopword 双档过滤走 `lib/concepts.js` 的 `isStopConcept` / `normalizeTag`），不调用老的 `buildGraph()` 函数（legacy，保留未删）。修边权重 / 边类型 / 过滤规则都改端点内联块，不要改老函数也不要 fall back 用它。
