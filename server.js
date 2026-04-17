@@ -6532,7 +6532,11 @@ if (require.main === module) {
     console.log(`[ingest] concurrency=${INGEST_CONCURRENCY} queueCap=200`);
     __diagAppend(CRASH_LOG, `[${new Date().toISOString()}] LISTEN port=${PORT}\n---\n`);
   });
-  server.on('error', e => crashLog('SERVER_ERROR', e));
+  server.on('error', e => {
+    crashLog('SERVER_ERROR', e);
+    // 监听失败（如 EADDRINUSE）必须退出，否则进程因定时器挂住不死，supervisor 无法感知
+    process.exit(1);
+  });
   server.on('clientError', e => __diagAppend(ACCESS_LOG, `${new Date().toISOString()} CLIENT_ERROR ${e.code || ''} ${e.message || ''}`));
 }
 
