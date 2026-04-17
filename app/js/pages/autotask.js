@@ -36,6 +36,15 @@ const SOURCE_LABELS = { rss: 'RSS', webpage: '网页', api: 'API' };
 const SCHEDULE_LABELS = { daily: '每日', hourly: '每小时', manual: '仅手动' };
 const STATUS_COLORS = { success: 'var(--green)', error: 'var(--red)', partial: 'var(--yellow)', running: 'var(--accent)' };
 
+/* ── Intent presets: 一键填入常见任务模板，给空白框一个起点 ── */
+const INTENT_PRESETS = [
+  { label: 'AI 研究进展', text: '了解头部 AI 公司（OpenAI、Anthropic、Google DeepMind、Meta）的研究新进展，重点是论文和技术博客，跳过招聘和市场活动' },
+  { label: '前端 / 开发工具更新', text: '跟踪主流前端框架和开发工具的版本更新（React、Vue、Next.js、TypeScript、Vite、Bun 等），重点是 release notes 和 breaking changes' },
+  { label: 'AI 产品与开源模型', text: '关注头部 AI 公司的产品发布与主流开源模型的新版本（如 Llama、Qwen、DeepSeek、Mistral），跳过纯营销内容' },
+  { label: 'arxiv 论文跟踪', text: '跟踪 cs.LG、cs.CL、cs.AI 方向的最新 arxiv 论文，重点是 LLM、agent、RAG、推理相关' },
+  { label: '科技商业新闻', text: '了解科技行业的融资、并购、新产品发布等商业动态，跳过名人八卦和股价波动' }
+];
+
 /* ── Helpers ── */
 function statusDot(enabled) {
   return '<span class="autotask-status-dot" style="background:' + (enabled ? 'var(--green)' : 'var(--fg-tertiary)') + '"></span>';
@@ -640,6 +649,16 @@ function renderWizardStep1() {
   s += '<textarea class="autotask-nl-textarea" id="autotaskIntentInput" rows="4" placeholder="了解大厂 AI 研究新进展，重点是论文和技术博客，跳过招聘和市场活动" oninput="window._autotaskIntentChange&&window._autotaskIntentChange(this.value)">' + h(wizardIntent) + '</textarea>';
   s += '</div>';
 
+  // Preset chips: one-click fill the textarea. Helps users stuck at the empty box.
+  s += '<div class="autotask-intent-presets">';
+  s += '<div class="autotask-intent-presets-label">不知道写什么？试试这些：</div>';
+  s += '<div class="autotask-intent-presets-row">';
+  INTENT_PRESETS.forEach((p, i) => {
+    s += '<button class="autotask-intent-preset-chip" type="button"' + (wizardBusy ? ' disabled' : '') + ' onclick="pickAutotaskIntentPreset(' + i + ')">' + h(p.label) + '</button>';
+  });
+  s += '</div>';
+  s += '</div>';
+
   if (wizardBusy) {
     s += '<div class="autotask-loading-msg">AI 正在挑选合适的信息源…</div>';
   }
@@ -659,6 +678,21 @@ function renderWizardStep1() {
   if (wizardBusy) {
     const ta = $('autotaskIntentInput');
     if (ta) ta.disabled = true;
+  }
+}
+
+/* ── Pick a preset: fill textarea + sync state ── */
+export function pickAutotaskIntentPreset(idx) {
+  if (wizardBusy) return;
+  const preset = INTENT_PRESETS[idx];
+  if (!preset) return;
+  wizardIntent = preset.text;
+  const ta = $('autotaskIntentInput');
+  if (ta) {
+    ta.value = preset.text;
+    ta.focus();
+    // Move caret to end so user sees full text + can continue editing
+    try { ta.setSelectionRange(preset.text.length, preset.text.length); } catch (_) {}
   }
 }
 

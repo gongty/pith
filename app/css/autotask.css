@@ -172,6 +172,28 @@
 }
 .autotask-nl-textarea:focus{border-color:var(--accent)}
 
+/* Intent presets: clickable starter chips */
+.autotask-intent-presets{margin-top:14px}
+.autotask-intent-presets-label{
+  font-size:12px;color:var(--fg-tertiary);margin-bottom:8px;
+}
+.autotask-intent-presets-row{
+  display:flex;flex-wrap:wrap;gap:6px;
+}
+.autotask-intent-preset-chip{
+  background:var(--bg-hover);border:1px solid var(--border);
+  padding:6px 12px;border-radius:999px;
+  font-size:12px;color:var(--fg-secondary);cursor:pointer;
+  transition:all 150ms ease;font-family:inherit;
+  white-space:nowrap;
+}
+.autotask-intent-preset-chip:hover:not(:disabled){
+  border-color:var(--accent);color:var(--accent);background:var(--bg);
+}
+.autotask-intent-preset-chip:disabled{
+  opacity:0.5;cursor:not-allowed;
+}
+
 /* Fallback button */
 .autotask-fallback-btn{
   background:none;border:1px dashed var(--border);

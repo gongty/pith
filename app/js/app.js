@@ -13,7 +13,7 @@ import { dashAsk } from './pages/dashboard.js';
 import { chatSend, delChat, archiveChat, precipitateMsg, precipitateConv, closePrecipModal } from './pages/chat.js';
 import { toggleToc, scrollToH, onArtChange, fmtCmd, closeDel, doDel, newArticle, pickSlash, closeSlashMenu, imgAlign, imgSize, deselectImg } from './pages/article.js';
 import { gZoom, applyGF } from './pages/graph.js';
-import { openAutotaskModal, closeAutotaskModal, closeAutotaskDetail, runAutotask, toggleAutotaskEnabled, deleteAutotask, switchAutotaskTab, switchHistoryRange, backToWizardStep1, toggleWizardAdvanced, submitConfigureIntent, confirmCreateTask, openSourcePicker, closeSourcePicker, confirmSourcePicker, submitFeedback, addSourceToDraft, removeSourceFromDraft, removeMustExclude, toggleRunExpand } from './pages/autotask.js';
+import { openAutotaskModal, closeAutotaskModal, closeAutotaskDetail, runAutotask, toggleAutotaskEnabled, deleteAutotask, switchAutotaskTab, switchHistoryRange, backToWizardStep1, toggleWizardAdvanced, submitConfigureIntent, pickAutotaskIntentPreset, confirmCreateTask, openSourcePicker, closeSourcePicker, confirmSourcePicker, submitFeedback, addSourceToDraft, removeSourceFromDraft, removeMustExclude, toggleRunExpand } from './pages/autotask.js';
 
 /* ── Expose functions to inline onclick handlers ── */
 window.go = go;
@@ -73,6 +73,7 @@ window.switchHistoryRange = switchHistoryRange;
 window.backToWizardStep1 = backToWizardStep1;
 window.toggleWizardAdvanced = toggleWizardAdvanced;
 window.submitConfigureIntent = submitConfigureIntent;
+window.pickAutotaskIntentPreset = pickAutotaskIntentPreset;
 window.confirmCreateTask = confirmCreateTask;
 window.openSourcePicker = openSourcePicker;
 window.closeSourcePicker = closeSourcePicker;
