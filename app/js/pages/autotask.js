@@ -334,7 +334,7 @@ function renderRunSummaryCard(run) {
   }
   const statusLabel = run.status === 'success' ? 'success' : run.status === 'error' ? 'error' : run.status === 'partial' ? 'partial' : (run.status || '');
 
-  let s = '<div class="autotask-history-row' + dimClass + runningClass + watchingClass + '">';
+  let s = '<div class="autotask-history-row' + dimClass + runningClass + watchingClass + '" data-run-id="' + h(runId || '') + '">';
   s += '<div class="autotask-history-head">';
   if (isRunning) {
     s += '<span class="autotask-status-dot pulsing" style="background:' + dotColor + '"></span>';
@@ -1114,6 +1114,47 @@ function isOnAutotaskPage() {
   return hash === '/autotask' || hash.startsWith('/autotask');
 }
 
+// 就地 patch 运行中卡片的动态部分（进度条 / 进度文字 / 相对时间）。
+// 返回 true 表示命中目标卡并完成 patch；返回 false 时调用方需回退到 renderPage 全量重建。
+// 动机：原实现每 1.5s 整页 innerHTML 重建，视觉上就是不停刷新闪烁。
+function patchRunningCardInPlace(run) {
+  if (!run || run.status !== 'running') return false;
+  const runId = run.id || run.runId;
+  if (!runId) return false;
+  const row = document.querySelector('.autotask-history-row[data-run-id="' + (window.CSS && CSS.escape ? CSS.escape(runId) : runId.replace(/"/g, '\\"')) + '"]');
+  if (!row || !row.classList.contains('running')) return false;
+
+  const prog = run.progress || { phase: 'fetching', current: 0, total: 0, currentTitle: null };
+  const total = prog.total || 0;
+  const cur = prog.current || 0;
+  const pct = total > 0 ? Math.min(100, Math.round((cur / total) * 100)) : (prog.phase === 'fetching' ? 10 : 5);
+
+  const fill = row.querySelector('.autotask-progress-fill');
+  if (fill) fill.style.width = pct + '%';
+
+  const phaseLabel = prog.phase === 'fetching' ? '抓取数据源...' : prog.phase === 'filtering' ? '过滤中...' : '处理条目';
+  const meta = row.querySelector('.autotask-history-meta');
+  if (meta) {
+    let metaHtml;
+    if (prog.phase === 'processing' && total > 0) {
+      metaHtml = h(phaseLabel) + ' ' + cur + '/' + total;
+    } else {
+      metaHtml = h(phaseLabel);
+    }
+    if (run.itemsIngested) metaHtml += ' · 已入库 ' + run.itemsIngested;
+    if (run.itemsSkipped) metaHtml += ' · 已跳过 ' + run.itemsSkipped;
+    if (prog.currentTitle) {
+      const t = prog.currentTitle.length > 80 ? prog.currentTitle.slice(0, 78) + '...' : prog.currentTitle;
+      metaHtml += '<div class="autotask-progress-current">当前: ' + h(t) + '</div>';
+    }
+    meta.innerHTML = metaHtml;
+  }
+
+  const timeEl = row.querySelector('.autotask-history-time');
+  if (timeEl) timeEl.textContent = relTime(run.startedAt);
+  return true;
+}
+
 async function pollOnce() {
   pollTimer = null;
   if (!watchingRunId) return;
@@ -1123,17 +1164,24 @@ async function pollOnce() {
     history = Array.isArray(histRes) ? histRes : (histRes.history || []);
     const run = history.find(r => r.id === watchingRunId);
     const c = $('content');
-    if (c && currentTab === 'history' && isOnAutotaskPage()) renderPage(c);
+    const onHistoryTab = c && currentTab === 'history' && isOnAutotaskPage();
+
     if (run && run.status === 'running') {
+      // 就地 patch，不全量重建，避免整页闪烁。命中失败（如新加的 run 还没 render 过）时回退到全量重建。
+      if (onHistoryTab) {
+        const patched = patchRunningCardInPlace(run);
+        if (!patched) renderPage(c);
+      }
       if (isOnAutotaskPage()) pollTimer = setTimeout(pollOnce, 1500);
       else watchingRunId = null;
     } else {
+      // 状态迁移（running → 完成/失败）时卡片形态变化较大，仍走全量重建。
       watchingRunId = null;
       try {
         const tres = await api('/api/autotask/list');
         tasks = tres.tasks || [];
       } catch (_) {}
-      if (c && currentTab === 'history' && isOnAutotaskPage()) renderPage(c);
+      if (onHistoryTab) renderPage(c);
       if (run) {
         const label = run.status === 'success' ? '执行完成' : run.status === 'partial' ? '部分完成' : '执行失败';
         toast(label + '：入库 ' + (run.itemsIngested || 0) + ' · 跳过 ' + (run.itemsSkipped || 0));

@@ -1283,6 +1283,12 @@ ${existingTagsStr}
     // 把 tags 写成 YAML frontmatter 放文章最前面
     const frontmatter = serializeFrontmatter({ tags: articleTags });
     const fileContent = frontmatter ? `${frontmatter}${articleContent}` : articleContent;
+    // 防线：拒绝写入空/近空文章。正文至少应有 H1 + 一段话。低于阈值视为 pipeline 出 bug，
+    // 抛错让上游 errorStage 记录，宁可没文章也不留 0 字节僵尸。
+    const MIN_ARTICLE_BYTES = 40;
+    if (!articleContent || articleContent.trim().length < MIN_ARTICLE_BYTES) {
+      throw new Error(`refusing to write near-empty article (content ${articleContent ? articleContent.length : 0} bytes < ${MIN_ARTICLE_BYTES}); upstream pipeline bug`);
+    }
     fs.writeFileSync(articlePath, fileContent, 'utf-8');
     relPath = `${articleTopic}/${articleFilename}`;
     // 异步触发向量索引增量更新，失败不阻塞编译
@@ -2912,7 +2918,6 @@ async function extractContent(type, content, filename, urlVal, rawDir) {
 // ── 自动化任务 ──
 
 const { fetchSource: fetchSourceAdapter, AGGREGATOR_SCRIPT: AGG_SCRIPT_PATH } = require('./lib/sources.js');
-const { handleAsk: askOrchestratorHandle } = require('./lib/ask-orchestrator.js');
 const SYSTEM_SOURCES_PATH = path.join(ROOT, 'data', 'system-sources.json');
 
 // ── 向量索引（团队 A / M1） ──
@@ -3938,6 +3943,7 @@ const server = http.createServer(async (req, res) => {
           const { path: relPath, content } = JSON.parse(body);
           const fp = safe(WIKI, relPath);
           if (!fp) return json(res, 400, { error: '无效路径' });
+          if (typeof content !== 'string' || !content.trim()) return json(res, 400, { error: '正文不能为空' });
           fs.writeFileSync(fp, content, 'utf-8');
           return json(res, 200, { ok: true });
         } catch (e) { return json(res, 400, { error: e.message }); }
@@ -3953,6 +3959,7 @@ const server = http.createServer(async (req, res) => {
           const { path: relPath, content } = JSON.parse(body);
           const fp = safe(WIKI, relPath);
           if (!fp) return json(res, 400, { error: '无效路径' });
+          if (typeof content !== 'string' || !content.trim()) return json(res, 400, { error: '正文不能为空' });
           fs.mkdirSync(path.dirname(fp), { recursive: true });
           fs.writeFileSync(fp, content, 'utf-8');
           return json(res, 200, { ok: true, path: relPath });
@@ -4640,22 +4647,6 @@ const server = http.createServer(async (req, res) => {
 
   if (p === '/api/tasks') {
     return json(res, 200, taskQueue.slice(-20));
-  }
-
-  // POST /api/wiki/ask — M3 多跳问答（clarify JSON / answer SSE）
-  if (p === '/api/wiki/ask' && req.method === 'POST') {
-    askOrchestratorHandle(req, res, {
-      callLLM,
-      pickModelByUse,
-      getFullConfig,
-      retrieveContext
-    }).catch(err => {
-      try {
-        if (!res.headersSent) json(res, 500, { error: `ask 失败: ${err.message}` });
-        else { try { res.write(`event: error\ndata: ${JSON.stringify({ message: err.message })}\n\n`); } catch {} try { res.end(); } catch {} }
-      } catch {}
-    });
-    return;
   }
 
   // POST /api/wiki/query — Wiki Chat
