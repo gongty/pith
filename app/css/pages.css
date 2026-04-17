@@ -338,7 +338,13 @@
 .graph-canvas-wrap{flex:1;border-radius:6px;background:var(--bg-sidebar);overflow:hidden;position:relative}
 .graph-canvas-wrap canvas{display:block;width:100%;height:100%;cursor:grab}
 .graph-focus-card{
-  position:absolute;z-index:5;width:320px;max-height:70vh;
+  /* 宽度自适应内容：内容短就缩到 min-width，内容长到 max-width 后换行。
+     以前写死 320px 会在短标题（"RAG / 3 篇文章"等）下右侧留大片空白。
+     用 max-content 让最宽的一行（通常是最长文章标题）决定宽度，
+     再用 min/max 夹住上下界。 */
+  position:absolute;z-index:5;
+  width:max-content;min-width:240px;max-width:340px;
+  max-height:70vh;
   display:flex;flex-direction:column;
   background:var(--bg);border:1px solid var(--border);border-radius:12px;
   padding:14px 14px 10px;box-shadow:0 10px 28px rgba(0,0,0,0.14),0 2px 6px rgba(0,0,0,0.06);
