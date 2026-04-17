@@ -597,7 +597,7 @@ function renderRunItems(run) {
       if (it.reason) errText += '：' + truncate(it.reason, 60);
       s += '<span class="autotask-run-item-reason" style="color:var(--red)">' + h(errText) + '</span>';
       if (it.rawArchivePath) {
-        s += '<a class="autotask-run-item-raw" href="/data/raw/' + h(it.rawArchivePath) + '" target="_blank" rel="noopener">查看原始素材</a>';
+        s += '<a class="autotask-run-item-raw" href="/raw/' + h(it.rawArchivePath) + '" target="_blank" rel="noopener">查看原始素材</a>';
       }
       s += '</div>';
       void itemKey;

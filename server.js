@@ -5,6 +5,7 @@ const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const os = require('os');
 const crypto = require('crypto');
+const readline = require('readline');
 
 // ── 多格式导入依赖 ──
 // pdf-parse v2 导出 { PDFParse } 类；v1 导出一个函数。这里兼容两者。
@@ -1110,7 +1111,10 @@ ${existingTagsStr}
     } catch (archiveErr) {
       console.warn('[compile] archive failed raw body failed:', archiveErr && archiveErr.message);
     }
-    throw new Error('content-stage-failed: ' + (contentErrMsg || 'LLM empty'));
+    const errMsg = 'content-stage-failed: ' + (contentErrMsg || 'LLM empty');
+    task.status = 'error';
+    task.message = `编译失败: ${errMsg}`;
+    throw new Error(errMsg);
   } else {
     articleContent = stripOuterCodeFences(articleContent);
     // 从 content 第一行 "#..#### ..." 提取 LLM 生成的标题（优先 H1，兜底 H2-H6）
@@ -1305,7 +1309,7 @@ ${existingTagsStr}
     const fileContent = frontmatter ? `${frontmatter}${articleContent}` : articleContent;
     // 防线：拒绝写入空/近空文章。正文至少应有 H1 + 一段话。低于阈值视为 pipeline 出 bug，
     // 抛错让上游 errorStage 记录，宁可没文章也不留 0 字节僵尸。
-    const MIN_ARTICLE_BYTES = 40;
+    const MIN_ARTICLE_BYTES = 200;
     if (!articleContent || articleContent.trim().length < MIN_ARTICLE_BYTES) {
       throw new Error(`refusing to write near-empty article (content ${articleContent ? articleContent.length : 0} bytes < ${MIN_ARTICLE_BYTES}); upstream pipeline bug`);
     }
@@ -3072,7 +3076,7 @@ function saveAutotasks(tasks) { fs.writeFileSync(path.join(AUTOTASKS_DIR, 'tasks
 function loadHistory() { try { return JSON.parse(fs.readFileSync(path.join(AUTOTASKS_DIR, 'history.json'), 'utf-8')); } catch { return []; } }
 // history.json 容量保底：超过 100 条时按 startedAt 降序保留最近 100 条，
 // 旧条目归档到 data/autotasks/history-archive-<YYYY-MM>.jsonl（append 模式，每行一个 JSON）。
-// 归档失败走 fail-safe：跳过归档只截断主文件，避免因归档 IO 失败阻塞主流程。
+// 归档失败时保持主文件完整（不截断），避免磁盘/权限问题导致记录丢失。
 function saveHistory(hist) {
   let toWrite = hist;
   if (Array.isArray(hist) && hist.length > 100) {
@@ -3084,6 +3088,7 @@ function saveHistory(hist) {
       });
       const keep = sorted.slice(0, 100);
       const archive = sorted.slice(100);
+      let archiveOk = true;
       if (archive.length) {
         try {
           const grouped = {};
@@ -3098,16 +3103,104 @@ function saveHistory(hist) {
             fs.appendFileSync(archiveFile, lines, 'utf-8');
           }
         } catch (e) {
-          console.warn('[AutoTask] history archive failed (truncating anyway):', e.message);
+          archiveOk = false;
+          console.error('[AutoTask] CRITICAL: history archive failed, keeping full history to avoid data loss. Check disk space / permissions on', AUTOTASKS_DIR, '-', e.message);
         }
       }
-      toWrite = keep;
+      // 归档成功才截断；失败时保持完整 hist，下次再试
+      toWrite = archiveOk ? keep : hist;
     } catch (e) {
       console.warn('[AutoTask] history trim prep failed, writing as-is:', e.message);
       toWrite = hist;
     }
   }
-  fs.writeFileSync(path.join(AUTOTASKS_DIR, 'history.json'), JSON.stringify(toWrite, null, 2), 'utf-8');
+  // 原子写：tmp + rename，避免进程崩溃时留下半行 JSON
+  const histPath = path.join(AUTOTASKS_DIR, 'history.json');
+  const tmp = histPath + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(toWrite, null, 2), 'utf-8');
+  fs.renameSync(tmp, histPath);
+}
+
+// 列出归档文件（history-archive-YYYY-MM.jsonl），按文件名倒序（新 → 旧）
+function listHistoryArchiveFiles() {
+  try {
+    const names = fs.readdirSync(AUTOTASKS_DIR)
+      .filter(f => /^history-archive-\d{4}-\d{2}\.jsonl$/.test(f))
+      .sort()
+      .reverse();
+    return names.map(n => path.join(AUTOTASKS_DIR, n));
+  } catch { return []; }
+}
+
+// 按行流式扫归档，命中 runId 立刻返回。找不到返回 null。
+// 单行 parse 错误吞掉（防半行 JSON），整个文件读取异常 warn 后跳过。
+async function loadRunFromArchive(runId) {
+  const files = listHistoryArchiveFiles();
+  for (const f of files) {
+    let hit = null;
+    try {
+      const stream = fs.createReadStream(f, { encoding: 'utf-8' });
+      const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+      for await (const line of rl) {
+        const s = line.trim();
+        if (!s) continue;
+        let obj = null;
+        try { obj = JSON.parse(s); } catch { continue; }
+        if (obj && obj.id === runId) { hit = obj; break; }
+      }
+      rl.close();
+      stream.destroy();
+    } catch (e) {
+      console.warn('[AutoTask] loadRunFromArchive failed on', f, '-', e.message);
+      continue;
+    }
+    if (hit) return hit;
+  }
+  return null;
+}
+
+// 扫全部归档文件 + 主 history，按 startedAt 倒序合并，cap 500 条。
+// 单文件 > 50 MB 跳过并 warn，避免 OOM。
+async function loadHistoryIncludingArchive({ cap = 500, maxFileBytes = 50 * 1024 * 1024 } = {}) {
+  const all = [];
+  // 主文件
+  try {
+    const main = loadHistory();
+    if (Array.isArray(main)) for (const r of main) all.push(r);
+  } catch {}
+  // 归档
+  const files = listHistoryArchiveFiles();
+  for (const f of files) {
+    try {
+      const st = fs.statSync(f);
+      if (st.size > maxFileBytes) {
+        console.warn('[AutoTask] archive file too large, skipping:', f, st.size);
+        continue;
+      }
+    } catch { continue; }
+    try {
+      const stream = fs.createReadStream(f, { encoding: 'utf-8' });
+      const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+      for await (const line of rl) {
+        const s = line.trim();
+        if (!s) continue;
+        try {
+          const obj = JSON.parse(s);
+          if (obj) all.push(obj);
+        } catch { /* skip partial line */ }
+      }
+      rl.close();
+      stream.destroy();
+    } catch (e) {
+      console.warn('[AutoTask] read archive failed:', f, '-', e.message);
+    }
+  }
+  all.sort((a, b) => {
+    const ta = new Date((a && a.startedAt) || 0).getTime();
+    const tb = new Date((b && b.startedAt) || 0).getTime();
+    return tb - ta;
+  });
+  return all.slice(0, cap);
 }
 
 // 节流状态：runId → { lastWriteAt, pendingTimer, dirty }。
@@ -3760,19 +3853,34 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
 
         const displayName = (item.title && String(item.title).trim()) || task.name || 'autotask';
         const compileTask = pushTask('autotask', { name: displayName });
-        await compileArticle(topicDir, rawFilename, filePath, compileTask, modelOverrides);
-
-        await markIngestedTimed(item.url, extractedText, runId);
-
-        if (rec) {
-          rec.status = item.__smartFill ? 'smart_fill' : 'ingested';
-          if (compileTask.created && compileTask.created.length > 0) {
-            rec.articlePath = compileTask.created[0].path;
-          }
+        // 编译失败单独处理，不让外层 catch 把 compile 错误误判为 fetch_error。
+        let compileErr = null;
+        try {
+          await compileArticle(topicDir, rawFilename, filePath, compileTask, modelOverrides);
+        } catch (ce) {
+          compileErr = ce;
         }
-        run.itemsIngested++;
-        indexCache.invalidate('index');
-        wikiCache.invalidate();
+
+        if (compileErr || compileTask.status !== 'done') {
+          if (rec) {
+            rec.status = 'compile_error';
+            rec.reason = (compileErr && compileErr.message) || compileTask.message || 'compile failed';
+            rec.rawArchivePath = compileTask.rawArchivePath || null;
+          }
+          run.itemsSkipped = (run.itemsSkipped || 0) + 1;
+          // 关键：不 markIngestedTimed、不 itemsIngested++、不 invalidate cache
+        } else {
+          await markIngestedTimed(item.url, extractedText, runId);
+          if (rec) {
+            rec.status = item.__smartFill ? 'smart_fill' : 'ingested';
+            if (compileTask.created && compileTask.created.length > 0) {
+              rec.articlePath = compileTask.created[0].path;
+            }
+          }
+          run.itemsIngested++;
+          indexCache.invalidate('index');
+          wikiCache.invalidate();
+        }
       } catch (e) {
         if (rec) { rec.status = 'fetch_error'; rec.reason = e.message; }
       }
@@ -3811,6 +3919,20 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
       console.warn(`[AutoTask] brief generation failed: ${e.message}`);
     }
 
+    // 给 brief 在 run.items[] 里追加一个条目，让前端历史详情页能看到它。
+    // brief 失败时 briefPath 为 null，自动跳过。
+    if (run.briefPath && Array.isArray(run.items)) {
+      run.items.push({
+        type: 'brief',
+        title: `${task.name || '未命名任务'} · ${new Date(run.startedAt).toISOString().slice(0,10)} 简报`,
+        sourceId: null,
+        status: 'brief',
+        articlePath: run.briefPath,
+        url: null,
+        reason: null
+      });
+    }
+
     // 9. Status
     const anyFetchFail = Object.values(run.sourceStatus).some(s => s.status === 'error');
     const allFetchFail = sources.length > 0 && Object.values(run.sourceStatus).every(s => s.status === 'error');
@@ -3835,7 +3957,11 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
     saveAutotasks(updatedTasks);
   }
 
+  // 收口：先等之前所有 pending 写落盘，再 force 写一次最终状态，再等该写完成。
+  // 否则 __persistRunState.delete(runId) 可能删掉还没 flush 的 pending timer 状态。
+  await withAutotaskWriteLock(() => {});
   persistRun({ force: true });
+  await withAutotaskWriteLock(() => {});
   __persistRunState.delete(runId);
   return run;
   } finally {
@@ -5680,32 +5806,71 @@ const server = http.createServer(async (req, res) => {
     }
 
     // GET /api/autotask/history — get execution history
+    // 默认只读主 history.json；?includeArchive=1 时合并归档（cap 500 条，按 startedAt 倒序）
     if (subPath === '/history' && req.method === 'GET') {
-      let hist = loadHistory();
       const filterTaskId = params.get('taskId');
+      const includeArchive = params.get('includeArchive') === '1';
+      if (includeArchive) {
+        (async () => {
+          try {
+            let hist = await loadHistoryIncludingArchive({ cap: 500 });
+            if (filterTaskId) hist = hist.filter(h => h.taskId === filterTaskId);
+            return json(res, 200, { history: hist });
+          } catch (e) {
+            console.error('[autotask] history includeArchive failed:', e && e.stack || e);
+            return json(res, 500, { error: '服务端错误' });
+          }
+        })();
+        return;
+      }
+      let hist = loadHistory();
       if (filterTaskId) hist = hist.filter(h => h.taskId === filterTaskId);
       return json(res, 200, { history: hist.reverse() });
     }
 
     // GET /api/autotask/history/:runId — single run detail
+    // 主文件未命中 → 扫归档 jsonl（按 YYYY-MM 倒序，streaming）
     const histDetailMatch = subPath.match(/^\/history\/(.+)$/);
     if (histDetailMatch && req.method === 'GET') {
       const runId = histDetailMatch[1];
       const hist = loadHistory();
       const run = hist.find(h => h.id === runId);
-      if (!run) return json(res, 404, { error: '记录不存在' });
-      return json(res, 200, run);
+      if (run) return json(res, 200, run);
+      (async () => {
+        try {
+          const archived = await loadRunFromArchive(runId);
+          if (!archived) return json(res, 404, { error: '记录不存在' });
+          return json(res, 200, archived);
+        } catch (e) {
+          console.error('[autotask] history detail archive lookup failed:', e && e.stack || e);
+          return json(res, 500, { error: '服务端错误' });
+        }
+      })();
+      return;
     }
 
     // DELETE /api/autotask/history/:runId — delete history record
+    // 整块走 withAutotaskWriteLock，避免与 persistRun/saveHistory 并发撕裂
     if (histDetailMatch && req.method === 'DELETE') {
       const runId = histDetailMatch[1];
-      let hist = loadHistory();
-      const idx = hist.findIndex(h => h.id === runId);
-      if (idx < 0) return json(res, 404, { error: '记录不存在' });
-      hist.splice(idx, 1);
-      saveHistory(hist);
-      return json(res, 200, { ok: true });
+      (async () => {
+        try {
+          const result = await withAutotaskWriteLock(() => {
+            const hist = loadHistory();
+            const idx = hist.findIndex(h => h.id === runId);
+            if (idx < 0) return { notFound: true };
+            hist.splice(idx, 1);
+            saveHistory(hist);
+            return { ok: true };
+          });
+          if (result && result.notFound) return json(res, 404, { error: '记录不存在' });
+          return json(res, 200, { ok: true });
+        } catch (e) {
+          console.error('[autotask] history delete failed:', e && e.stack || e);
+          return json(res, 500, { error: '服务端错误' });
+        }
+      })();
+      return;
     }
 
     // POST /api/autotask/test-source — test a source URL
