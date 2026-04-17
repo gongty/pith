@@ -11,6 +11,7 @@ import { rArticle } from './pages/article.js';
 import { rRaw } from './pages/raw.js';
 import { rHealth } from './pages/health.js';
 import { rAutotask } from './pages/autotask.js';
+import { rAsk } from './pages/ask.js';
 
 function safeDecode(s) {
   try { return decodeURIComponent(s); } catch { return s; }
@@ -38,6 +39,7 @@ export function route() {
   if (path === '#/browse') return { v: 'browse', tag: query.tag || '' };
   if (path === '#/health') return { v: 'health' };
   if (path === '#/autotask') return { v: 'autotask' };
+  if (path === '#/ask') return { v: 'ask', q: query.q || '' };
   if (path.startsWith('#/article/')) return { v: 'article', p: safeDecode(path.slice(10)) };
   if (path.startsWith('#/raw/')) return { v: 'raw', p: safeDecode(path.slice(6)) };
   return { v: 'dashboard' };
@@ -62,6 +64,7 @@ function updBC(r) {
     ? '<a href="#/">知识库</a><span class="sep">/</span><a href="#/browse">全部文章</a><span class="sep">/</span>标签 · ' + h(r.tag)
     : '<a href="#/">知识库</a><span class="sep">/</span>全部文章';
   else if (r.v === 'autotask') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>自动任务';
+  else if (r.v === 'ask') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>提问';
   else if (r.v === 'raw' && r.p) {
     const pts = r.p.split('/'); const f = pts[pts.length - 1];
     const ft = f.length > 30 ? f.slice(0, 30) + '…' : f;
@@ -92,6 +95,7 @@ export async function render() {
   else if (r.v === 'browse') await rBrowse(c, r.tag);
   else if (r.v === 'health') await rHealth(c);
   else if (r.v === 'autotask') await rAutotask(c);
+  else if (r.v === 'ask') await rAsk(c, r.q);
   else if (r.v === 'article') await rArticle(c, r.p);
   else if (r.v === 'raw') await rRaw(c, r.p);
   updSidebarPages();
