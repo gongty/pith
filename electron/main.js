@@ -79,7 +79,7 @@ async function findAvailablePort() {
     if (!(await isPortOpen(p))) return { port: p, reuse: false };
     if (await isPithServer(p)) return { port: p, reuse: true };
   }
-  return { port: BASE_PORT + 20, reuse: false };
+  throw new Error('No available port found (tried ' + BASE_PORT + '-' + (BASE_PORT + 19) + ')');
 }
 
 function startServer(port) {
@@ -173,8 +173,13 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('activate', () => {
-  if (!mainWindow) createWindow();
+app.on('activate', async () => {
+  if (!mainWindow) {
+    if (ownServer && !serverProcess) {
+      try { await startServer(activePort); } catch {}
+    }
+    createWindow();
+  }
 });
 
 app.on('before-quit', () => {

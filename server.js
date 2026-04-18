@@ -4640,7 +4640,7 @@ ${trimmedArticle}
           } else {
             const baseUrl = (providerKey === 'custom' && cfg.customBaseUrl) ? cfg.customBaseUrl : provBuiltin.baseUrl;
             const hdrs = { 'Authorization': 'Bearer ' + cfg.apiKey };
-            if (providerKey === 'openrouter') { hdrs['HTTP-Referer'] = 'http://localhost:' + PORT; hdrs['X-Title'] = 'Wiki KB'; }
+            if (providerKey === 'openrouter') { hdrs['HTTP-Referer'] = 'http://localhost:' + PORT; hdrs['X-Title'] = 'Pith'; }
             const llmBody = { model: chosenModel, messages: [{ role: 'system', content: sysPrompt }, ...msgs], temperature: 0.3, max_tokens: 2048, stream: true };
             const mm = findModelMeta(providerKey, chosenModel, cfg) || {};
             if (providerKey === 'bailian' && mm.thinkingCapable) llmBody.enable_thinking = !!mm.defaultThinking;
