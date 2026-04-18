@@ -52,45 +52,82 @@ export async function rDash(c) {
 
 // 基于实际知识库数据生成推荐气泡
 // 每个 chip 有 label（显示用，短）和 q（点击发送的完整问题）
-function buildSuggestChips(stats, graph, recent) {
+function pickRandom(arr, n) {
+  const pool = arr.slice();
   const out = [];
-  const seen = new Set();
-  const push = (label, q) => { if (label && q && !seen.has(q)) { seen.add(q); out.push({ label, q }); } };
+  while (out.length < n && pool.length) {
+    const i = Math.floor(Math.random() * pool.length);
+    out.push(pool.splice(i, 1)[0]);
+  }
+  return out;
+}
+
+function buildSuggestChips(stats, graph, recent) {
+  const pool = [];
+  const add = (label, q) => { if (label && q) pool.push({ label, q }); };
 
   const nodes = (graph && graph.nodes) || [];
-  // 两层图谱：concept 节点已在后端聚合，articleCount 直接可用
   const concepts = nodes.filter(n => n.kind === 'concept');
   const articleNodes = nodes.filter(n => n.kind === 'article');
+  const edges = (graph && graph.edges) || [];
   const entries = (recent && recent.entries) || [];
 
-  // 1) 最新收录的文章：short label，点击发送带标题的完整问题
-  const latest = entries.find(e => e.type === 'ingest' && e.title);
-  if (latest) push(t('dash.chipLatest'), t('dash.chipLatestQ', { title: latest.title }));
-
-  // 2) 最热 concept (tag)：用 articleCount 聚合
-  const topConcept = concepts.slice().sort((a, b) => (b.articleCount || 0) - (a.articleCount || 0))[0];
-  if (topConcept && (topConcept.articleCount || 0) >= 2) {
-    const label = topConcept.label || topConcept.name || '';
-    if (label) push(label, t('dash.chipContentSummary', { label }));
+  // A) 最近文章
+  for (const e of entries.filter(e => e.type === 'ingest' && e.title).slice(0, 5)) {
+    add(e.title, t('dash.chipLatestQ', { title: e.title }));
   }
 
-  // 3) 最大主题：从 article 节点（每篇文章有 topic）统计
+  // B) 热门 concept
+  const hotConcepts = concepts.slice().sort((a, b) => (b.articleCount || 0) - (a.articleCount || 0))
+    .filter(c => (c.articleCount || 0) >= 2).slice(0, 8);
+  for (const c of hotConcepts) {
+    const label = c.label || c.name || '';
+    if (label) add(label, t('dash.chipContentSummary', { label }));
+  }
+
+  // C) 主题
   const topicCount = {};
   for (const n of articleNodes) if (n.topic) topicCount[n.topic] = (topicCount[n.topic] || 0) + 1;
-  // fallback：若文章节点没有 topic，就用 concept 节点的 topic 字段计 article 加权
   if (!Object.keys(topicCount).length) {
     for (const c of concepts) if (c.topic) topicCount[c.topic] = (topicCount[c.topic] || 0) + (c.articleCount || 1);
   }
-  const topTopic = Object.entries(topicCount).sort((a, b) => b[1] - a[1])[0];
-  if (topTopic) push(t('dash.chipTopic', { topic: topTopic[0] }), t('dash.chipTopicQ', { topic: topTopic[0] }));
-
-  // 数据不足兜底
-  if (out.length < 2) {
-    push(t('dash.chipWhat'), t('dash.chipWhatQ'));
-    push(t('dash.chipTopics'), t('dash.chipTopicsQ'));
+  for (const [topic] of Object.entries(topicCount).sort((a, b) => b[1] - a[1]).slice(0, 5)) {
+    add(t('dash.chipTopic', { topic }), t('dash.chipTopicQ', { topic }));
   }
 
-  return out.slice(0, 3);
+  // D) 两个 concept 对比
+  if (hotConcepts.length >= 2) {
+    const [a, b] = pickRandom(hotConcepts, 2);
+    const la = a.label || a.name, lb = b.label || b.name;
+    if (la && lb) add(t('dash.chipCompare', { a: la, b: lb }), t('dash.chipCompareQ', { a: la, b: lb }));
+  }
+
+  // E) 随机文章深读
+  if (articleNodes.length) {
+    const [art] = pickRandom(articleNodes.slice(0, 20), 1);
+    const title = art.label || art.name || '';
+    if (title) add(t('dash.chipDeep', { title }), t('dash.chipDeepQ', { title }));
+  }
+
+  // F) 图谱关联发现
+  const coEdges = edges.filter(e => e.type === 'co-concept' && (e.weight || 1) >= 2);
+  if (coEdges.length) {
+    const [e] = pickRandom(coEdges, 1);
+    const sn = concepts.find(n => n.id === e.source), tn = concepts.find(n => n.id === e.target);
+    if (sn && tn) {
+      const sl = sn.label || sn.name, tl = tn.label || tn.name;
+      if (sl && tl) add(t('dash.chipLink', { a: sl, b: tl }), t('dash.chipLinkQ', { a: sl, b: tl }));
+    }
+  }
+
+  if (pool.length < 2) {
+    add(t('dash.chipWhat'), t('dash.chipWhatQ'));
+    add(t('dash.chipTopics'), t('dash.chipTopicsQ'));
+  }
+
+  const picked = pickRandom(pool, 3);
+  const seen = new Set();
+  return picked.filter(c => { if (seen.has(c.q)) return false; seen.add(c.q); return true; });
 }
 
 export async function dashAsk(el) { $('dashIn').value = el.dataset.q || el.textContent; $('dashSendBtn').disabled = false; dashSend(); }
