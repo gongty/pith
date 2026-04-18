@@ -30,7 +30,7 @@ Default port: 3456. First run `npm install` to install dependencies (pdf-parse, 
 
 ### Server (`server.js`)
 
-Single-file raw Node.js HTTP server (~5400 lines). Key subsystems:
+Single-file raw Node.js HTTP server (~6700 lines). Key subsystems:
 
 - **LLM Integration** — 6 cloud providers (Bailian/阿里云, OpenRouter, Anthropic, OpenAI, DeepSeek, custom)。`callLLM()` is the universal entry point. `getFullConfig()` merges `loadConfig()` (provider/model) + `loadApiKey()` (env var only). `pickModelByUse(provider, use, cfg)` resolves use-key ('fast' / 'main' / 'strong') to concrete model id with fallback. 默认 provider 是 `bailian`。
 - **Compilation Engine** — `runCompilePipeline()` is the 7-stage pipeline: title -> topic -> content+summary(parallel) -> tags -> filename -> seealso -> persist. Each stage tracked via `startStage`/`doneStage`/`errorStage`. 失败时把原始 rawBody 归档到 `data/raw/<topic>/failed/` 并抛错，绝不构造占位正文落盘。
@@ -48,8 +48,8 @@ Vanilla JS with ES modules (`<script type="module">`). No framework, no bundler.
 
 **Module dependency graph** (entry: `js/app.js`):
 ```
-app.js -> router.js -> pages/{dashboard,chat,article,graph,browse,autotask,health}.js
-       -> sidebar.js, composer.js, search.js, settings.js, ingest.js
+app.js -> router.js -> pages/{dashboard,chat,article,graph,browse,autotask,health,raw}.js
+       -> sidebar.js, composer.js, search.js, settings.js, ingest.js, ingest-queue.js, memory.js
        -> state.js (shared mutable state), utils.js (DOM/$, API, toast)
        -> theme.js, markdown.js
 ```
@@ -64,6 +64,7 @@ app.js -> router.js -> pages/{dashboard,chat,article,graph,browse,autotask,healt
 - `css/components.css` — Composer, search overlay, modals, toast
 - `css/pages.css` — Per-page styles
 - `css/ingest.css` — Ingest panel
+- `css/ingest-queue.css` — Ingest queue panel
 - `css/autotask.css` — Automated tasks page
 
 ### Adding a New Page
