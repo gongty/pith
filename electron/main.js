@@ -11,7 +11,14 @@ const SERVER_SCRIPT = path.join(__dirname, '..', 'server.js');
 
 let dataDir = null;
 function getDataDir() {
-  if (!dataDir) dataDir = path.join(app.getPath('userData'), 'data');
+  if (!dataDir) {
+    dataDir = path.join(app.getPath('userData'), 'data');
+    // migrate from old "wiki-app" userData path after rename to "pith"
+    const oldDir = path.join(path.dirname(app.getPath('userData')), 'wiki-app', 'data');
+    if (!fs.existsSync(dataDir) && fs.existsSync(oldDir)) {
+      fs.renameSync(oldDir, dataDir);
+    }
+  }
   return dataDir;
 }
 
