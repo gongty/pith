@@ -85,7 +85,7 @@ export function renderMd(md, ap) {
     t = t.replace(/`([^`]+)`/g, '<code>$1</code>');
     return t;
   }
-  function fBq() { if (bqL.length) { if (bqL.length === 1) { html += '<div class="callout"><p>' + inl(bqL[0]) + '</p></div>'; } else { html += '<blockquote>' + bqL.map(l => '<p>' + inl(l) + '</p>').join('') + '</blockquote>'; } bqL = []; } inBq = false; }
+  function fBq() { if (bqL.length) { const total = bqL.join('').length; if (total <= 200) { html += '<div class="callout">' + bqL.map(l => '<p>' + inl(l) + '</p>').join('') + '</div>'; } else { html += '<blockquote>' + bqL.map(l => '<p>' + inl(l) + '</p>').join('') + '</blockquote>'; } bqL = []; } inBq = false; }
   function fTbl() { if (tRows.length >= 2) { html += '<div class="table-wrap"><table><thead><tr>' + tRows[0].map(c => '<th>' + inl(c.trim()) + '</th>').join('') + '</tr></thead><tbody>'; for (let i = 2; i < tRows.length; i++) html += '<tr>' + tRows[i].map(c => '<td>' + inl(c.trim()) + '</td>').join('') + '</tr>'; html += '</tbody></table></div>'; } tRows = []; inTbl = false; }
   function fList() { if (inList) { html += lt === 'ol' ? '</ol>' : '</ul>'; inList = false; } }
 
