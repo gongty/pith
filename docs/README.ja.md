@@ -1,8 +1,8 @@
 # Wiki App
 
-AI搭載のパーソナルナレッジベース。素材を投入すると、AIが構造化されたWiki記事に自動編纂します。素材を追加するほど、知識ベースは賢くなります。
+AI搭載のパーソナルナレッジベース。素材を投入すると、AIが構造化されたWiki記事に自動編纂します。素材を追加するほど、知識ベースは賢くなります。UIは中国語・英語・日本語・韓国語に対応。
 
-[Andrej Karpathy](https://x.com/karpathy) に着想を得たプロジェクト: LLMにWikiの執筆と保守を任せ、あなたは読んで質問する。Wikiは複利で成長するナレッジ資産です。
+[Claude Code](https://claude.ai/code) を使って数時間のバイブコーディングで構築。[Andrej Karpathy](https://x.com/karpathy) に着想を得たプロジェクト: LLMにWikiの執筆と保守を任せ、あなたは読んで質問する。Wikiは複利で成長するナレッジ資産です。
 
 **[中文](README.zh.md) | [English](../README.md) | 日本語 | [한국어](README.ko.md) | [Espanol](README.es.md) | [Portugues](README.pt.md) | [Deutsch](README.de.md)**
 

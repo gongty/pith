@@ -1,8 +1,8 @@
 # Wiki App
 
-Base de conhecimento pessoal com IA. Jogue materiais, a IA compila em artigos wiki estruturados. Quanto mais voce alimenta, mais inteligente ela fica.
+Base de conhecimento pessoal com IA. Jogue materiais, a IA compila em artigos wiki estruturados. Quanto mais voce alimenta, mais inteligente ela fica. Interface disponivel em chines, ingles, japones e coreano.
 
-Inspirado por [Andrej Karpathy](https://x.com/karpathy): deixe LLMs escreverem e manterem um wiki, voce le e faz perguntas. Um wiki e um ativo de conhecimento que se acumula.
+Construido em poucas horas de puro vibe coding com [Claude Code](https://claude.ai/code). Inspirado por [Andrej Karpathy](https://x.com/karpathy): deixe LLMs escreverem e manterem um wiki, voce le e faz perguntas. Um wiki e um ativo de conhecimento que se acumula.
 
 **[中文](README.zh.md) | [English](../README.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Espanol](README.es.md) | Portugues | [Deutsch](README.de.md)**
 

@@ -1,8 +1,8 @@
 # Wiki App
 
-AI 驱动的个人知识库。丢进素材，AI 自动整理成结构化的 wiki 文章。喂得越多，它就越聪明。
+AI 驱动的个人知识库。丢进素材，AI 自动整理成结构化的 wiki 文章。喂得越多，它就越聪明。界面支持中文、英语、日语、韩语。
 
-灵感来自 [Andrej Karpathy](https://x.com/karpathy)：让 LLM 写和维护一个 wiki，你来阅读和提问。Wiki 是一种会复利增长的知识资产。
+几小时纯 vibe coding 搭建，使用 [Claude Code](https://claude.ai/code)。灵感来自 [Andrej Karpathy](https://x.com/karpathy)：让 LLM 写和维护一个 wiki，你来阅读和提问。Wiki 是一种会复利增长的知识资产。
 
 **中文 | [English](../README.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Espanol](README.es.md) | [Portugues](README.pt.md) | [Deutsch](README.de.md)**
 

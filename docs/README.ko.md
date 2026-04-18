@@ -1,8 +1,8 @@
 # Wiki App
 
-AI 기반 개인 지식 베이스. 자료를 넣으면 AI가 체계적인 위키 문서로 정리합니다. 자료를 넣을수록 더 똑똑해집니다.
+AI 기반 개인 지식 베이스. 자료를 넣으면 AI가 체계적인 위키 문서로 정리합니다. 자료를 넣을수록 더 똑똑해집니다. UI는 중국어, 영어, 일본어, 한국어를 지원합니다.
 
-[Andrej Karpathy](https://x.com/karpathy)에서 영감을 받았습니다: LLM이 위키를 작성하고 관리하면, 당신은 읽고 질문하세요. 위키는 복리로 쌓이는 지식 자산입니다.
+[Claude Code](https://claude.ai/code)로 몇 시간 만에 바이브 코딩으로 구축. [Andrej Karpathy](https://x.com/karpathy)에서 영감을 받았습니다: LLM이 위키를 작성하고 관리하면, 당신은 읽고 질문하세요. 위키는 복리로 쌓이는 지식 자산입니다.
 
 **[中文](README.zh.md) | [English](../README.md) | [日本語](README.ja.md) | 한국어 | [Espanol](README.es.md) | [Portugues](README.pt.md) | [Deutsch](README.de.md)**
 

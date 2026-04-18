@@ -1,8 +1,8 @@
 # Wiki App
 
-KI-gestutzte persoenliche Wissensdatenbank. Materialien einspeisen, die KI kompiliert sie zu strukturierten Wiki-Artikeln. Je mehr du einspeist, desto intelligenter wird sie.
+KI-gestutzte persoenliche Wissensdatenbank. Materialien einspeisen, die KI kompiliert sie zu strukturierten Wiki-Artikeln. Je mehr du einspeist, desto intelligenter wird sie. Oberflaeche verfuegbar auf Chinesisch, Englisch, Japanisch und Koreanisch.
 
-Inspiriert von [Andrej Karpathy](https://x.com/karpathy): Lass LLMs ein Wiki schreiben und pflegen, du liest und stellst Fragen. Ein Wiki ist ein wachsendes Wissenskapital.
+In wenigen Stunden reines Vibe Coding mit [Claude Code](https://claude.ai/code) gebaut. Inspiriert von [Andrej Karpathy](https://x.com/karpathy): Lass LLMs ein Wiki schreiben und pflegen, du liest und stellst Fragen. Ein Wiki ist ein wachsendes Wissenskapital.
 
 **[中文](README.zh.md) | [English](../README.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Espanol](README.es.md) | [Portugues](README.pt.md) | Deutsch**
 
