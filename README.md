@@ -1,112 +1,113 @@
-# Wiki App — AI 驱动的个人知识库
+# Wiki App
 
-受 [Andrej Karpathy](https://x.com/karpathy) 启发：让 LLM 写和维护 wiki，人来读和提问。wiki 是一个持续复利的知识资产。
+AI-powered personal knowledge base. Throw in materials, AI compiles them into structured wiki articles. The more you feed, the smarter it gets.
 
-把资料丢进来，AI 自动整理成 wiki，越积越多越好用。
+Inspired by [Andrej Karpathy](https://x.com/karpathy): let LLMs write and maintain a wiki, you read and ask questions. A wiki is a compounding knowledge asset.
 
-## 截图
+**[中文](docs/README.zh.md) | [日本語](docs/README.ja.md) | [한국어](docs/README.ko.md) | [Espanol](docs/README.es.md) | [Portugues](docs/README.pt.md) | [Deutsch](docs/README.de.md)**
 
-```
-┌─────────┬──────────────────────────────────┐
-│ 侧边栏   │  基于知识库提问                     │
-│          │  ┌─────┐ ┌─────┐ ┌─────┐        │
-│ 对话 文章 │  │ 卡片 │ │ 卡片 │ │ 卡片 │        │
-│          │  └─────┘ └─────┘ └─────┘        │
-│ 新对话    │  [____________________ 发送]     │
-│          │                                  │
-│ 历史对话  │  知识图谱        最近活动           │
-│ ...      │  ◉──◉──◉        · 文章标题        │
-│          │  ◉──◉            · 文章标题        │
-└─────────┴──────────────────────────────────┘
-```
+## Screenshots
 
-## 特性
+| Dashboard | Knowledge Graph |
+|:-:|:-:|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Knowledge Graph](docs/screenshots/graph.png) |
 
-- **投喂** — 粘贴文本、拖入文件、输入 URL、上传 ZIP，AI 自动编译成结构化文章
-- **对话** — 基于知识库内容的 RAG 问答，引用来源可追溯
-- **知识图谱** — 力导向图可视化文章关联（链接、关键词共现、主题亲和）
-- **编辑器** — Notion 风格 contenteditable，浮动格式工具栏，自动保存
-- **多 LLM** — 百炼/OpenRouter/Anthropic/OpenAI/DeepSeek/本地 Claude CLI
+| Article Reading | Browse Articles |
+|:-:|:-:|
+| ![Article](docs/screenshots/article.png) | ![Browse](docs/screenshots/browse.png) |
 
-## 快速开始
+| Automated Tasks | Dark Mode |
+|:-:|:-:|
+| ![Autotask](docs/screenshots/autotask.png) | ![Dark Mode](docs/screenshots/dark-mode.png) |
+
+## What problems does it solve?
+
+**Information is scattered, read and forgotten.** Notes in one app, bookmarks in another, PDFs on your desktop. Wiki App turns all of them into searchable, interconnected articles -- automatically.
+
+**You want to ask questions based on your own knowledge, not generic AI.** The built-in chat uses RAG (retrieval-augmented generation) to answer from your wiki. Every answer is grounded in articles you've accumulated.
+
+**You want AI to monitor topics you care about, daily.** Set up automated tasks with RSS feeds, web pages, and APIs as sources. AI fetches, filters, and compiles new articles on a schedule -- your personal research assistant.
+
+## Features
+
+- **Ingest anything** -- Paste text, drop files (PDF, images, audio, video, ZIP), or enter URLs. AI compiles them into structured articles with tags, summaries, and cross-references.
+- **Chat with your knowledge** -- RAG-powered Q&A that retrieves context from your wiki. Hybrid search: BM25 keywords + vector embeddings (RRF fusion).
+- **Knowledge graph** -- Force-directed visualization of concepts and articles. See how your knowledge connects.
+- **Article Q&A** -- Floating panel on each article for in-context questions. Per-article conversation sessions with streaming responses.
+- **Automated tasks** -- AI research assistant that monitors RSS/web/API sources on a schedule. LLM relevance gating, dedup, and daily briefings.
+- **Rich editing** -- Notion-style contenteditable editor with floating toolbar, auto-save, tag management, and table of contents.
+- **Multi-LLM** -- Bailian (Alibaba), OpenRouter, Anthropic, OpenAI, DeepSeek, or custom providers.
+- **Dark mode** -- Full dark theme with carefully tuned tokens.
+- **Zero framework** -- Vanilla JS frontend, no build step. Edit and refresh.
+
+## Quick Start
 
 ```bash
 git clone https://github.com/gongty/wiki-app.git
 cd wiki-app
-node server.js
-# 打开 http://localhost:3456
+npm install
+WIKI_API_KEY=your-api-key node server.js
+# Open http://localhost:3456
 ```
 
-无需 `npm install`。零外部依赖，只用 Node.js 内置模块。
+Default port: 3456. Configure your LLM provider in Settings after first launch.
 
-## 配置 LLM
+## Configuration
 
-首次使用需在设置中配置 AI 提供商。打开页面后点击左下角「设置」：
+### Environment Variables
 
-| 提供商 | 说明 |
-|--------|------|
-| 百炼 (Bailian) | 阿里云 DashScope，默认选项 |
-| OpenRouter | 聚合多家模型 |
-| Anthropic | Claude 系列 |
-| OpenAI | GPT 系列 |
-| DeepSeek | 国产大模型 |
-| 本地 Claude CLI | 需安装 claude 命令行 |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `WIKI_API_KEY` | Yes | API key for your LLM provider |
+| `WIKI_ADMIN_TOKEN` | Production | Auth token (16+ chars) to protect write endpoints |
+| `PORT` | No | Server port (default: 3456) |
 
-## 项目结构
+### LLM Providers
+
+Configure in Settings after launch:
+
+| Provider | Notes |
+|----------|-------|
+| Bailian (Alibaba Cloud) | Default. DashScope API |
+| OpenRouter | Multi-model aggregator |
+| Anthropic | Claude models |
+| OpenAI | GPT models |
+| DeepSeek | Chinese LLM |
+| Custom | Any OpenAI-compatible endpoint |
+
+## Tech Stack
+
+| Layer | Choice | Why |
+|-------|--------|-----|
+| Backend | Node.js stdlib | Single-file server, zero backend dependencies |
+| Frontend | Vanilla JS + ES Modules | No framework, no bundler, no build step |
+| Styling | CSS Custom Properties | Design tokens cascade, dark mode built in |
+| Storage | File system | Markdown + JSON, no database |
+| AI | Multi-provider | Unified `callLLM()` interface |
+
+## Project Structure
 
 ```
 wiki-app/
-├── server.js          ← Node.js HTTP 服务器（API + 静态文件）
-├── config.json        ← LLM 提供商配置
-├── profile.json       ← 用户信息
+├── server.js          # Node.js HTTP server (~6700 lines, API + static files)
 ├── app/
-│   ├── index.html     ← HTML 骨架
-│   ├── css/           ← 5 个样式文件（Warm Ink 设计系统）
-│   └── js/            ← 16 个 ES Module
-│       ├── app.js     ← 入口，事件绑定
-│       ├── router.js  ← Hash 路由
-│       ├── state.js   ← 全局状态
-│       └── pages/     ← 页面组件（dashboard, chat, article, graph, browse）
-└── data/
-    ├── wiki/          ← 编译后的知识库文章（Markdown）
-    ├── raw/           ← 原始素材（不可变）
-    └── chats/         ← 对话历史（JSON）
+│   ├── index.html     # HTML shell
+│   ├── css/           # Design system ("Warm Ink": indigo accent, warm paper)
+│   └── js/            # ES Modules
+│       ├── app.js     # Entry point
+│       ├── router.js  # Hash-based routing
+│       └── pages/     # dashboard, chat, article, graph, browse, autotask
+└── data/              # Auto-created, gitignored
+    ├── wiki/          # Compiled markdown articles by topic
+    ├── raw/           # Immutable source materials
+    ├── chats/         # Conversation history (JSON)
+    ├── autotasks/     # Task configs, run history, dedup index
+    └── vectors/       # Embedding index for semantic search
 ```
 
-## 技术栈
+## Contributing
 
-| 层 | 选型 | 说明 |
-|----|------|------|
-| 后端 | Node.js stdlib | 零依赖，原生 HTTP 服务器 |
-| 前端 | Vanilla JS + ES Modules | 零框架，零构建工具 |
-| 样式 | CSS Custom Properties | 主题变量级联，支持 dark mode |
-| 存储 | 文件系统 | Markdown + JSON，无数据库 |
-| AI | 多 LLM 提供商 | 统一 callLLM() 接口 |
-
-## API 概览
-
-| 路径 | 说明 |
-|------|------|
-| `GET /api/wiki/tree` | 文章目录树 |
-| `GET /api/wiki/graph` | 知识图谱数据 |
-| `GET /api/search?q=` | 全文搜索 |
-| `POST /api/ingest` | 投喂内容（文本/URL/文件） |
-| `POST /api/chat/new` | 新建对话 |
-| `POST /api/chat/:id/message` | 发送消息 |
-| `GET /api/settings` | 获取配置 |
-
-完整 API 见 `server.js`。
-
-## 设计系统：Warm Ink
-
-温暖、克制、有质感。知识库不是工具，是你的书房。
-
-- 主色：`#5B5BD6` 墨水紫
-- 背景：`#FAFAF8` 暖白纸感
-- 圆角：8px / 12px 两档
-- 字体：系统字体栈（SF Pro + PingFang SC）
-
-所有设计 token 在 `app/css/base.css` 的 `:root` 中定义。
+Issues and pull requests are welcome.
 
 ## License
 
