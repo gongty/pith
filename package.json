@@ -21,7 +21,7 @@
     "rag"
   ],
   "author": "gongty",
-  "license": "ISC",
+  "license": "MIT",
   "type": "commonjs",
   "bugs": {
     "url": "https://github.com/gongty/pith/issues"
