@@ -2,7 +2,7 @@
 
 AI-powered personal knowledge base. Throw in materials, AI compiles them into structured wiki articles. The more you feed, the smarter it gets. UI available in Chinese, English, Japanese, and Korean.
 
-Inspired by [Andrej Karpathy](https://x.com/karpathy): let LLMs write and maintain a wiki, you read and ask questions. A wiki is a compounding knowledge asset.
+Built in a few hours of pure vibe coding with [Claude Code](https://claude.ai/code). Inspired by [Andrej Karpathy](https://x.com/karpathy): let LLMs write and maintain a wiki, you read and ask questions. A wiki is a compounding knowledge asset.
 
 **[中文](docs/README.zh.md) | [日本語](docs/README.ja.md) | [한국어](docs/README.ko.md) | [Espanol](docs/README.es.md) | [Portugues](docs/README.pt.md) | [Deutsch](docs/README.de.md)**
 
