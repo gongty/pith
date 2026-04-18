@@ -629,6 +629,7 @@ function setupBlockPlusBtn(body) {
   function updatePlus() {
     const sel = window.getSelection();
     if (!sel.rangeCount || !sel.isCollapsed) { _plusBtn.classList.remove('show'); return; }
+    if (_qaPanel && _qaPanel.classList.contains('open')) { _plusBtn.classList.remove('show'); return; }
     // Find the block-level parent of the cursor
     let node = sel.anchorNode;
     if (node.nodeType === 3) node = node.parentElement;
@@ -833,20 +834,32 @@ function endImgResize() {
 /* ── Article Q&A floating panel ── */
 let _qaPanel = null;
 let _qaFab = null;
-let _qaHistory = [];
+const _qaSessions = new Map();
 let _qaPath = '';
-let _qaStreaming = false;
 let _qaModel = '';
 let _qaModels = [];
 
+function _qaSession(p) {
+  if (!_qaSessions.has(p)) _qaSessions.set(p, { history: [], html: '', streaming: false, abort: null });
+  return _qaSessions.get(p);
+}
+
 function setupArticleQA(articlePath) {
+  if (_qaPath && _qaPanel) {
+    const prev = _qaSession(_qaPath);
+    prev.html = _qaPanel.querySelector('.article-qa-messages').innerHTML;
+  }
   _qaPath = articlePath;
-  _qaHistory = [];
+  const s = _qaSession(articlePath);
   ensureQAPanel();
   ensureQAFab();
   if (!_qaPanel.classList.contains('open')) _qaFab.classList.add('show');
   const msgsEl = _qaPanel.querySelector('.article-qa-messages');
-  msgsEl.innerHTML = buildEmptyState();
+  msgsEl.innerHTML = s.html || buildEmptyState();
+  const input = _qaPanel.querySelector('.article-qa-input');
+  if (input) input.disabled = s.streaming;
+  const btn = _qaPanel.querySelector('.article-qa-bottom');
+  if (btn) btn.classList.remove('show');
   loadQAModels();
 }
 
@@ -877,11 +890,52 @@ async function loadQAModels() {
 }
 
 function renderModelSelect() {
-  const sel = _qaPanel.querySelector('.article-qa-model-select');
-  if (!sel || !_qaModels.length) return;
-  sel.innerHTML = _qaModels.map(m =>
-    '<option value="' + h(m.id) + '"' + (m.id === _qaModel ? ' selected' : '') + '>' + h(m.label) + '</option>'
+  if (!_qaPanel || !_qaModels.length) return;
+  const label = _qaPanel.querySelector('.article-qa-model-label');
+  const dd = _qaPanel.querySelector('.article-qa-model-dd');
+  if (!label || !dd) return;
+  const cur = _qaModels.find(m => m.id === _qaModel) || _qaModels[0];
+  label.textContent = cur.label;
+  dd.innerHTML = _qaModels.map(m =>
+    '<div class="article-qa-model-opt' + (m.id === _qaModel ? ' active' : '') + '" onclick="qaModelPick(\'' + jsAttr(m.id) + '\')">' + h(m.label) + '</div>'
   ).join('');
+}
+
+export function toggleQAModelDD() {
+  const dd = _qaPanel && _qaPanel.querySelector('.article-qa-model-dd');
+  if (dd) dd.classList.toggle('open');
+}
+
+export function qaModelPick(id) {
+  _qaModel = id;
+  renderModelSelect();
+  const dd = _qaPanel && _qaPanel.querySelector('.article-qa-model-dd');
+  if (dd) dd.classList.remove('open');
+}
+
+const QA_FAB_KEY = 'qa.fab.pos';
+const QA_SIZE_KEY = 'qa.panel.size';
+const QA_PANEL_KEY = 'qa.panel.pos';
+
+function _positionPanel() {
+  if (!_qaPanel) return;
+  const pw = _qaPanel.offsetWidth, ph = _qaPanel.offsetHeight;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let x, y, used = false;
+  try {
+    const s = localStorage.getItem(QA_PANEL_KEY);
+    if (s) { const p = JSON.parse(s); x = p.x; y = p.y; used = true; }
+  } catch {}
+  if (!used && _qaFab) {
+    const fab = _qaFab.getBoundingClientRect();
+    const cx = fab.left + fab.width / 2, cy = fab.top + fab.height / 2;
+    x = cx > vw / 2 ? fab.left - pw - 12 : fab.right + 12;
+    y = cy > vh / 2 ? fab.bottom - ph : fab.top;
+  }
+  x = Math.max(8, Math.min(vw - pw - 8, x || 0));
+  y = Math.max(8, Math.min(vh - ph - 8, y || 0));
+  _qaPanel.style.left = x + 'px'; _qaPanel.style.top = y + 'px';
+  _qaPanel.style.right = 'auto'; _qaPanel.style.bottom = 'auto';
 }
 
 function ensureQAFab() {
@@ -890,9 +944,42 @@ function ensureQAFab() {
   btn.className = 'article-qa-fab';
   btn.title = '提问';
   btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>';
-  btn.addEventListener('click', toggleQAPanel);
   document.body.appendChild(btn);
   _qaFab = btn;
+
+  try {
+    const s = localStorage.getItem(QA_FAB_KEY);
+    if (s) { const p = JSON.parse(s); btn.style.right = 'auto'; btn.style.bottom = 'auto'; btn.style.left = p.x + 'px'; btn.style.top = p.y + 'px'; }
+  } catch {}
+
+  let sx, sy, ex, ey, dragged;
+  btn.addEventListener('mousedown', e => {
+    e.preventDefault();
+    sx = e.clientX; sy = e.clientY;
+    const r = btn.getBoundingClientRect(); ex = r.left; ey = r.top;
+    dragged = false;
+    const onMove = ev => {
+      const dx = ev.clientX - sx, dy = ev.clientY - sy;
+      if (!dragged && Math.abs(dx) + Math.abs(dy) < 4) return;
+      dragged = true;
+      btn.style.right = 'auto'; btn.style.bottom = 'auto';
+      btn.style.left = (ex + dx) + 'px'; btn.style.top = (ey + dy) + 'px';
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (dragged) {
+        const vw = window.innerWidth, vh = window.innerHeight, r = btn.getBoundingClientRect();
+        btn.style.left = Math.max(0, Math.min(vw - r.width, r.left)) + 'px';
+        btn.style.top = Math.max(0, Math.min(vh - r.height, r.top)) + 'px';
+        localStorage.setItem(QA_FAB_KEY, JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top) }));
+      } else {
+        toggleQAPanel();
+      }
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
 }
 
 function ensureQAPanel() {
@@ -900,9 +987,16 @@ function ensureQAPanel() {
   const panel = document.createElement('div');
   panel.className = 'article-qa-panel';
   panel.innerHTML =
+    '<div class="article-qa-resize"></div>' +
     '<div class="article-qa-head">' +
       '<span class="article-qa-title">文章提问</span>' +
-      '<select class="article-qa-model-select" onchange="qaModelChange(this)"></select>' +
+      '<div class="article-qa-model-wrap">' +
+        '<span class="article-qa-model-tag" onclick="toggleQAModelDD()">' +
+          '<span class="article-qa-model-label"></span>' +
+          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>' +
+        '</span>' +
+        '<div class="article-qa-model-dd"></div>' +
+      '</div>' +
       '<button class="article-qa-close" onclick="closeArticleQA()">' +
         '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
       '</button>' +
@@ -917,6 +1011,11 @@ function ensureQAPanel() {
   document.body.appendChild(panel);
   _qaPanel = panel;
 
+  try {
+    const sz = JSON.parse(localStorage.getItem(QA_SIZE_KEY));
+    if (sz) { panel.style.width = sz.w + 'px'; panel.style.height = sz.h + 'px'; }
+  } catch {}
+
   const input = panel.querySelector('.article-qa-input');
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
@@ -924,10 +1023,62 @@ function ensureQAPanel() {
       sendArticleQA();
     }
   });
-}
 
-export function qaModelChange(sel) {
-  _qaModel = sel.value;
+  const head = panel.querySelector('.article-qa-head');
+  let hsx, hsy, hex, hey, hdragged;
+  head.addEventListener('mousedown', e => {
+    if (e.target.closest('button, .article-qa-model-tag, .article-qa-model-dd')) return;
+    e.preventDefault();
+    hsx = e.clientX; hsy = e.clientY;
+    const r = panel.getBoundingClientRect(); hex = r.left; hey = r.top;
+    hdragged = false;
+    const onMove = ev => {
+      const dx = ev.clientX - hsx, dy = ev.clientY - hsy;
+      if (!hdragged && Math.abs(dx) + Math.abs(dy) < 4) return;
+      hdragged = true;
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const nx = Math.max(0, Math.min(vw - panel.offsetWidth, hex + dx));
+      const ny = Math.max(0, Math.min(vh - panel.offsetHeight, hey + dy));
+      panel.style.left = nx + 'px'; panel.style.top = ny + 'px';
+      panel.style.right = 'auto'; panel.style.bottom = 'auto';
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (hdragged) {
+        const r = panel.getBoundingClientRect();
+        localStorage.setItem(QA_PANEL_KEY, JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top) }));
+      }
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  const rh = panel.querySelector('.article-qa-resize');
+  let rStartX, rStartY, rStartW, rStartH, rStartLeft, rStartTop;
+  rh.addEventListener('mousedown', e => {
+    e.preventDefault();
+    rStartX = e.clientX; rStartY = e.clientY;
+    rStartW = panel.offsetWidth; rStartH = panel.offsetHeight;
+    const rect = panel.getBoundingClientRect();
+    rStartLeft = rect.right; rStartTop = rect.bottom;
+    const onMove = ev => {
+      const w = Math.max(320, Math.min(rStartLeft, rStartW - (ev.clientX - rStartX)));
+      const h = Math.max(360, Math.min(rStartTop, rStartH - (ev.clientY - rStartY)));
+      panel.style.width = w + 'px'; panel.style.height = h + 'px';
+      panel.style.right = 'auto'; panel.style.bottom = 'auto';
+      panel.style.left = (rStartLeft - w) + 'px'; panel.style.top = (rStartTop - h) + 'px';
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      localStorage.setItem(QA_SIZE_KEY, JSON.stringify({ w: panel.offsetWidth, h: panel.offsetHeight }));
+      const pr = panel.getBoundingClientRect();
+      localStorage.setItem(QA_PANEL_KEY, JSON.stringify({ x: Math.round(pr.left), y: Math.round(pr.top) }));
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
 }
 
 export function toggleQAPanel() {
@@ -935,6 +1086,7 @@ export function toggleQAPanel() {
   const opening = !_qaPanel.classList.contains('open');
   _qaPanel.classList.toggle('open');
   if (opening) {
+    _positionPanel();
     _qaFab.classList.remove('show');
     setTimeout(() => _qaPanel.querySelector('.article-qa-input').focus(), 100);
   } else {
@@ -945,6 +1097,7 @@ export function toggleQAPanel() {
 export function closeArticleQA() {
   if (_qaPanel) _qaPanel.classList.remove('open');
   if (_qaFab) _qaFab.classList.add('show');
+  if (_plusBtn) _plusBtn.classList.remove('show');
 }
 
 export function hideArticleQA() {
@@ -953,14 +1106,17 @@ export function hideArticleQA() {
 }
 
 export function qaChip(btn) {
-  if (_qaStreaming) return;
+  const sess = _qaSession(_qaPath);
+  if (sess.streaming) return;
   const input = _qaPanel.querySelector('.article-qa-input');
   input.value = btn.textContent;
   sendArticleQA();
 }
 
 export async function sendArticleQA() {
-  if (_qaStreaming) return;
+  const sess = _qaSession(_qaPath);
+  if (sess.streaming) return;
+  const sentPath = _qaPath;
   const input = _qaPanel.querySelector('.article-qa-input');
   const q = input.value.trim();
   if (!q) return;
@@ -977,25 +1133,45 @@ export async function sendArticleQA() {
 
   const aiDiv = document.createElement('div');
   aiDiv.className = 'article-qa-msg assistant';
-  aiDiv.innerHTML = '<div class="article-qa-avatar">AI</div><div class="article-qa-msg-body"><span class="article-qa-dots"><span></span><span></span><span></span></span></div>';
+  aiDiv.innerHTML = '<div class="article-qa-avatar">AI</div><div class="article-qa-msg-body"><div class="article-qa-loading"><span></span><span></span><span></span></div></div>';
   msgsEl.appendChild(aiDiv);
   msgsEl.scrollTop = msgsEl.scrollHeight;
 
-  _qaHistory.push({ role: 'user', content: q });
-  _qaStreaming = true;
+  let _userScrolledUp = false;
+  const isVisible = () => _qaPath === sentPath;
+  const _nearBottom = () => msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 40;
+  const _scrollIfPinned = () => { if (!_userScrolledUp && isVisible()) msgsEl.scrollTop = msgsEl.scrollHeight; };
+  let _bottomBtn = _qaPanel.querySelector('.article-qa-bottom');
+  if (!_bottomBtn) {
+    _bottomBtn = document.createElement('button');
+    _bottomBtn.className = 'article-qa-bottom';
+    _bottomBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>';
+    _bottomBtn.addEventListener('click', () => { _userScrolledUp = false; msgsEl.scrollTop = msgsEl.scrollHeight; });
+    msgsEl.parentElement.appendChild(_bottomBtn);
+  }
+  const _onScroll = () => {
+    _userScrolledUp = !_nearBottom();
+    _bottomBtn.classList.toggle('show', _userScrolledUp);
+  };
+  msgsEl.addEventListener('scroll', _onScroll);
+
+  sess.history.push({ role: 'user', content: q });
+  sess.streaming = true;
+  sess.abort = new AbortController();
   input.disabled = true;
 
   const aiBody = aiDiv.querySelector('.article-qa-msg-body');
   let full = '';
 
   try {
-    const reqBody = { path: _qaPath, question: q, history: _qaHistory.slice(-10) };
+    const reqBody = { path: sentPath, question: q, history: sess.history.slice(-11, -1) };
     if (_qaModel) reqBody.model = _qaModel;
 
     const resp = await fetch('/api/wiki/article-ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(reqBody)
+      body: JSON.stringify(reqBody),
+      signal: sess.abort.signal
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
@@ -1005,6 +1181,8 @@ export async function sendArticleQA() {
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let buf = '';
+    let reasoning = '';
+    let thinkEl = null;
     aiBody.textContent = '';
 
     while (true) {
@@ -1021,10 +1199,28 @@ export async function sendArticleQA() {
         try {
           const obj = JSON.parse(payload);
           if (obj.error) throw new Error(obj.error);
+          if (obj.r) {
+            reasoning += obj.r;
+            if (!thinkEl) {
+              aiBody.innerHTML = '<div class="article-qa-thinking-label">思考中</div><div class="article-qa-thinking"></div>';
+              thinkEl = aiBody.querySelector('.article-qa-thinking');
+            }
+            thinkEl.textContent = reasoning;
+            thinkEl.scrollTop = thinkEl.scrollHeight;
+            _scrollIfPinned();
+          }
           if (obj.t) {
+            if (thinkEl && !full) {
+              const details = document.createElement('details');
+              details.className = 'article-qa-thinking-wrap';
+              details.innerHTML = '<summary class="article-qa-thinking-label">思考过程</summary><div class="article-qa-thinking">' + h(reasoning) + '</div>';
+              aiBody.innerHTML = '';
+              aiBody.appendChild(details);
+            }
             full += obj.t;
-            aiBody.innerHTML = fmtChat(full);
-            msgsEl.scrollTop = msgsEl.scrollHeight;
+            const contentEl = thinkEl ? (aiBody.querySelector('.article-qa-content') || (() => { const d = document.createElement('div'); d.className = 'article-qa-content'; aiBody.appendChild(d); return d; })()) : aiBody;
+            contentEl.innerHTML = fmtChat(full);
+            _scrollIfPinned();
           }
         } catch (e) {
           if (e.message && e.message !== 'Unexpected end of JSON input') throw e;
@@ -1032,14 +1228,24 @@ export async function sendArticleQA() {
       }
     }
 
-    if (!full) aiBody.textContent = '(无回复)';
-    _qaHistory.push({ role: 'assistant', content: full });
+    if (!full && !reasoning) aiBody.textContent = '(无回复)';
+    if (!full && reasoning) {
+      aiBody.innerHTML = '<div class="article-qa-thinking-label">思考完成，未生成回复</div>';
+    }
+    sess.history.push({ role: 'assistant', content: full });
   } catch (e) {
+    if (e.name === 'AbortError') return;
     aiBody.textContent = '出错: ' + (e.message || '未知错误');
   }
 
-  _qaStreaming = false;
-  input.disabled = false;
-  input.focus();
-  msgsEl.scrollTop = msgsEl.scrollHeight;
+  sess.abort = null;
+  sess.streaming = false;
+  sess.html = msgsEl.innerHTML;
+  if (isVisible()) {
+    input.disabled = false;
+    input.focus();
+  }
+  _scrollIfPinned();
+  msgsEl.removeEventListener('scroll', _onScroll);
+  if (_nearBottom()) _bottomBtn.classList.remove('show');
 }
