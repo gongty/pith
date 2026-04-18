@@ -37,6 +37,7 @@
     "electron-builder": "^26.0.0"
   },
   "build": {
+    "asar": false,
     "appId": "com.blank.pith",
     "productName": "Pith",
     "mac": {

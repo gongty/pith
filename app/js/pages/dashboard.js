@@ -7,9 +7,20 @@ import { t } from '../i18n.js';
 export async function rDash(c) {
   c.innerHTML = '<div class="page-dashboard">' + skelLines(4) + '</div>';
   try {
-    const [stats, graph, recent] = await Promise.all([api('/api/wiki/stats'), api('/api/wiki/graph'), api('/api/wiki/recent')]);
+    const [stats, graph, recent, settings] = await Promise.all([api('/api/wiki/stats'), api('/api/wiki/graph'), api('/api/wiki/recent'), api('/api/settings').catch(() => null)]);
     state.sd = stats; state.gd = graph;
     let s = '<div class="page-dashboard">';
+
+    // Setup banner for new users without API key
+    if (settings && !settings.hasKey) {
+      s += '<div class="dash-setup-banner">';
+      s += '<div class="dash-setup-text">';
+      s += '<div class="dash-setup-title">' + t('dash.setupTitle') + '</div>';
+      s += '<div class="dash-setup-desc">' + t('dash.setupDesc') + '</div>';
+      s += '</div>';
+      s += '<button class="dash-setup-btn" onclick="openSettings()">' + t('dash.setupBtn') + '</button>';
+      s += '</div>';
+    }
 
     // Greeting + suggestion cards + composer
     s += '<div class="chat-area">';

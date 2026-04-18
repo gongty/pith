@@ -116,6 +116,9 @@ L.en = {
   'dash.chipDeepQ': 'Give me a detailed analysis of "{title}"',
   'dash.chipLink': '{a} & {b}',
   'dash.chipLinkQ': 'How are {a} and {b} related in the knowledge base?',
+  'dash.setupTitle': 'Set up your LLM provider',
+  'dash.setupDesc': 'Add your API key in Settings to enable AI features -- chat, knowledge ingestion, and automated tasks.',
+  'dash.setupBtn': 'Open Settings',
 
   // ── browse ──
   'browse.title': 'All Articles',
@@ -719,6 +722,9 @@ L.ja = {
   'dash.chipDeepQ': '\u300C{title}\u300D\u3092\u8A73\u3057\u304F\u5206\u6790\u3057\u3066',
   'dash.chipLink': '{a} & {b}',
   'dash.chipLinkQ': '{a}\u3068{b}\u306F\u77E5\u8B58\u30D9\u30FC\u30B9\u306E\u4E2D\u3067\u3069\u3046\u7E4B\u304C\u3063\u3066\u3044\u308B\uFF1F',
+  'dash.setupTitle': 'LLM \u30D7\u30ED\u30D0\u30A4\u30C0\u30FC\u3092\u8A2D\u5B9A',
+  'dash.setupDesc': '\u8A2D\u5B9A\u3067 API \u30AD\u30FC\u3092\u8FFD\u52A0\u3057\u3066\u3001AI \u6A5F\u80FD\uFF08\u30C1\u30E3\u30C3\u30C8\u3001\u30CA\u30EC\u30C3\u30B8\u53D6\u308A\u8FBC\u307F\u3001\u81EA\u52D5\u30BF\u30B9\u30AF\uFF09\u3092\u6709\u52B9\u306B\u3057\u3066\u304F\u3060\u3055\u3044\u3002',
+  'dash.setupBtn': '\u8A2D\u5B9A\u3092\u958B\u304F',
 
   'browse.title': '\u5168\u8A18\u4E8B',
   'browse.empty': '\u30CA\u30EC\u30C3\u30B8\u30D9\u30FC\u30B9\u306F\u7A7A\u3067\u3059',
@@ -1301,6 +1307,9 @@ L.ko = {
   'dash.chipDeepQ': '"{title}"\uC744 \uC790\uC138\uD788 \uBD84\uC11D\uD574 \uC8FC\uC138\uC694',
   'dash.chipLink': '{a} & {b}',
   'dash.chipLinkQ': '{a}\uACFC {b}\uB294 \uC9C0\uC2DD\uBCA0\uC774\uC2A4\uC5D0\uC11C \uC5B4\uB5BB\uAC8C \uC5F0\uACB0\uB418\uC5B4 \uC788\uB098\uC694?',
+  'dash.setupTitle': 'LLM \uD504\uB85C\uBC14\uC774\uB354 \uC124\uC815',
+  'dash.setupDesc': '\uC124\uC815\uC5D0\uC11C API \uD0A4\uB97C \uCD94\uAC00\uD558\uC5EC AI \uAE30\uB2A5(\uCC44\uD305, \uC9C0\uC2DD \uC218\uC9D1, \uC790\uB3D9\uD654 \uC791\uC5C5)\uC744 \uD65C\uC131\uD654\uD558\uC138\uC694.',
+  'dash.setupBtn': '\uC124\uC815 \uC5F4\uAE30',
 
   'browse.title': '\uC804\uCCB4 \uAE00',
   'browse.empty': '\uC9C0\uC2DD\uBCA0\uC774\uC2A4\uAC00 \uBE44\uC5B4 \uC788\uC2B5\uB2C8\uB2E4',
@@ -1883,6 +1892,9 @@ L.zh = {
   'dash.chipDeepQ': '\u8BE6\u7EC6\u5206\u6790\u4E00\u4E0B\u300A{title}\u300B',
   'dash.chipLink': '{a} & {b}',
   'dash.chipLinkQ': '{a} \u548C {b} \u5728\u77E5\u8BC6\u5E93\u91CC\u6709\u4EC0\u4E48\u5173\u8054\uFF1F',
+  'dash.setupTitle': '\u914D\u7F6E LLM \u670D\u52A1',
+  'dash.setupDesc': '\u5728\u8BBE\u7F6E\u4E2D\u6DFB\u52A0 API Key\uFF0C\u542F\u7528 AI \u529F\u80FD\u2014\u2014\u5BF9\u8BDD\u3001\u77E5\u8BC6\u6295\u5582\u548C\u81EA\u52A8\u5316\u4EFB\u52A1\u3002',
+  'dash.setupBtn': '\u6253\u5F00\u8BBE\u7F6E',
 
   'browse.title': '\u5168\u90E8\u6587\u7AE0',
   'browse.empty': '\u77E5\u8BC6\u5E93\u8FD8\u662F\u7A7A\u7684',

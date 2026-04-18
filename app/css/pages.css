@@ -1,6 +1,23 @@
 /* ── Page: Dashboard ── */
 .page-dashboard{max-width:1040px;margin:0 auto;padding:40px 48px 120px;animation:fadeIn 150ms ease}
 
+/* Setup banner (first-run onboarding) */
+.dash-setup-banner{
+  display:flex;align-items:center;gap:16px;
+  padding:16px 20px;margin-bottom:20px;
+  background:var(--accent-bg);border:1px solid var(--accent-border);
+  border-radius:var(--radius-lg);
+}
+.dash-setup-text{flex:1}
+.dash-setup-title{font-size:15px;font-weight:600;color:var(--fg);margin-bottom:4px}
+.dash-setup-desc{font-size:13px;color:var(--fg-secondary);line-height:1.5}
+.dash-setup-btn{
+  padding:8px 18px;border-radius:var(--radius);font-size:13px;font-weight:500;
+  color:#fff;background:var(--accent);white-space:nowrap;flex-shrink:0;
+  border:none;cursor:pointer;
+}
+.dash-setup-btn:hover{background:var(--accent-hover)}
+
 /* Chat area (dashboard) */
 .chat-area{margin-bottom:72px}
 .chat-greeting{font-size:22px;font-weight:600;letter-spacing:-0.02em;margin-bottom:6px;text-align:center;padding-top:32px;color:var(--fg)}

@@ -442,7 +442,13 @@ function saveConfig(cfg) {
 
 // apiKey 只从环境变量读取，绝不落盘。
 function loadApiKey() {
-  return process.env.WIKI_API_KEY || '';
+  if (process.env.WIKI_API_KEY) return process.env.WIKI_API_KEY;
+  // Electron desktop: fall back to file-based key in data dir
+  if (process.env.ELECTRON) {
+    const keyPath = path.join(DATA_ROOT, '.api-key');
+    try { return fs.readFileSync(keyPath, 'utf-8').trim(); } catch {}
+  }
+  return '';
 }
 
 function getFullConfig() {
@@ -3012,9 +3018,11 @@ const SYSTEM_SOURCES_PATH = path.join(DATA_ROOT, 'system-sources.json');
 // ── 向量索引（团队 A / M1） ──
 const vectors = require('./lib/vectors.js');
 vectors.__setConfigProvider(getFullConfig);
+vectors.__setDataRoot(DATA_ROOT);
 
 // ── 概念映射（canonical tag 表）──
 const concepts = require('./lib/concepts.js');
+concepts.__setDataRoot(DATA_ROOT);
 
 function loadSystemSources() {
   try {
@@ -5872,7 +5880,13 @@ ${trimmedArticle}
     req.on('end', () => {
       try {
         const parsed = JSON.parse(body);
-        // apiKey 字段若前端误发一律忽略；密钥只允许通过环境变量 WIKI_API_KEY 注入，绝不落盘。
+        // Electron desktop: allow saving API key to data dir (chmod 600) so users can configure via UI.
+        // Web server mode: apiKey field is silently ignored; key only from env var WIKI_API_KEY.
+        if (process.env.ELECTRON && parsed.apiKey) {
+          const keyPath = path.join(DATA_ROOT, '.api-key');
+          fs.writeFileSync(keyPath, parsed.apiKey.trim(), { mode: 0o600 });
+          process.env.WIKI_API_KEY = parsed.apiKey.trim();
+        }
         const { provider, model, customBaseUrl, wikiLang, uiLang, providers, pipeline } = parsed;
         const config = loadConfig();
         const prevProvider = config.provider;
