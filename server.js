@@ -1444,6 +1444,13 @@ function json(res, code, data) {
   res.end(JSON.stringify(data));
 }
 
+const __SYS_ERR_RE = /\b(ENOENT|EACCES|EPERM|EISDIR|ENOTDIR|EMFILE|ENFILE)\b|\/[A-Za-z_][^\s'",}]*(\/[^\s'",}]+)/;
+function safeErr(e) {
+  const msg = (e && e.message) || '';
+  if (__SYS_ERR_RE.test(msg)) return '服务端错误';
+  return msg || '服务端错误';
+}
+
 function safe(base, rel) {
   if (!rel || typeof rel !== 'string') return null;
   if (path.isAbsolute(rel)) return null;
@@ -4071,7 +4078,8 @@ const EXPENSIVE_PREFIXES = [
   '/api/ingest',
   '/api/settings/test',
   '/api/autotask/run/',
-  '/api/auth/login'
+  '/api/auth/login',
+  '/api/wiki/article-ask'
 ];
 function isExpensiveEndpoint(p) {
   if (EXPENSIVE_PREFIXES.some(x => p === x || p.startsWith(x))) return true;
@@ -4080,8 +4088,6 @@ function isExpensiveEndpoint(p) {
   return false;
 }
 function clientIp(req) {
-  const xf = req.headers['x-forwarded-for'];
-  if (typeof xf === 'string' && xf.trim()) return xf.split(',')[0].trim();
   return (req.socket && req.socket.remoteAddress) || 'unknown';
 }
 function rateLimitAllow(req, p) {
@@ -4112,6 +4118,11 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const p = url.pathname;
   const params = url.searchParams;
+
+  // ── Security headers ──
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; font-src 'self'");
 
   // 请求打点：写入 ring buffer + 结束时落 access.log
   const __reqStart = Date.now();
@@ -4263,7 +4274,7 @@ const server = http.createServer(async (req, res) => {
             updateChatIndex(conv);
             return json(res, 200, { conversation: { id: conv.id, title: conv.title } });
           }
-        } catch (e) { return json(res, 400, { error: e.message }); }
+        } catch (e) { return json(res, 400, { error: safeErr(e) }); }
       });
       return;
     }
@@ -4301,7 +4312,7 @@ const server = http.createServer(async (req, res) => {
             saveChat(conv);
             updateChatIndex(conv);
             return json(res, 200, { ok: true });
-          } catch (e) { return json(res, 400, { error: e.message }); }
+          } catch (e) { return json(res, 400, { error: safeErr(e) }); }
         });
         return;
       }
@@ -4320,7 +4331,7 @@ const server = http.createServer(async (req, res) => {
             saveChat(conv);
             updateChatIndex(conv);
             return json(res, 200, { ok: true, provider: conv.provider, model: conv.model });
-          } catch (e) { return json(res, 400, { error: e.message }); }
+          } catch (e) { return json(res, 400, { error: safeErr(e) }); }
         });
         return;
       }
@@ -4428,7 +4439,7 @@ const server = http.createServer(async (req, res) => {
               console.error('[chat] 沉淀失败:', e && e.stack || e);
               return json(res, 500, { error: '服务端错误' });
             }
-          } catch (e) { return json(res, 400, { error: e.message }); }
+          } catch (e) { return json(res, 400, { error: safeErr(e) }); }
         });
         return;
       }
@@ -4449,7 +4460,7 @@ const server = http.createServer(async (req, res) => {
             if (precipitated) msg.precipitated = precipitated;
             saveChat(conv);
             return json(res, 200, { ok: true });
-          } catch (e) { return json(res, 400, { error: e.message }); }
+          } catch (e) { return json(res, 400, { error: safeErr(e) }); }
         });
         return;
       }
@@ -4487,7 +4498,7 @@ const server = http.createServer(async (req, res) => {
           if (typeof content !== 'string' || !content.trim()) return json(res, 400, { error: '正文不能为空' });
           fs.writeFileSync(fp, content, 'utf-8');
           return json(res, 200, { ok: true });
-        } catch (e) { return json(res, 400, { error: e.message }); }
+        } catch (e) { return json(res, 400, { error: safeErr(e) }); }
       });
       return;
     }
@@ -4505,7 +4516,7 @@ const server = http.createServer(async (req, res) => {
           fs.mkdirSync(path.dirname(fp), { recursive: true });
           fs.writeFileSync(fp, content, 'utf-8');
           return json(res, 200, { ok: true, path: relPath });
-        } catch (e) { return json(res, 400, { error: e.message }); }
+        } catch (e) { return json(res, 400, { error: safeErr(e) }); }
       });
       return;
     }
@@ -4534,6 +4545,105 @@ const server = http.createServer(async (req, res) => {
     if (!fp) return json(res, 400, { error: '无效路径' });
     try { return json(res, 200, { content: fs.readFileSync(fp, 'utf-8') }); }
     catch { return json(res, 404, { error: '文件不存在' }); }
+  }
+
+  if (p === '/api/wiki/article-ask' && req.method === 'POST') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { path: relPath, question, history, model: reqModel } = JSON.parse(body);
+        if (!question || !relPath) return json(res, 400, { error: '缺少 path 或 question' });
+        const fp = safe(WIKI, relPath);
+        if (!fp) return json(res, 400, { error: '无效路径' });
+        let articleContent;
+        try { articleContent = fs.readFileSync(fp, 'utf-8'); } catch { return json(res, 404, { error: '文件不存在' }); }
+        const fm = parseFrontmatter(articleContent);
+        const plainBody = fm.body;
+        const MAX_CTX = 12000;
+        const trimmedArticle = plainBody.length > MAX_CTX ? plainBody.slice(0, MAX_CTX) + '\n\n...(已截断)' : plainBody;
+
+        const config = getFullConfig();
+        const providerKey = config.provider || 'bailian';
+        const chosenModel = reqModel || pickModelByUse(providerKey, 'fast', config) || config.model;
+
+        const sysPrompt = `你是一个知识库文章阅读助手。用户正在阅读下面这篇文章，请基于文章内容回答用户的问题。
+
+## 文章内容
+${trimmedArticle}
+
+## 规则
+1. 优先基于文章内容回答；文章没有覆盖的部分可以用你自己的知识补充，但要标明
+2. 简洁、直接、有条理
+3. 用中文回答`;
+
+        const msgs = [];
+        if (Array.isArray(history)) {
+          for (const m of history.slice(-10)) {
+            if (m.role === 'user' || m.role === 'assistant') msgs.push({ role: m.role, content: m.content });
+          }
+        }
+        msgs.push({ role: 'user', content: question });
+
+        res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
+        res.flushHeaders();
+        if (res.socket) res.socket.setNoDelay(true);
+
+        let aborted = false;
+        req.on('close', () => { aborted = true; });
+
+        try {
+          const cfg = getFullConfig();
+          const provBuiltin = BUILTIN_PROVIDERS[providerKey] || BUILTIN_PROVIDERS.bailian;
+          if (provBuiltin.format === 'cli') throw new Error('本地 CLI 不支持');
+          if (!cfg.apiKey) throw new Error('未配置 API Key');
+
+          if (provBuiltin.format === 'anthropic') {
+            const full = await callLLM(sysPrompt, msgs, { provider: providerKey, model: chosenModel }, { maxTokens: 2048 });
+            if (!aborted && !res.destroyed) res.write('data: ' + JSON.stringify({ t: full }) + '\n\n');
+          } else {
+            const baseUrl = (providerKey === 'custom' && cfg.customBaseUrl) ? cfg.customBaseUrl : provBuiltin.baseUrl;
+            const hdrs = { 'Authorization': 'Bearer ' + cfg.apiKey };
+            if (providerKey === 'openrouter') { hdrs['HTTP-Referer'] = 'http://localhost:' + PORT; hdrs['X-Title'] = 'Wiki KB'; }
+            const llmBody = { model: chosenModel, messages: [{ role: 'system', content: sysPrompt }, ...msgs], temperature: 0.3, max_tokens: 2048, stream: true };
+            const mm = findModelMeta(providerKey, chosenModel, cfg) || {};
+            if (providerKey === 'bailian' && mm.thinkingCapable) llmBody.enable_thinking = !!mm.defaultThinking;
+            const u = new URL(baseUrl + '/chat/completions');
+            const mod = u.protocol === 'https:' ? https : http;
+            const rb = JSON.stringify(llmBody);
+            await new Promise((ok, fail) => {
+              const lr = mod.request({ hostname: u.hostname, port: u.port || (u.protocol === 'https:' ? 443 : 80), path: u.pathname + u.search, method: 'POST', headers: { ...hdrs, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(rb), 'Accept': 'text/event-stream' } }, lr2 => {
+                if (lr2.statusCode < 200 || lr2.statusCode >= 300) { let d = ''; lr2.on('data', c => d += c); lr2.on('end', () => fail(new Error(humanizeHttpError(lr2.statusCode, d)))); return; }
+                let buf = '';
+                lr2.setEncoding('utf-8');
+                lr2.on('data', chunk => {
+                  buf += chunk; let idx;
+                  while ((idx = buf.indexOf('\n\n')) !== -1) {
+                    const ev = buf.slice(0, idx); buf = buf.slice(idx + 2);
+                    for (const ln of ev.split('\n').filter(l => l.startsWith('data:'))) {
+                      const pl = ln.slice(5).trim(); if (!pl || pl === '[DONE]') continue;
+                      try { const o = JSON.parse(pl); const d = o.choices && o.choices[0] && (o.choices[0].delta || {}); if (d && typeof d.content === 'string' && d.content.length > 0 && !aborted && !res.destroyed) res.write('data: ' + JSON.stringify({ t: d.content }) + '\n\n'); } catch {}
+                    }
+                  }
+                });
+                lr2.on('end', ok); lr2.on('error', fail);
+              });
+              lr.on('error', fail);
+              lr.setTimeout(120000, () => { lr.destroy(); fail(new Error('请求超时')); });
+              lr.write(rb); lr.end();
+            });
+          }
+        } catch (e) {
+          if (!aborted && !res.destroyed) res.write('data: ' + JSON.stringify({ error: safeErr(e) || '生成失败' }) + '\n\n');
+        }
+        if (!aborted && !res.destroyed) res.write('data: [DONE]\n\n');
+        res.end();
+      } catch (e) {
+        if (!res.headersSent) return json(res, 400, { error: safeErr(e) });
+        res.end();
+      }
+    });
+    return;
   }
 
   if (p === '/api/wiki/index') {
@@ -5058,7 +5168,8 @@ const server = http.createServer(async (req, res) => {
       const saved = concepts.saveConcepts({ version: existing.version || 1, aliases: aliasesOut });
       return json(res, 200, { ok: true, aliases: saved.aliases, added: Object.keys(saved.aliases).length, clusters });
     } catch (e) {
-      return json(res, 500, { ok: false, error: e.message });
+      console.error('[concepts] merge error:', e);
+      return json(res, 500, { ok: false, error: '服务端错误' });
     }
   }
 
@@ -5147,7 +5258,7 @@ const server = http.createServer(async (req, res) => {
         }
         walkDir(tmpDir);
         return json(res, 200, { files });
-      } catch (e) { return json(res, 400, { error: e.message }); } finally {
+      } catch (e) { return json(res, 400, { error: safeErr(e) }); } finally {
         try { if (zipPath) fs.unlinkSync(zipPath); } catch {}
         try { if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
       }
@@ -5194,7 +5305,7 @@ const server = http.createServer(async (req, res) => {
           batch: !!batchId,
           batchId,
         });
-      } catch (e) { json(res, 400, { error: e.message }); }
+      } catch (e) { json(res, 400, { error: safeErr(e) }); }
     });
     return;
   }
@@ -5567,7 +5678,8 @@ const server = http.createServer(async (req, res) => {
         scoreBreakdown: { completeness, freshness, connectivity, consistency }
       };
     } catch (e) {
-      return { timestamp: new Date().toISOString(), score: 0, summary: { totalArticles: 0, totalRaw: 0, totalWords: 0, totalConnections: 0, lastUpdate: null }, issues: [{ type: 'error', severity: 'error', path: '', message: '检查失败: ' + e.message }], scoreBreakdown: { completeness: 0, freshness: 0, connectivity: 0, consistency: 0 } };
+      console.error('[health] check failed:', e);
+      return { timestamp: new Date().toISOString(), score: 0, summary: { totalArticles: 0, totalRaw: 0, totalWords: 0, totalConnections: 0, lastUpdate: null }, issues: [{ type: 'error', severity: 'error', path: '', message: '检查失败' }], scoreBreakdown: { completeness: 0, freshness: 0, connectivity: 0, consistency: 0 } };
     }
   }
 
@@ -5690,6 +5802,7 @@ const server = http.createServer(async (req, res) => {
         // apiKey 字段若前端误发一律忽略；密钥只允许通过环境变量 WIKI_API_KEY 注入，绝不落盘。
         const { provider, model, customBaseUrl, wikiLang, providers, pipeline } = parsed;
         const config = loadConfig();
+        const prevProvider = config.provider;
         if (provider) config.provider = provider;
         if (typeof model === 'string') config.model = model;
         if (typeof customBaseUrl === 'string') config.customBaseUrl = customBaseUrl;
@@ -5697,6 +5810,7 @@ const server = http.createServer(async (req, res) => {
         if (providers && typeof providers === 'object') {
           config.providers = { ...(config.providers || {}), ...providers };
         }
+        const providerChanged = provider && provider !== prevProvider;
         if (pipeline && typeof pipeline === 'object') {
           const merged = { ...(config.pipeline || {}), ...pipeline };
           if (pipeline.stages && typeof pipeline.stages === 'object') {
@@ -5708,9 +5822,13 @@ const server = http.createServer(async (req, res) => {
           }
           config.pipeline = merged;
         }
+        if (providerChanged && config.pipeline) {
+          const preset = (config.pipeline && config.pipeline.preset) || 'balanced';
+          config.pipeline.stages = resolvePresetForProvider(preset, config.provider, config);
+        }
         saveConfig(config);
         return json(res, 200, { ok: true });
-      } catch (e) { return json(res, 400, { error: e.message }); }
+      } catch (e) { return json(res, 400, { error: safeErr(e) }); }
     });
     return;
   }
@@ -5735,7 +5853,7 @@ const server = http.createServer(async (req, res) => {
           const answer = await callLLM('你是一个测试助手。', '请回复"连接成功"四个字。', overrides, opts);
           return json(res, 200, { ok: true, message: (answer || '').trim().slice(0, 100) });
         } catch (e) {
-          return json(res, 200, { ok: false, message: e.message.slice(0, 300) });
+          return json(res, 200, { ok: false, message: safeErr(e).slice(0, 300) });
         }
       })();
     });
@@ -5758,7 +5876,7 @@ const server = http.createServer(async (req, res) => {
         const { nickname, bio } = JSON.parse(body);
         saveProfile({ nickname: (nickname || '').trim(), bio: (bio || '').trim() });
         return json(res, 200, { ok: true });
-      } catch (e) { return json(res, 400, { error: e.message }); }
+      } catch (e) { return json(res, 400, { error: safeErr(e) }); }
     });
     return;
   }
@@ -5777,7 +5895,7 @@ const server = http.createServer(async (req, res) => {
         const { text } = JSON.parse(body);
         saveMemory({ text: typeof text === 'string' ? text : '' });
         return json(res, 200, { ok: true });
-      } catch (e) { return json(res, 400, { error: e.message }); }
+      } catch (e) { return json(res, 400, { error: safeErr(e) }); }
     });
     return;
   }
@@ -5911,7 +6029,7 @@ const server = http.createServer(async (req, res) => {
           // URL 合法性 / SSRF 拦截 → 400（err.message 形如 "blocked private ip: ..." / "invalid url"，
           // 对用户可见且不泄露内部路径）
           if (isBlockedUrlError(e)) {
-            return json(res, 400, { error: e.message });
+            return json(res, 400, { error: safeErr(e) });
           }
           // Source-level fetch failures（HTTP 404/5xx/timeout/too-many-redirects / RSS 解析失败）
           // 对用户是有意义的诊断信息（"这条源坏了"），归 422 而不是 500，UI 能显示具体原因。
@@ -5993,8 +6111,9 @@ ${topicListStr}`;
               new Promise((_, reject) => setTimeout(() => reject(new Error('LLM 超时')), 30000))
             ]);
           } catch (e) {
-            if (/超时|timeout/i.test(e.message)) return json(res, 504, { error: 'AI 解析超时', detail: e.message });
-            return json(res, 502, { error: 'LLM 调用失败', detail: e.message });
+            console.error('[ingest] LLM error:', e);
+            if (/超时|timeout/i.test(e.message)) return json(res, 504, { error: 'AI 解析超时' });
+            return json(res, 502, { error: 'LLM 调用失败' });
           }
 
           // Strip ```json fences if present
@@ -6076,7 +6195,7 @@ ${topicListStr}`;
 
           return json(res, 200, { ok: true, config, warnings });
         } catch (e) {
-          return json(res, 400, { error: e.message });
+          return json(res, 400, { error: safeErr(e) });
         }
       });
       return;
@@ -6128,7 +6247,8 @@ ${JSON.stringify(libBrief, null, 2)}`;
               new Promise((_, reject) => setTimeout(() => reject(new Error('configure timeout')), 30000))
             ]);
           } catch (e) {
-            return json(res, 502, { error: 'LLM 调用失败', detail: e.message });
+            console.error('[autotask] LLM configure error:', e);
+            return json(res, 502, { error: 'LLM 调用失败' });
           }
 
           // 鲁棒抽取：先剥 markdown 围栏；解析失败则从首个 '{' 到末尾 '}' 再试一次
@@ -6180,7 +6300,7 @@ ${JSON.stringify(libBrief, null, 2)}`;
             warnings: []
           });
         } catch (e) {
-          return json(res, 400, { error: e.message });
+          return json(res, 400, { error: safeErr(e) });
         }
       });
       return;
@@ -6212,7 +6332,7 @@ ${JSON.stringify(libBrief, null, 2)}`;
           if (t.feedback.length > 50) t.feedback = t.feedback.slice(-50);
           saveAutotasks(tasks);
           return json(res, 200, { ok: true, feedbackCount: t.feedback.length });
-        } catch (e) { return json(res, 400, { error: e.message }); }
+        } catch (e) { return json(res, 400, { error: safeErr(e) }); }
       });
       return;
     }
@@ -6303,7 +6423,7 @@ ${JSON.stringify(libBrief, null, 2)}`;
           tasks.push(task);
           saveAutotasks(tasks);
           return json(res, 201, task);
-        } catch (e) { return json(res, 400, { error: e.message }); }
+        } catch (e) { return json(res, 400, { error: safeErr(e) }); }
       });
       return;
     }
@@ -6351,7 +6471,7 @@ ${JSON.stringify(libBrief, null, 2)}`;
           }
           saveAutotasks(tasks);
           return json(res, 200, t);
-        } catch (e) { return json(res, 400, { error: e.message }); }
+        } catch (e) { return json(res, 400, { error: safeErr(e) }); }
       });
       return;
     }

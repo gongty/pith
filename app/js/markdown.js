@@ -45,7 +45,7 @@ export function renderMd(md, ap) {
   const fm = parseFrontmatter(md || '');
   md = fm.body;
   const lines = md.split('\n'); let html = '', inCode = false, cLines = [];
-  let inList = false, lt = '', inBq = false, bqL = [], inTbl = false, tRows = [];
+  let inList = false, lt = '', inBq = false, bqL = [], isCallout = false, inTbl = false, tRows = [];
   const aDir = ap ? ap.split('/').slice(0, -1).join('/') : '';
   function resLink(href) {
     if (/^https?:\/\//.test(href)) return href;
@@ -85,7 +85,7 @@ export function renderMd(md, ap) {
     t = t.replace(/`([^`]+)`/g, '<code>$1</code>');
     return t;
   }
-  function fBq() { if (bqL.length) { const total = bqL.join('').length; if (total <= 200) { html += '<div class="callout">' + bqL.map(l => '<p>' + inl(l) + '</p>').join('') + '</div>'; } else { html += '<blockquote>' + bqL.map(l => '<p>' + inl(l) + '</p>').join('') + '</blockquote>'; } bqL = []; } inBq = false; }
+  function fBq() { if (bqL.length) { if (isCallout) { html += '<div class="callout">' + bqL.map(l => '<p>' + inl(l) + '</p>').join('') + '</div>'; } else { html += '<blockquote>' + bqL.map(l => '<p>' + inl(l) + '</p>').join('') + '</blockquote>'; } bqL = []; isCallout = false; } inBq = false; }
   function fTbl() { if (tRows.length >= 2) { html += '<div class="table-wrap"><table><thead><tr>' + tRows[0].map(c => '<th>' + inl(c.trim()) + '</th>').join('') + '</tr></thead><tbody>'; for (let i = 2; i < tRows.length; i++) html += '<tr>' + tRows[i].map(c => '<td>' + inl(c.trim()) + '</td>').join('') + '</tr>'; html += '</tbody></table></div>'; } tRows = []; inTbl = false; }
   function fList() { if (inList) { html += lt === 'ol' ? '</ol>' : '</ul>'; inList = false; } }
 
@@ -98,6 +98,7 @@ export function renderMd(md, ap) {
     if (inCode) { cLines.push(line); continue; }
     if (/^\|(.+)\|$/.test(line.trim())) { fBq(); fList(); tRows.push(line.trim().slice(1, -1).split('|')); inTbl = true; continue; }
     else if (inTbl) fTbl();
+    if (/^>!/.test(line)) { fList(); fTbl(); if (!inBq) isCallout = true; bqL.push(line.replace(/^>!\s?/, '')); inBq = true; continue; }
     if (/^>\s?/.test(line)) { fList(); fTbl(); bqL.push(line.replace(/^>\s?/, '')); inBq = true; continue; }
     else if (inBq) fBq();
     const hm = line.match(/^(#{1,4})\s+(.+)/);

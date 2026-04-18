@@ -6,6 +6,8 @@ data/*
 node_modules/
 start.sh
 .claude/
+CLAUDE.md
+CLAUDE.local.md
 test-vectors.sh
 test-ask.sh
 config.json.bak

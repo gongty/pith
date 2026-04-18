@@ -11,8 +11,8 @@
     "type": "git",
     "url": "git+https://github.com/gongty/wiki-app.git"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["wiki", "knowledge-base", "ai", "llm", "rag"],
+  "author": "gongty",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
