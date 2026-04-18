@@ -38,7 +38,7 @@ Single-file raw Node.js HTTP server (~6700 lines). Key subsystems:
 - **Chat System** — JSON file storage in `data/chats/`. Per-conversation files `conv_*.json` + `_index.json` index. Supports context retrieval from wiki for RAG.
 - **Wiki Data & Graph** — `searchWiki()` for full-text (BM25-ish) search. `retrieveContext(question)` for chat RAG: lex + vec RRF 融合. `/api/wiki/graph` 构两层图: concept 节点 + article 节点, 经 `lib/concepts.js` 的 stopword + hapax 双档过滤。
 - **Vector Retrieval (`lib/vectors.js`)** — embedding 仅支持 `bailian / openai / custom`。索引落 `data/vectors/index.jsonl` + `meta.json`。写策略: 先写 `.tmp` 再 `fs.renameSync` 原子替换。
-- **Ingest Pipeline** — Single-task queue. Accepts text/URL/PDF/image/audio/video/ZIP. Batch mode with progress tracking.
+- **Ingest Pipeline** — Task queue with `enqueueTask` -> `tryDispatch` -> `processTask`. Accepts text/URL/PDF/image/audio/video/ZIP. Batch mode with progress tracking. URL dedup at submit time: `POST /api/ingest` checks `taskQueue` for pending/processing/done tasks with the same `normalizeUrl()`; all-duplicate -> 409. Overview endpoint (`GET /api/ingest/overview`): returns `{running, queued, recent, batch, hasActivity, phaseTotal}`.
 - **Article Q&A** — `POST /api/wiki/article-ask` SSE 端点，读取文章全文 + 多轮对话历史，调 `callLLM` 流式返回。server 做 SSE 代理，re-emit `{t:content}` 和 `{r:reasoning_content}` 事件。前端在 `pages/article.js` 实现浮动面板，每个文章独立 session（上限 10，LRU 淘汰），session 持有自己的 DOM 容器，切文章只换挂载不丢 streaming 状态。
 - **Automated Tasks** — Source 适配器五种类型: rss / changelog / aggregator / webpage / api. Pipeline: fetch -> dedup -> prefilter -> gating -> smart_fill -> processing -> brief -> finalize. SSRF 防护 via `assertSafeUrl()`.
 - **Auth & Hardening** — 三层中间件: CSRF (Origin check) -> Rate limit (IP + endpoint bucketing) -> Auth (Bearer token / cookie).
@@ -115,6 +115,7 @@ data/uploads/       -> Uploaded files
 - **CSS overflow rule**: `overflow-y` 非 `visible` 时浏览器强制 `overflow-x` 从 `visible` 变 `auto`。滚动容器必须显式 `overflow-x:hidden`。
 - **Contenteditable paste 清洗**: `.article-title` 走纯文本粘贴；`.article-body` 走 `sanitizeBodyHtml()` 白/灰/黑三张表清洗。新增 contenteditable 区域要走同款处理。
 - **新增写路由**: 默认进 auth / CSRF / rate limit 三层中间件。高成本 LLM 端点加到 `EXPENSIVE_PREFIXES`（10 req/min）。
+- **Ingest queue 前端联动**: `ingest-queue.js` 轮询 overview（活跃 2s / 空闲 10s）。侧边栏刷新靠 `lastRecentIds` 差集检测新完成项 -> 清 `state.td/gd/sd` + `updSidebarPages()`。投喂提交成功后自动展开队列面板。
 - **前端 tab 状态持久化**: 用 localStorage，不走 hash query（会触发 router 全量重 render）。
 
 ## Conventions
