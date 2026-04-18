@@ -2139,21 +2139,20 @@ async function runBackfillTags(opts = {}) {
     const config = getFullConfig();
     const providerKey = config.provider || 'local';
     const model = pickModelByUse(providerKey, useModel, config);
+    const existingTagsCol = collectExistingTags(200);
+    const existingTagsStr = existingTagsCol.length ? existingTagsCol.map(t => t.tag).join('、') : '（暂无）';
 
-    for (const f of todo) {
+    await mapLimit(todo, 3, async (f) => {
       const rel = path.relative(WIKI, f);
       backfillProgress.currentFile = rel;
       try {
-        // 每次重新读盘，避免 compile 并发写入后用陈旧 body
         const content = fs.readFileSync(f, 'utf-8');
         const existing = parseFrontmatter(content);
         if (!force && Array.isArray(existing.data.tags) && existing.data.tags.length > 0) {
           backfillProgress.skipped++;
-          continue;
+          return;
         }
         const core = existing.body.replace(/\n##\s+See\s+Also[\s\S]*$/i, '').slice(0, 6000);
-        const existingTagsCol = collectExistingTags(200);
-        const existingTagsStr = existingTagsCol.length ? existingTagsCol.map(t => t.tag).join('、') : '（暂无）';
 
         const sys = `你是知识库标签助手。根据文章内容输出 3-5 个精准标签，用于知识图谱连接。
 规则：
@@ -2180,15 +2179,14 @@ async function runBackfillTags(opts = {}) {
           backfillProgress.failed++;
           backfillProgress.recent.unshift({ file: rel, error: 'empty tags' });
           if (backfillProgress.recent.length > 10) backfillProgress.recent.pop();
-          continue;
+          return;
         }
 
-        // 写盘前再读一次合并最新 body，避免覆盖 compile 刚写入的新正文
         const freshContent = fs.readFileSync(f, 'utf-8');
         const fresh = parseFrontmatter(freshContent);
         if (!force && Array.isArray(fresh.data.tags) && fresh.data.tags.length > 0) {
           backfillProgress.skipped++;
-          continue;
+          return;
         }
         const newData = { ...fresh.data, tags };
         const newContent = serializeFrontmatter(newData) + fresh.body;
@@ -2201,7 +2199,7 @@ async function runBackfillTags(opts = {}) {
         backfillProgress.recent.unshift({ file: rel, error: e.message });
         if (backfillProgress.recent.length > 10) backfillProgress.recent.pop();
       }
-    }
+    });
   } finally {
     backfillProgress.running = false;
     backfillProgress.finishedAt = new Date().toISOString();
@@ -3547,9 +3545,9 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
     err.code = 'AUTOTASK_ALREADY_RUNNING';
     throw err;
   }
-  runningAutotasks.add(taskId);
 
   try {
+  runningAutotasks.add(taskId);
   const task = normalizeTask(rawTask);
 
   const modelOverrides = (task.provider && task.model) ? { provider: task.provider, model: task.model } : null;

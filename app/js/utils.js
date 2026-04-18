@@ -66,8 +66,11 @@ export async function api(p, o) {
     }
     throw new Error('401');
   }
-  if (!r.ok) throw new Error('' + r.status);
-  return r.json();
+  if (!r.ok) {
+    const errBody = await r.json().catch(() => ({}));
+    throw new Error(errBody.error || '' + r.status);
+  }
+  return r.json().catch(() => ({}));
 }
 export async function post(p, b) { return api(p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); }
 export async function put(p, b) { return api(p, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); }

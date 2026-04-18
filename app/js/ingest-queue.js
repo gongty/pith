@@ -45,7 +45,7 @@ async function tick(forceFast) {
     // 静默失败，下次再试
   }
   const desired = (forceFast || latestOverview.hasActivity) ? FAST_INTERVAL : SLOW_INTERVAL;
-  if (desired !== currentInterval) {
+  if (desired !== currentInterval || !pollTimer) {
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(tick, desired);
     currentInterval = desired;
