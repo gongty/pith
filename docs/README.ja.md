@@ -1,8 +1,10 @@
 # Wiki App
 
-AI搭載のパーソナルナレッジベース。素材を投入すると、AIが構造化されたWiki記事に自動編纂します。素材を追加するほど、知識ベースは賢くなります。UIは中国語・英語・日本語・韓国語に対応。
+URLやPDF、スクリーンショット、テキストを投入するだけ -- AIが読み取り、構造化し、パーソナルWikiに整理します。必要な時に検索するか、自然言語で質問するだけ。
 
-[Claude Code](https://claude.ai/code) を使って数時間のバイブコーディングで構築。[Andrej Karpathy](https://x.com/karpathy) に着想を得たプロジェクト: LLMにWikiの執筆と保守を任せ、あなたは読んで質問する。Wikiは複利で成長するナレッジ資産です。
+RSSフィードやWebソースを設定すれば、AIが毎日監視し、関心のある情報をフィルタリングして記事を作成。あなたが寝ている間もナレッジベースは成長し続けます。
+
+[Claude Code](https://claude.ai/code) を使って数時間のバイブコーディングで構築。フレームワークなし、ビルドなし、データベースなし -- Node.jsとバニラJSのみ。UIは中国語・英語・日本語・韓国語に対応。[Andrej Karpathy](https://x.com/karpathy) の発想に着想: LLMに複利で成長するWikiを維持させる。
 
 **[中文](README.zh.md) | [English](../README.md) | 日本語 | [한국어](README.ko.md) | [Espanol](README.es.md) | [Portugues](README.pt.md) | [Deutsch](README.de.md)**
 

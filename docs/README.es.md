@@ -1,8 +1,10 @@
 # Wiki App
 
-Base de conocimiento personal potenciada por IA. Agrega materiales, la IA los compila en articulos wiki estructurados. Cuanto mas le alimentas, mas inteligente se vuelve. Interfaz disponible en chino, ingles, japones y coreano.
+Agrega una URL, un PDF, una captura de pantalla o simplemente pega texto -- la IA lo lee, lo estructura y lo archiva en tu wiki personal. La proxima vez que lo necesites, busca o simplemente pregunta en lenguaje natural.
 
-Construido en pocas horas de puro vibe coding con [Claude Code](https://claude.ai/code). Inspirado por [Andrej Karpathy](https://x.com/karpathy): deja que los LLMs escriban y mantengan una wiki, tu lees y haces preguntas. Una wiki es un activo de conocimiento que se acumula.
+Configura fuentes RSS y paginas web, la IA las monitorea diariamente, filtra lo que te importa y escribe los articulos. Tu base de conocimiento crece mientras duermes.
+
+Construido en pocas horas de puro vibe coding con [Claude Code](https://claude.ai/code). Sin framework, sin build, sin base de datos -- solo Node.js y JS vanilla. Interfaz en chino, ingles, japones y coreano. Inspirado en la idea de [Andrej Karpathy](https://x.com/karpathy): dejar que los LLMs mantengan una wiki que se acumula con el tiempo.
 
 **[中文](README.zh.md) | [English](../README.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | Espanol | [Portugues](README.pt.md) | [Deutsch](README.de.md)**
 

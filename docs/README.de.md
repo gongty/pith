@@ -1,8 +1,10 @@
 # Wiki App
 
-KI-gestutzte persoenliche Wissensdatenbank. Materialien einspeisen, die KI kompiliert sie zu strukturierten Wiki-Artikeln. Je mehr du einspeist, desto intelligenter wird sie. Oberflaeche verfuegbar auf Chinesisch, Englisch, Japanisch und Koreanisch.
+Wirf eine URL, ein PDF, einen Screenshot oder einfach Text rein -- die KI liest, strukturiert und archiviert es in deinem persoenlichen Wiki. Wenn du es brauchst, suche oder frag einfach in natuerlicher Sprache.
 
-In wenigen Stunden reines Vibe Coding mit [Claude Code](https://claude.ai/code) gebaut. Inspiriert von [Andrej Karpathy](https://x.com/karpathy): Lass LLMs ein Wiki schreiben und pflegen, du liest und stellst Fragen. Ein Wiki ist ein wachsendes Wissenskapital.
+Richte RSS-Feeds und Webquellen ein, die KI ueberwacht sie taeglich, filtert was dich interessiert und schreibt die Artikel. Deine Wissensdatenbank waechst, waehrend du schlaefst.
+
+In wenigen Stunden reines Vibe Coding mit [Claude Code](https://claude.ai/code) gebaut. Kein Framework, kein Build, keine Datenbank -- nur Node.js und Vanilla JS. Oberflaeche auf Chinesisch, Englisch, Japanisch und Koreanisch. Inspiriert von [Andrej Karpathy](https://x.com/karpathy): LLMs ein Wiki pflegen lassen, das sich ueber die Zeit aufbaut.
 
 **[中文](README.zh.md) | [English](../README.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Espanol](README.es.md) | [Portugues](README.pt.md) | Deutsch**
 
