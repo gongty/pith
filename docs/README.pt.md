@@ -1,6 +1,6 @@
-# Wiki App
+# Pith
 
-Jogue uma URL, um PDF, um screenshot ou simplesmente cole texto -- a IA le, estrutura e arquiva no seu wiki pessoal. Na proxima vez que precisar, pesquise ou pergunte em linguagem natural.
+Jogue uma URL, um PDF, um screenshot ou simplesmente cole texto -- a IA le, estrutura e arquiva na sua base de conhecimento pessoal. Na proxima vez que precisar, pesquise ou pergunte em linguagem natural.
 
 Configure feeds RSS e fontes web, a IA monitora diariamente, filtra o que importa para voce e escreve os artigos. Sua base de conhecimento cresce enquanto voce dorme.
 
@@ -22,9 +22,15 @@ Construido em poucas horas de puro vibe coding com [Claude Code](https://claude.
 |:-:|:-:|
 | ![Tarefas Automatizadas](../docs/screenshots/autotask.png) | ![Modo Escuro](../docs/screenshots/dark-mode.png) |
 
+## Download
+
+**[macOS (Apple Silicon) DMG](https://github.com/gongty/pith/releases/latest)**
+
+Build nao assinado -- primeira execucao: clique direito > Abrir, ou execute `xattr -cr /Applications/Pith.app` no terminal.
+
 ## Que problemas resolve?
 
-**Informacao espalhada, lida e esquecida.** Notas em um app, favoritos em outro, PDFs na area de trabalho. O Wiki App transforma tudo em artigos pesquisaveis e interconectados -- automaticamente.
+**Informacao espalhada, lida e esquecida.** Notas em um app, favoritos em outro, PDFs na area de trabalho. O Pith transforma tudo em artigos pesquisaveis e interconectados -- automaticamente.
 
 **Voce quer fazer perguntas com base no seu proprio conhecimento, nao em IA generica.** O chat integrado usa RAG (geracao aumentada por recuperacao) para responder a partir do seu wiki. Cada resposta e fundamentada em artigos que voce acumulou.
 
@@ -45,8 +51,8 @@ Construido em poucas horas de puro vibe coding com [Claude Code](https://claude.
 ## Inicio Rapido
 
 ```bash
-git clone https://github.com/gongty/wiki-app.git
-cd wiki-app
+git clone https://github.com/gongty/pith.git
+cd pith
 npm install
 WIKI_API_KEY=your-api-key node server.js
 # Abra http://localhost:3456
@@ -90,7 +96,7 @@ Configure em Configuracoes apos a primeira execucao:
 ## Estrutura do Projeto
 
 ```
-wiki-app/
+pith/
 ├── server.js          # Servidor HTTP Node.js (~6700 linhas, API + arquivos estaticos)
 ├── app/
 │   ├── index.html     # Shell HTML

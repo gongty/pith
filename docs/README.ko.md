@@ -1,6 +1,6 @@
-# Wiki App
+# Pith
 
-URL, PDF, 스크린샷, 또는 텍스트를 넣으세요 -- AI가 읽고, 구조화하고, 개인 위키에 정리합니다. 필요할 때 검색하거나 자연어로 질문하세요.
+URL, PDF, 스크린샷, 또는 텍스트를 넣으세요 -- AI가 읽고, 구조화하고, 개인 지식 베이스에 정리합니다. 필요할 때 검색하거나 자연어로 질문하세요.
 
 RSS 피드와 웹 소스를 설정하면 AI가 매일 모니터링하고, 관심 있는 내용을 필터링하여 문서를 작성합니다. 잠자는 동안에도 지식 베이스가 성장합니다.
 
@@ -22,9 +22,15 @@ RSS 피드와 웹 소스를 설정하면 AI가 매일 모니터링하고, 관심
 |:-:|:-:|
 | ![자동화 작업](../docs/screenshots/autotask.png) | ![다크 모드](../docs/screenshots/dark-mode.png) |
 
+## 다운로드
+
+**[macOS (Apple Silicon) DMG](https://github.com/gongty/pith/releases/latest)**
+
+서명되지 않은 빌드 -- 첫 실행 시: 우클릭 > 열기, 또는 터미널에서 `xattr -cr /Applications/Pith.app` 실행.
+
 ## 어떤 문제를 해결하나요?
 
-**정보가 흩어져 있고, 읽으면 곧 잊어버립니다.** 노트는 한 앱에, 북마크는 다른 앱에, PDF는 바탕화면에. Wiki App은 이 모든 것을 검색 가능하고 서로 연결된 문서로 자동 변환합니다.
+**정보가 흩어져 있고, 읽으면 곧 잊어버립니다.** 노트는 한 앱에, 북마크는 다른 앱에, PDF는 바탕화면에. Pith는 이 모든 것을 검색 가능하고 서로 연결된 문서로 자동 변환합니다.
 
 **범용 AI가 아닌, 내 지식을 기반으로 질문하고 싶습니다.** 내장 채팅은 RAG(검색 증강 생성)를 사용하여 당신의 위키에서 답변합니다. 모든 답변은 직접 축적한 문서에 기반합니다.
 
@@ -45,8 +51,8 @@ RSS 피드와 웹 소스를 설정하면 AI가 매일 모니터링하고, 관심
 ## 빠른 시작
 
 ```bash
-git clone https://github.com/gongty/wiki-app.git
-cd wiki-app
+git clone https://github.com/gongty/pith.git
+cd pith
 npm install
 WIKI_API_KEY=your-api-key node server.js
 # http://localhost:3456 접속
@@ -90,7 +96,7 @@ WIKI_API_KEY=your-api-key node server.js
 ## 프로젝트 구조
 
 ```
-wiki-app/
+pith/
 ├── server.js          # Node.js HTTP 서버 (~6700줄, API + 정적 파일)
 ├── app/
 │   ├── index.html     # HTML 셸

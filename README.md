@@ -1,6 +1,6 @@
-# Wiki App
+# Pith
 
-Drop a URL, a PDF, a screenshot, or just paste text -- AI reads it, structures it, and files it into your personal wiki. Next time you need it, search or just ask in natural language.
+Drop a URL, a PDF, a screenshot, or just paste text -- AI reads it, structures it, and files it into your personal knowledge base. Next time you need it, search or just ask in natural language.
 
 Set up RSS feeds and web sources, AI monitors them daily, filters what matters to you, and writes the articles. Your knowledge base grows while you sleep.
 
@@ -22,9 +22,15 @@ Built in a few hours of pure vibe coding with [Claude Code](https://claude.ai/co
 |:-:|:-:|
 | ![Autotask](docs/screenshots/autotask.png) | ![Dark Mode](docs/screenshots/dark-mode.png) |
 
+## Download
+
+**[macOS (Apple Silicon) DMG](https://github.com/gongty/pith/releases/latest)**
+
+Unsigned build -- first launch: right-click > Open, or run `xattr -cr /Applications/Pith.app`.
+
 ## What problems does it solve?
 
-**Information is scattered, read and forgotten.** Notes in one app, bookmarks in another, PDFs on your desktop. Wiki App turns all of them into searchable, interconnected articles -- automatically.
+**Information is scattered, read and forgotten.** Notes in one app, bookmarks in another, PDFs on your desktop. Pith turns all of them into searchable, interconnected articles -- automatically.
 
 **You want to ask questions based on your own knowledge, not generic AI.** The built-in chat uses RAG (retrieval-augmented generation) to answer from your wiki. Every answer is grounded in articles you've accumulated.
 
@@ -46,8 +52,8 @@ Built in a few hours of pure vibe coding with [Claude Code](https://claude.ai/co
 ## Quick Start
 
 ```bash
-git clone https://github.com/gongty/wiki-app.git
-cd wiki-app
+git clone https://github.com/gongty/pith.git
+cd pith
 npm install
 WIKI_API_KEY=your-api-key node server.js
 # Open http://localhost:3456
@@ -91,7 +97,7 @@ Configure in Settings after launch:
 ## Project Structure
 
 ```
-wiki-app/
+pith/
 ├── server.js          # Node.js HTTP server (~6700 lines, API + static files)
 ├── app/
 │   ├── index.html     # HTML shell

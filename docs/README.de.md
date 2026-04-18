@@ -1,6 +1,6 @@
-# Wiki App
+# Pith
 
-Wirf eine URL, ein PDF, einen Screenshot oder einfach Text rein -- die KI liest, strukturiert und archiviert es in deinem persoenlichen Wiki. Wenn du es brauchst, suche oder frag einfach in natuerlicher Sprache.
+Wirf eine URL, ein PDF, einen Screenshot oder einfach Text rein -- die KI liest, strukturiert und archiviert es in deiner persoenlichen Wissensdatenbank. Wenn du es brauchst, suche oder frag einfach in natuerlicher Sprache.
 
 Richte RSS-Feeds und Webquellen ein, die KI ueberwacht sie taeglich, filtert was dich interessiert und schreibt die Artikel. Deine Wissensdatenbank waechst, waehrend du schlaefst.
 
@@ -22,9 +22,15 @@ In wenigen Stunden reines Vibe Coding mit [Claude Code](https://claude.ai/code) 
 |:-:|:-:|
 | ![Automatisierte Aufgaben](../docs/screenshots/autotask.png) | ![Dark Mode](../docs/screenshots/dark-mode.png) |
 
+## Download
+
+**[macOS (Apple Silicon) DMG](https://github.com/gongty/pith/releases/latest)**
+
+Unsignierter Build -- erster Start: Rechtsklick > Oeffnen, oder im Terminal `xattr -cr /Applications/Pith.app` ausfuehren.
+
 ## Welche Probleme loest es?
 
-**Informationen sind verstreut, gelesen und vergessen.** Notizen in einer App, Lesezeichen in einer anderen, PDFs auf dem Desktop. Wiki App verwandelt alles in durchsuchbare, vernetzte Artikel -- automatisch.
+**Informationen sind verstreut, gelesen und vergessen.** Notizen in einer App, Lesezeichen in einer anderen, PDFs auf dem Desktop. Pith verwandelt alles in durchsuchbare, vernetzte Artikel -- automatisch.
 
 **Du willst Fragen auf Basis deines eigenen Wissens stellen, nicht generischer KI.** Der integrierte Chat nutzt RAG (Retrieval-Augmented Generation), um aus deinem Wiki zu antworten. Jede Antwort basiert auf Artikeln, die du gesammelt hast.
 
@@ -45,8 +51,8 @@ In wenigen Stunden reines Vibe Coding mit [Claude Code](https://claude.ai/code) 
 ## Schnellstart
 
 ```bash
-git clone https://github.com/gongty/wiki-app.git
-cd wiki-app
+git clone https://github.com/gongty/pith.git
+cd pith
 npm install
 WIKI_API_KEY=dein-api-key node server.js
 # Oeffne http://localhost:3456
@@ -90,7 +96,7 @@ Nach dem Start in den Einstellungen konfigurieren:
 ## Projektstruktur
 
 ```
-wiki-app/
+pith/
 ├── server.js          # Node.js HTTP-Server (~6700 Zeilen, API + statische Dateien)
 ├── app/
 │   ├── index.html     # HTML-Grundgeruest

@@ -1,6 +1,6 @@
-# Wiki App
+# Pith
 
-丢进一个链接、一份 PDF、一张截图，或者直接粘贴文字 -- AI 阅读、整理、归档到你的个人 wiki。下次需要时，搜索或直接用自然语言提问。
+丢进一个链接、一份 PDF、一张截图，或者直接粘贴文字 -- AI 阅读、整理、归档到你的个人知识库。下次需要时，搜索或直接用自然语言提问。
 
 设好 RSS 和网页源，AI 每天自动监控、过滤你关心的内容、撰写文章。你睡觉的时候，知识库在生长。
 
@@ -22,9 +22,15 @@
 |:-:|:-:|
 | ![自动化任务](../docs/screenshots/autotask.png) | ![深色模式](../docs/screenshots/dark-mode.png) |
 
+## 下载
+
+**[macOS (Apple Silicon) DMG](https://github.com/gongty/pith/releases/latest)**
+
+未签名构建 -- 首次启动：右键 > 打开，或终端执行 `xattr -cr /Applications/Pith.app`。
+
 ## 解决什么问题？
 
-**信息分散，看过就忘。** 笔记在一个 app 里，书签在另一个，PDF 扔在桌面上。Wiki App 把它们全部变成可搜索、互相关联的文章 -- 自动完成。
+**信息分散，看过就忘。** 笔记在一个 app 里，书签在另一个，PDF 扔在桌面上。Pith 把它们全部变成可搜索、互相关联的文章 -- 自动完成。
 
 **想基于自己的知识提问，而不是通用 AI。** 内置聊天使用 RAG（检索增强生成）从你的 wiki 中检索上下文来回答问题。每个回答都基于你积累的文章。
 
@@ -45,8 +51,8 @@
 ## 快速开始
 
 ```bash
-git clone https://github.com/gongty/wiki-app.git
-cd wiki-app
+git clone https://github.com/gongty/pith.git
+cd pith
 npm install
 WIKI_API_KEY=your-api-key node server.js
 # 打开 http://localhost:3456
@@ -90,7 +96,7 @@ WIKI_API_KEY=your-api-key node server.js
 ## 项目结构
 
 ```
-wiki-app/
+pith/
 ├── server.js          # Node.js HTTP 服务器（约 6700 行，API + 静态文件）
 ├── app/
 │   ├── index.html     # HTML 外壳

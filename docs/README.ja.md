@@ -1,6 +1,6 @@
-# Wiki App
+# Pith
 
-URLやPDF、スクリーンショット、テキストを投入するだけ -- AIが読み取り、構造化し、パーソナルWikiに整理します。必要な時に検索するか、自然言語で質問するだけ。
+URLやPDF、スクリーンショット、テキストを投入するだけ -- AIが読み取り、構造化し、パーソナルナレッジベースに整理します。必要な時に検索するか、自然言語で質問するだけ。
 
 RSSフィードやWebソースを設定すれば、AIが毎日監視し、関心のある情報をフィルタリングして記事を作成。あなたが寝ている間もナレッジベースは成長し続けます。
 
@@ -22,9 +22,15 @@ RSSフィードやWebソースを設定すれば、AIが毎日監視し、関心
 |:-:|:-:|
 | ![自動タスク](../docs/screenshots/autotask.png) | ![ダークモード](../docs/screenshots/dark-mode.png) |
 
+## ダウンロード
+
+**[macOS (Apple Silicon) DMG](https://github.com/gongty/pith/releases/latest)**
+
+未署名ビルド -- 初回起動時：右クリック > 開く、またはターミナルで `xattr -cr /Applications/Pith.app` を実行。
+
 ## 解決する課題
 
-**情報が散在し、読んだそばから忘れていく。** メモはあるアプリに、ブックマークは別のアプリに、PDFはデスクトップに。Wiki Appはそれらすべてを、検索可能で相互リンクされた記事に自動変換します。
+**情報が散在し、読んだそばから忘れていく。** メモはあるアプリに、ブックマークは別のアプリに、PDFはデスクトップに。Pithはそれらすべてを、検索可能で相互リンクされた記事に自動変換します。
 
 **汎用的なAIではなく、自分の知識に基づいて質問したい。** 内蔵チャットはRAG（検索拡張生成）を使い、あなたのWikiから回答を導きます。すべての回答は、あなたが蓄積した記事に基づいています。
 
@@ -45,8 +51,8 @@ RSSフィードやWebソースを設定すれば、AIが毎日監視し、関心
 ## クイックスタート
 
 ```bash
-git clone https://github.com/gongty/wiki-app.git
-cd wiki-app
+git clone https://github.com/gongty/pith.git
+cd pith
 npm install
 WIKI_API_KEY=your-api-key node server.js
 # http://localhost:3456 を開く
@@ -90,7 +96,7 @@ WIKI_API_KEY=your-api-key node server.js
 ## プロジェクト構成
 
 ```
-wiki-app/
+pith/
 ├── server.js          # Node.js HTTPサーバー（約6700行、API + 静的ファイル配信）
 ├── app/
 │   ├── index.html     # HTMLシェル

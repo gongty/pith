@@ -1,6 +1,6 @@
-# Wiki App
+# Pith
 
-Agrega una URL, un PDF, una captura de pantalla o simplemente pega texto -- la IA lo lee, lo estructura y lo archiva en tu wiki personal. La proxima vez que lo necesites, busca o simplemente pregunta en lenguaje natural.
+Agrega una URL, un PDF, una captura de pantalla o simplemente pega texto -- la IA lo lee, lo estructura y lo archiva en tu base de conocimiento personal. La proxima vez que lo necesites, busca o simplemente pregunta en lenguaje natural.
 
 Configura fuentes RSS y paginas web, la IA las monitorea diariamente, filtra lo que te importa y escribe los articulos. Tu base de conocimiento crece mientras duermes.
 
@@ -22,9 +22,15 @@ Construido en pocas horas de puro vibe coding con [Claude Code](https://claude.a
 |:-:|:-:|
 | ![Tareas automatizadas](../docs/screenshots/autotask.png) | ![Modo oscuro](../docs/screenshots/dark-mode.png) |
 
+## Descarga
+
+**[macOS (Apple Silicon) DMG](https://github.com/gongty/pith/releases/latest)**
+
+Build sin firmar -- primer inicio: clic derecho > Abrir, o ejecuta `xattr -cr /Applications/Pith.app` en terminal.
+
 ## Que problemas resuelve?
 
-**La informacion esta dispersa, se lee y se olvida.** Notas en una app, marcadores en otra, PDFs en el escritorio. Wiki App los convierte a todos en articulos buscables e interconectados -- automaticamente.
+**La informacion esta dispersa, se lee y se olvida.** Notas en una app, marcadores en otra, PDFs en el escritorio. Pith los convierte a todos en articulos buscables e interconectados -- automaticamente.
 
 **Quieres hacer preguntas basadas en tu propio conocimiento, no en IA generica.** El chat integrado usa RAG (generacion aumentada por recuperacion) para responder desde tu wiki. Cada respuesta esta fundamentada en los articulos que has acumulado.
 
@@ -45,8 +51,8 @@ Construido en pocas horas de puro vibe coding con [Claude Code](https://claude.a
 ## Inicio rapido
 
 ```bash
-git clone https://github.com/gongty/wiki-app.git
-cd wiki-app
+git clone https://github.com/gongty/pith.git
+cd pith
 npm install
 WIKI_API_KEY=your-api-key node server.js
 # Abre http://localhost:3456
@@ -90,7 +96,7 @@ Configura en Ajustes despues del inicio:
 ## Estructura del proyecto
 
 ```
-wiki-app/
+pith/
 ├── server.js          # Servidor HTTP Node.js (~6700 lineas, API + archivos estaticos)
 ├── app/
 │   ├── index.html     # Shell HTML
