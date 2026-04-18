@@ -839,27 +839,39 @@ let _qaPath = '';
 let _qaModel = '';
 let _qaModels = [];
 
+const QA_MAX_SESSIONS = 10;
+
 function _qaSession(p) {
-  if (!_qaSessions.has(p)) _qaSessions.set(p, { history: [], html: '', streaming: false, abort: null });
+  if (!_qaSessions.has(p)) {
+    if (_qaSessions.size >= QA_MAX_SESSIONS) {
+      for (const [k, s] of _qaSessions) {
+        if (k === _qaPath) continue;
+        if (s.abort) s.abort.abort();
+        _qaSessions.delete(k);
+        break;
+      }
+    }
+    const el = document.createElement('div');
+    el.className = 'article-qa-session';
+    el.innerHTML = buildEmptyState();
+    _qaSessions.set(p, { history: [], el, streaming: false, abort: null });
+  }
   return _qaSessions.get(p);
 }
 
 function setupArticleQA(articlePath) {
-  if (_qaPath && _qaPanel) {
-    const prev = _qaSession(_qaPath);
-    prev.html = _qaPanel.querySelector('.article-qa-messages').innerHTML;
-  }
   _qaPath = articlePath;
   const s = _qaSession(articlePath);
   ensureQAPanel();
   ensureQAFab();
   if (!_qaPanel.classList.contains('open')) _qaFab.classList.add('show');
   const msgsEl = _qaPanel.querySelector('.article-qa-messages');
-  msgsEl.innerHTML = s.html || buildEmptyState();
+  msgsEl.replaceChildren(s.el);
   const input = _qaPanel.querySelector('.article-qa-input');
   if (input) input.disabled = s.streaming;
   const btn = _qaPanel.querySelector('.article-qa-bottom');
   if (btn) btn.classList.remove('show');
+  msgsEl.scrollTop = msgsEl.scrollHeight;
   loadQAModels();
 }
 
@@ -1001,7 +1013,7 @@ function ensureQAPanel() {
         '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
       '</button>' +
     '</div>' +
-    '<div class="article-qa-messages">' + buildEmptyState() + '</div>' +
+    '<div class="article-qa-messages"></div>' +
     '<div class="article-qa-input-wrap">' +
       '<input class="article-qa-input" type="text" placeholder="输入问题，回车发送..." />' +
       '<button class="article-qa-send" onclick="sendArticleQA()">' +
@@ -1122,23 +1134,25 @@ export async function sendArticleQA() {
   if (!q) return;
   input.value = '';
 
-  const msgsEl = _qaPanel.querySelector('.article-qa-messages');
-  const empty = msgsEl.querySelector('.article-qa-empty');
+  const container = sess.el;
+  const empty = container.querySelector('.article-qa-empty');
   if (empty) empty.remove();
 
   const userDiv = document.createElement('div');
   userDiv.className = 'article-qa-msg user';
   userDiv.innerHTML = '<div class="article-qa-msg-body">' + h(q).replace(/\n/g, '<br>') + '</div>';
-  msgsEl.appendChild(userDiv);
+  container.appendChild(userDiv);
 
   const aiDiv = document.createElement('div');
   aiDiv.className = 'article-qa-msg assistant';
   aiDiv.innerHTML = '<div class="article-qa-avatar">AI</div><div class="article-qa-msg-body"><div class="article-qa-loading"><span></span><span></span><span></span></div></div>';
-  msgsEl.appendChild(aiDiv);
-  msgsEl.scrollTop = msgsEl.scrollHeight;
+  container.appendChild(aiDiv);
+
+  const msgsEl = _qaPanel.querySelector('.article-qa-messages');
+  const isVisible = () => _qaPath === sentPath;
+  if (isVisible()) msgsEl.scrollTop = msgsEl.scrollHeight;
 
   let _userScrolledUp = false;
-  const isVisible = () => _qaPath === sentPath;
   const _nearBottom = () => msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 40;
   const _scrollIfPinned = () => { if (!_userScrolledUp && isVisible()) msgsEl.scrollTop = msgsEl.scrollHeight; };
   let _bottomBtn = _qaPanel.querySelector('.article-qa-bottom');
@@ -1150,6 +1164,7 @@ export async function sendArticleQA() {
     msgsEl.parentElement.appendChild(_bottomBtn);
   }
   const _onScroll = () => {
+    if (!isVisible()) return;
     _userScrolledUp = !_nearBottom();
     _bottomBtn.classList.toggle('show', _userScrolledUp);
   };
@@ -1183,7 +1198,8 @@ export async function sendArticleQA() {
     let buf = '';
     let reasoning = '';
     let thinkEl = null;
-    aiBody.textContent = '';
+    let cleared = false;
+    const clearLoading = () => { if (!cleared) { cleared = true; aiBody.textContent = ''; } };
 
     while (true) {
       const { done, value } = await reader.read();
@@ -1202,6 +1218,7 @@ export async function sendArticleQA() {
           if (obj.r) {
             reasoning += obj.r;
             if (!thinkEl) {
+              clearLoading();
               aiBody.innerHTML = '<div class="article-qa-thinking-label">思考中</div><div class="article-qa-thinking"></div>';
               thinkEl = aiBody.querySelector('.article-qa-thinking');
             }
@@ -1210,6 +1227,7 @@ export async function sendArticleQA() {
             _scrollIfPinned();
           }
           if (obj.t) {
+            clearLoading();
             if (thinkEl && !full) {
               const details = document.createElement('details');
               details.className = 'article-qa-thinking-wrap';
@@ -1240,12 +1258,11 @@ export async function sendArticleQA() {
 
   sess.abort = null;
   sess.streaming = false;
-  sess.html = msgsEl.innerHTML;
   if (isVisible()) {
     input.disabled = false;
     input.focus();
+    _scrollIfPinned();
+    if (_nearBottom()) _bottomBtn.classList.remove('show');
   }
-  _scrollIfPinned();
   msgsEl.removeEventListener('scroll', _onScroll);
-  if (_nearBottom()) _bottomBtn.classList.remove('show');
 }

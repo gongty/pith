@@ -11,8 +11,9 @@ import { initIngestQueue, toggleIngestQueue } from './ingest-queue.js';
 import { render } from './router.js';
 import { dashAsk } from './pages/dashboard.js';
 import { chatSend, delChat, archiveChat, precipitateMsg, precipitateConv, closePrecipModal } from './pages/chat.js';
-import { toggleToc, scrollToH, onArtChange, fmtCmd, closeDel, doDel, requestDelArticle, newArticle, pickSlash, closeSlashMenu, imgAlign, imgSize, deselectImg } from './pages/article.js';
+import { toggleToc, scrollToH, onArtChange, fmtCmd, closeDel, doDel, requestDelArticle, newArticle, pickSlash, closeSlashMenu, imgAlign, imgSize, deselectImg, closeArticleQA, sendArticleQA, qaChip, toggleQAModelDD, qaModelPick } from './pages/article.js';
 import { gZoom, applyGF } from './pages/graph.js';
+import { markAllArticlesRead } from './pages/browse.js';
 import { openAutotaskModal, closeAutotaskModal, closeAutotaskDetail, runAutotask, toggleAutotaskEnabled, deleteAutotask, switchAutotaskTab, switchHistoryRange, backToWizardStep1, toggleWizardAdvanced, submitConfigureIntent, pickAutotaskIntentPreset, confirmCreateTask, openSourcePicker, closeSourcePicker, confirmSourcePicker, submitFeedback, addSourceToDraft, removeSourceFromDraft, removeMustExclude, toggleRunExpand, toggleTaskExpand } from './pages/autotask.js';
 
 /* ── Expose functions to inline onclick handlers ── */
@@ -51,6 +52,7 @@ window.toggleDateFold = toggleDateFold;
 window.switchSidebarTab = switchSidebarTab;
 window.gZoom = gZoom;
 window.applyGF = applyGF;
+window.markAllArticlesRead = markAllArticlesRead;
 window.precipitateMsg = precipitateMsg;
 window.precipitateConv = precipitateConv;
 window.closePrecipModal = closePrecipModal;
@@ -63,6 +65,11 @@ window.toggleIngestQueue = toggleIngestQueue;
 window.imgAlign = imgAlign;
 window.imgSize = imgSize;
 window.deselectImg = deselectImg;
+window.closeArticleQA = closeArticleQA;
+window.sendArticleQA = sendArticleQA;
+window.qaChip = qaChip;
+window.toggleQAModelDD = toggleQAModelDD;
+window.qaModelPick = qaModelPick;
 window.openAutotaskModal = openAutotaskModal;
 window.closeAutotaskModal = closeAutotaskModal;
 window.closeAutotaskDetail = closeAutotaskDetail;
@@ -105,6 +112,9 @@ window.toggleTaskExpand = toggleTaskExpand;
 document.addEventListener('click', e => {
   document.querySelectorAll('.chat-model-dropdown.open').forEach(dd => {
     if (!dd.contains(e.target) && !e.target.closest('.chat-model-tag')) dd.classList.remove('open');
+  });
+  document.querySelectorAll('.article-qa-model-dd.open').forEach(dd => {
+    if (!dd.contains(e.target) && !e.target.closest('.article-qa-model-tag')) dd.classList.remove('open');
   });
 });
 
