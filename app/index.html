@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>知识库</title>
+<title data-i18n="nav.kb">知识库</title>
 <link rel="stylesheet" href="/css/base.css">
 <link rel="stylesheet" href="/css/layout.css">
 <link rel="stylesheet" href="/css/components.css">
@@ -19,27 +19,27 @@
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-resize" id="sidebarResize"></div>
   <div class="sidebar-header">
-    <span class="sidebar-title" id="sidebarTitle" onclick="go('#/')">知识库</span>
-    <button class="sidebar-collapse-btn" onclick="toggleSidebar()" title="收起侧边栏">
+    <span class="sidebar-title" id="sidebarTitle" onclick="go('#/')" data-i18n="nav.kb">知识库</span>
+    <button class="sidebar-collapse-btn" onclick="toggleSidebar()" title="收起侧边栏" data-i18n-title="nav.collapse">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
     </button>
   </div>
   <nav class="sidebar-nav">
     <div class="sidebar-item" data-view="dashboard" onclick="go('#/')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-      首页
+      <span data-i18n="nav.home">首页</span>
     </div>
     <div class="sidebar-item" data-view="graph" onclick="go('#/graph')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><line x1="8.5" y1="7.5" x2="15.5" y2="16.5"/><line x1="15.5" y1="7.5" x2="8.5" y2="16.5"/></svg>
-      知识图谱
+      <span data-i18n="nav.graph">知识图谱</span>
     </div>
     <div class="sidebar-item" data-view="browse" onclick="go('#/browse')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-      全部文章
+      <span data-i18n="nav.browse">全部文章</span>
     </div>
     <div class="sidebar-item" data-view="autotask" onclick="go('#/autotask')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
-      自动任务
+      <span data-i18n="nav.autotask">自动任务</span>
     </div>
   </nav>
 
@@ -47,11 +47,11 @@
   <div class="sidebar-tabs">
     <button class="sidebar-tab active" data-tab="chat" onclick="switchSidebarTab('chat')">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-      对话
+      <span data-i18n="nav.chat">对话</span>
     </button>
     <button class="sidebar-tab" data-tab="pages" onclick="switchSidebarTab('pages')">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      文章
+      <span data-i18n="nav.articles">文章</span>
     </button>
   </div>
 
@@ -59,7 +59,7 @@
   <div class="sidebar-panel" id="sidebarPanelChat">
     <button class="sidebar-new-chat-btn" onclick="go('#/chat')">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      新对话
+      <span data-i18n="nav.newChat">新对话</span>
     </button>
     <div class="sidebar-chat-list" id="sidebarChats"></div>
   </div>
@@ -72,11 +72,11 @@
   <div class="sidebar-bottom">
     <button class="sidebar-bottom-btn" onclick="openSettings()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-      设置
+      <span data-i18n="nav.settings">设置</span>
     </button>
     <button class="sidebar-bottom-btn" onclick="toggleTheme()">
       <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-      主题
+      <span data-i18n="nav.theme">主题</span>
     </button>
   </div>
 </aside>
@@ -89,9 +89,9 @@
   <div class="topbar" id="topbar">
     <div class="topbar-breadcrumb" id="breadcrumb"></div>
     <div class="topbar-actions" id="topbarActions">
-      <button class="topbar-btn" onclick="openSearch()" title="⌘K"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>搜索</button>
-      <button class="topbar-btn ingest-queue-btn" id="ingestQueueBtn" onclick="toggleIngestQueue()" title="投喂队列"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>队列<span class="ingest-queue-badge" id="ingestQueueBadge" hidden></span></button>
-      <button class="topbar-btn topbar-btn-accent" onclick="openIngest()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>投喂</button>
+      <button class="topbar-btn" onclick="openSearch()" title="⌘K"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span data-i18n="nav.search">搜索</span></button>
+      <button class="topbar-btn ingest-queue-btn" id="ingestQueueBtn" onclick="toggleIngestQueue()" title="投喂队列" data-i18n-title="nav.ingestQueue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg><span data-i18n="nav.queue">队列</span><span class="ingest-queue-badge" id="ingestQueueBadge" hidden></span></button>
+      <button class="topbar-btn topbar-btn-accent" onclick="openIngest()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span data-i18n="nav.ingest">投喂</span></button>
     </div>
   </div>
   <div class="content" id="content"></div>
@@ -101,19 +101,19 @@
 <!-- Ingest queue panel -->
 <div class="ingest-queue-panel" id="ingestQueuePanel" hidden>
   <div class="iq-head">
-    <span>投喂队列</span>
-    <button class="iq-close" onclick="toggleIngestQueue()" title="关闭"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    <span data-i18n="iq.title">投喂队列</span>
+    <button class="iq-close" onclick="toggleIngestQueue()" title="关闭" data-i18n-title="common.close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
   </div>
   <div class="iq-body" id="ingestQueueBody"></div>
 </div>
 
 <!-- Format toolbar -->
 <div class="format-toolbar" id="formatToolbar">
-  <button class="format-toolbar-btn" onclick="fmtCmd('bold')" title="加粗"><b>B</b></button>
-  <button class="format-toolbar-btn" onclick="fmtCmd('italic')" title="斜体"><i>I</i></button>
-  <button class="format-toolbar-btn" onclick="fmtCmd('code')" title="代码"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></button>
+  <button class="format-toolbar-btn" onclick="fmtCmd('bold')" title="加粗" data-i18n-title="fmt.bold"><b>B</b></button>
+  <button class="format-toolbar-btn" onclick="fmtCmd('italic')" title="斜体" data-i18n-title="fmt.italic"><i>I</i></button>
+  <button class="format-toolbar-btn" onclick="fmtCmd('code')" title="代码" data-i18n-title="fmt.code"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></button>
   <div class="format-toolbar-sep"></div>
-  <button class="format-toolbar-btn" onclick="fmtCmd('link')" title="链接"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></button>
+  <button class="format-toolbar-btn" onclick="fmtCmd('link')" title="链接" data-i18n-title="fmt.link"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></button>
   <div class="format-toolbar-sep"></div>
   <button class="format-toolbar-btn" onclick="fmtCmd('h2')" title="H2" style="font-size:11px">H2</button>
   <button class="format-toolbar-btn" onclick="fmtCmd('h3')" title="H3" style="font-size:11px">H3</button>
@@ -124,47 +124,47 @@
   <div class="search-box">
     <div class="search-input-row">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input class="search-field" id="searchInput" placeholder="搜索或提问..." autocomplete="off">
+      <input class="search-field" id="searchInput" placeholder="搜索或提问..." data-i18n-ph="search.placeholder" autocomplete="off">
       <span class="search-hint">ESC</span>
     </div>
-    <div class="search-results" id="searchResults"><div class="search-empty-msg">输入关键词搜索</div></div>
+    <div class="search-results" id="searchResults"><div class="search-empty-msg" data-i18n="search.emptyHint">输入关键词搜索</div></div>
   </div>
 </div>
 
 <!-- Ingest -->
 <div class="ingest-overlay" id="ingestOverlay" onclick="if(event.target===this)closeIngest()">
   <div class="ingest-panel">
-    <div class="ingest-head"><h3>投喂知识</h3><button class="topbar-btn" onclick="closeIngest()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+    <div class="ingest-head"><h3 data-i18n="ingest.title">投喂知识</h3><button class="topbar-btn" onclick="closeIngest()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
     <div class="ingest-form">
       <div>
-        <label class="field-label">拖拽文件或粘贴内容 · 支持 PDF/图片/音视频/文本/链接</label>
+        <label class="field-label" data-i18n="ingest.dropHint">拖拽文件或粘贴内容 · 支持 PDF/图片/音视频/文本/链接</label>
         <div class="ingest-drop-zone" id="ingestDropZone">
           <div class="ingest-url-chips" id="ingestUrlChips" style="display:none"></div>
-          <textarea id="ingestContent" placeholder="粘贴文本、拖入文件、或输入 https:// 链接..."></textarea>
+          <textarea id="ingestContent" placeholder="粘贴文本、拖入文件、或输入 https:// 链接..." data-i18n-ph="ingest.placeholder"></textarea>
           <div class="ingest-upload-bar">
             <input type="file" id="ingestFile" accept=".txt,.md,.html,.json,.csv,.xml,.zip,.pdf,.png,.jpg,.jpeg,.webp,.gif,.mp3,.mp4,.wav,.m4a,.ogg,.webm" multiple hidden>
             <button class="ingest-upload-btn" onclick="document.getElementById('ingestFile').click()">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              上传文件
+              <span data-i18n="ingest.uploadFile">上传文件</span>
             </button>
             <span class="ingest-file-name" id="ingestFileName"></span>
           </div>
           <div class="ingest-drop-hint">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            释放文件
+            <span data-i18n="ingest.releaseFile">释放文件</span>
           </div>
         </div>
       </div>
       <div style="display:flex;gap:10px">
-        <div style="flex:1"><label class="field-label">主题</label><select class="field-select" id="ingestTopic"><option value="auto">自动分类</option></select></div>
-        <div style="flex:1"><label class="field-label">模型</label><select class="field-select" id="ingestModel"></select></div>
+        <div style="flex:1"><label class="field-label" data-i18n="ingest.topic">主题</label><select class="field-select" id="ingestTopic"><option value="auto" data-i18n="ingest.autoClassify">自动分类</option></select></div>
+        <div style="flex:1"><label class="field-label" data-i18n="ingest.model">模型</label><select class="field-select" id="ingestModel"></select></div>
       </div>
       <div id="ingestBatchPreview" style="display:none">
         <div class="ingest-batch-summary" id="ingestBatchSummary"></div>
-        <div class="ingest-batch-actions"><button onclick="batchToggleAll(true)">全选</button><button onclick="batchToggleAll(false)">取消全选</button></div>
+        <div class="ingest-batch-actions"><button onclick="batchToggleAll(true)" data-i18n="ingest.selectAll">全选</button><button onclick="batchToggleAll(false)" data-i18n="ingest.deselectAll">取消全选</button></div>
         <div class="ingest-batch-list" id="ingestBatchList"></div>
       </div>
-      <button class="btn-fill" id="ingestBtn" onclick="submitIngest()">开始编译</button>
+      <button class="btn-fill" id="ingestBtn" onclick="submitIngest()" data-i18n="ingest.compile">开始编译</button>
     </div>
   </div>
 </div>
@@ -172,63 +172,74 @@
 <!-- Settings -->
 <div class="modal-bg" id="settingsModal" onclick="if(event.target===this)closeSettings()">
   <div class="modal-card modal-card-tabs">
-    <div class="modal-top"><h3>设置</h3><button onclick="closeSettings()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+    <div class="modal-top"><h3 data-i18n="settings.title">设置</h3><button onclick="closeSettings()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
     <div class="settings-tabs">
-      <button class="settings-tab active" data-tab="general" onclick="switchSettingsTab('general')">通用</button>
-      <button class="settings-tab" data-tab="memory" onclick="switchSettingsTab('memory')">记忆</button>
-      <button class="settings-tab" data-tab="provider" onclick="switchSettingsTab('provider')">模型配置</button>
-      <button class="settings-tab" data-tab="pipeline" onclick="switchSettingsTab('pipeline')">编译流水线</button>
+      <button class="settings-tab active" data-tab="general" onclick="switchSettingsTab('general')" data-i18n="settings.tabGeneral">通用</button>
+      <button class="settings-tab" data-tab="memory" onclick="switchSettingsTab('memory')" data-i18n="settings.tabMemory">记忆</button>
+      <button class="settings-tab" data-tab="provider" onclick="switchSettingsTab('provider')" data-i18n="settings.tabProvider">模型配置</button>
+      <button class="settings-tab" data-tab="pipeline" onclick="switchSettingsTab('pipeline')" data-i18n="settings.tabPipeline">编译流水线</button>
     </div>
     <div class="settings-tab-content" id="settingsTabGeneral">
       <div class="modal-form">
-        <div><label class="field-label">用户名</label><input class="field-input" id="sNickname" placeholder="设置后显示为「XX 的知识库」"></div>
-        <div><label class="field-label">知识库语言</label><select class="field-select" id="sLang">
-          <option value="zh">中文</option><option value="en">English</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="auto">跟随原文</option>
-        </select></div>
+        <div><label class="field-label" data-i18n="settings.nickname">用户名</label><input class="field-input" id="sNickname" placeholder="设置后显示为「XX 的知识库」" data-i18n-ph="settings.nicknamePH"></div>
+        <div><label class="field-label" data-i18n="settings.wikiLang">知识库语言</label>
+          <div class="custom-select" id="sLangWrap">
+            <div class="custom-select-trigger" id="sLangTrigger"></div>
+            <div class="custom-select-list" id="sLangList"></div>
+          </div>
+          <input type="hidden" id="sLang">
+        </div>
+        <div><label class="field-label" data-i18n="settings.uiLang">界面语言</label>
+          <div class="custom-select" id="sUiLangWrap">
+            <div class="custom-select-trigger" id="sUiLangTrigger"></div>
+            <div class="custom-select-list" id="sUiLangList"></div>
+          </div>
+          <input type="hidden" id="sUiLang">
+        </div>
       </div>
       <div class="modal-foot">
-        <button class="btn-sm-fill" onclick="saveSett()">保存</button>
+        <button class="btn-sm-fill" onclick="saveSett()" data-i18n="common.save">保存</button>
       </div>
     </div>
     <div class="settings-tab-content" id="settingsTabMemory" style="display:none"></div>
     <div class="settings-tab-content" id="settingsTabProvider" style="display:none">
       <div class="modal-form">
-        <div><label class="field-label">提供商</label><select class="field-select" id="sProv" onchange="onProvChange()"></select></div>
-        <div id="sCustomBaseUrlRow" style="display:none"><label class="field-label">自定义 Base URL</label><input class="field-input" id="sCustomBaseUrl" placeholder="https://your-endpoint/v1"></div>
-        <div><label class="field-label">API Key</label><input class="field-input" type="password" id="sKey" placeholder="输入 API Key..."></div>
-        <div><label class="field-label">当前主模型</label><select class="field-select" id="sModel"></select></div>
+        <div><label class="field-label" data-i18n="settings.provider">提供商</label><select class="field-select" id="sProv" onchange="onProvChange()"></select></div>
+        <div id="sCustomBaseUrlRow" style="display:none"><label class="field-label" data-i18n="settings.customBaseUrl">自定义 Base URL</label><input class="field-input" id="sCustomBaseUrl" placeholder="https://your-endpoint/v1"></div>
+        <div><label class="field-label" data-i18n="settings.apiKey">API Key</label><input class="field-input" type="password" id="sKey" placeholder="输入 API Key..." data-i18n-ph="settings.apiKeyPH"></div>
+        <div><label class="field-label" data-i18n="settings.mainModel">当前主模型</label><select class="field-select" id="sModel"></select></div>
         <div class="settings-section">
           <div class="settings-section-head">
-            <h4>模型列表</h4>
+            <h4 data-i18n="settings.modelList">模型列表</h4>
             <div class="settings-section-actions">
-              <button type="button" class="btn-outline btn-xs" id="addModelBtn">＋ 添加模型</button>
-              <button type="button" class="btn-outline btn-xs" id="restoreDefaultsBtn">↻ 恢复内建默认</button>
+              <button type="button" class="btn-outline btn-xs" id="addModelBtn" data-i18n="settings.addModel">＋ 添加模型</button>
+              <button type="button" class="btn-outline btn-xs" id="restoreDefaultsBtn" data-i18n="settings.restoreDefaults">↻ 恢复内建默认</button>
             </div>
           </div>
           <div id="modelListTable" class="model-list-table"></div>
         </div>
       </div>
       <div class="modal-foot">
-        <button class="btn-outline" id="testConnBtn" onclick="testConn()">测试连接</button>
-        <button class="btn-sm-fill" onclick="saveSett()">保存</button>
+        <button class="btn-outline" id="testConnBtn" onclick="testConn()" data-i18n="settings.testConn">测试连接</button>
+        <button class="btn-sm-fill" onclick="saveSett()" data-i18n="common.save">保存</button>
       </div>
     </div>
     <div class="settings-tab-content" id="settingsTabPipeline" style="display:none">
       <div class="modal-form" id="pipelinePanel">
         <div class="pipeline-presets">
-          <label class="field-label">预设</label>
+          <label class="field-label" data-i18n="settings.preset">预设</label>
           <div class="pipeline-preset-row" id="pipelinePresetRow">
-            <button type="button" class="preset-btn" data-preset="fast">极速</button>
-            <button type="button" class="preset-btn active" data-preset="balanced">平衡 <span class="preset-tag">推荐</span></button>
-            <button type="button" class="preset-btn" data-preset="quality">最稳</button>
-            <button type="button" class="preset-btn preset-btn-custom" data-preset="custom" hidden>自定义</button>
+            <button type="button" class="preset-btn" data-preset="fast" data-i18n="pipeline.fast">极速</button>
+            <button type="button" class="preset-btn active" data-preset="balanced"><span data-i18n="pipeline.balanced">平衡</span> <span class="preset-tag" data-i18n="pipeline.recommended">推荐</span></button>
+            <button type="button" class="preset-btn" data-preset="quality" data-i18n="pipeline.quality">最稳</button>
+            <button type="button" class="preset-btn preset-btn-custom" data-preset="custom" hidden data-i18n="pipeline.custom">自定义</button>
           </div>
         </div>
         <div class="pipeline-stages" id="pipelineStages"></div>
       </div>
       <div class="modal-foot">
-        <button class="btn-outline" id="pipelineResetBtn" type="button">重置为预设</button>
-        <button class="btn-sm-fill" id="pipelineSaveBtn" type="button">保存</button>
+        <button class="btn-outline" id="pipelineResetBtn" type="button" data-i18n="settings.resetPreset">重置为预设</button>
+        <button class="btn-sm-fill" id="pipelineSaveBtn" type="button" data-i18n="common.save">保存</button>
       </div>
     </div>
   </div>
@@ -237,10 +248,10 @@
 <!-- Delete confirm -->
 <div class="confirm-bg" id="delConfirm" onclick="if(event.target===this)closeDel()">
   <div class="confirm-card">
-    <h3>确认删除</h3>
+    <h3 data-i18n="del.title">确认删除</h3>
     <p id="delConfirmTitle" class="confirm-target"></p>
-    <p>删除后可在 6 秒内撤销</p>
-    <div class="confirm-btns"><button class="btn-cancel" onclick="closeDel()">取消</button><button class="btn-delete" onclick="doDel()">删除</button></div>
+    <p data-i18n="del.hint">删除后可在 6 秒内撤销</p>
+    <div class="confirm-btns"><button class="btn-cancel" onclick="closeDel()" data-i18n="common.cancel">取消</button><button class="btn-delete" onclick="doDel()" data-i18n="common.delete">删除</button></div>
   </div>
 </div>
 
@@ -249,7 +260,7 @@
   <div class="ingest-toast-header">
     <span class="ingest-toast-title" id="itTitle"></span>
     <span class="ingest-toast-detail" id="itDetail"></span>
-    <button id="itExpand" class="it-expand-btn" title="展开" type="button" aria-expanded="false">▾</button>
+    <button id="itExpand" class="it-expand-btn" title="展开" data-i18n-title="ingest.expand" type="button" aria-expanded="false">▾</button>
   </div>
   <div class="ingest-toast-bar"><div class="ingest-toast-fill" id="itFill"></div></div>
   <div class="ingest-toast-stages" id="itStages" hidden></div>
@@ -270,16 +281,16 @@
 <div class="mobile-nav" id="mobileNav">
   <div class="mobile-nav-inner">
     <div class="mobile-nav-item" data-view="dashboard" onclick="go('#/')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>首页
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span data-i18n="mobile.home">首页</span>
     </div>
     <div class="mobile-nav-item" data-view="chat" onclick="go('#/chat')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>对话
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span data-i18n="mobile.chat">对话</span>
     </div>
     <div class="mobile-nav-item" data-view="browse" onclick="go('#/browse')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>文章
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg><span data-i18n="mobile.articles">文章</span>
     </div>
     <div class="mobile-nav-item" onclick="openIngest()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>投喂
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span data-i18n="mobile.ingest">投喂</span>
     </div>
   </div>
 </div>
@@ -287,7 +298,7 @@
 <!-- Autotask Modal -->
 <div class="autotask-modal-bg" id="autotaskModal" onclick="if(event.target===this)closeAutotaskModal()">
   <div class="autotask-modal">
-    <div class="modal-top"><h3 id="autotaskModalTitle">新建任务</h3><button onclick="closeAutotaskModal()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+    <div class="modal-top"><h3 id="autotaskModalTitle" data-i18n="autotask.newTask">新建任务</h3><button onclick="closeAutotaskModal()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
     <div id="autotaskWizard" class="autotask-wizard"></div>
   </div>
 </div>
@@ -295,7 +306,7 @@
 <!-- Autotask Detail Modal -->
 <div class="autotask-modal-bg" id="autotaskDetailModal" onclick="if(event.target===this)closeAutotaskDetail()">
   <div class="autotask-modal autotask-detail-modal">
-    <div class="modal-top"><h3 id="autotaskDetailTitle">执行详情</h3><button onclick="closeAutotaskDetail()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+    <div class="modal-top"><h3 id="autotaskDetailTitle" data-i18n="autotask.detail">执行详情</h3><button onclick="closeAutotaskDetail()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
     <div id="autotaskDetailContent"></div>
   </div>
 </div>

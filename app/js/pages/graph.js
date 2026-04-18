@@ -1,5 +1,6 @@
 import { h, api } from '../utils.js';
 import state from '../state.js';
+import { t } from '../i18n.js';
 
 // Apple SF 软系统色（去饱和、米底上更耐看）
 const TC = ['#64A8FF', '#FF7A7A', '#67C18A', '#FFB460', '#AF8FE8', '#FF8CB6', '#5DC1D3', '#FF9B6E', '#5DD0B7', '#8892E0'];
@@ -25,7 +26,7 @@ export function cancelGA() {
 
 /* ── Main render ── */
 export async function rGraph(c) {
-  c.innerHTML = '<div style="padding:60px;text-align:center;color:var(--fg-tertiary)">加载中...</div>';
+  c.innerHTML = '<div style="padding:60px;text-align:center;color:var(--fg-tertiary)">' + t('common.loading') + '</div>';
   try {
     const data = state.gd || await api('/api/wiki/graph'); state.gd = data;
     const ns = data.nodes || [];
@@ -36,17 +37,17 @@ export async function rGraph(c) {
     const droppedNoise = (stats.droppedHapax || 0) + (stats.droppedStopword || 0);
 
     let s = '<div class="page-graph"><div class="graph-toolbar">';
-    s += '<button class="graph-toolbar-btn" onclick="gZoom(1.2)" title="放大"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>';
-    s += '<button class="graph-toolbar-btn" onclick="gZoom(0.8)" title="缩小"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>';
-    s += '<input type="search" class="graph-search-box" id="graphSearchBox" placeholder="搜索概念…" autocomplete="off">';
-    s += '<span class="graph-count">' + conceptCount + ' 概念</span></div>';
+    s += '<button class="graph-toolbar-btn" onclick="gZoom(1.2)" title="' + h(t('graph.zoomIn')) + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>';
+    s += '<button class="graph-toolbar-btn" onclick="gZoom(0.8)" title="' + h(t('graph.zoomOut')) + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>';
+    s += '<input type="search" class="graph-search-box" id="graphSearchBox" placeholder="' + h(t('graph.search')) + '" autocomplete="off">';
+    s += '<span class="graph-count">' + t('unit.concepts', { n: conceptCount }) + '</span></div>';
     s += '<div class="graph-canvas-wrap" id="fgWrap">';
-    if (conceptCount < 2) s += '<div class="graph-empty-msg">需要更多内容</div>';
+    if (conceptCount < 2) s += '<div class="graph-empty-msg">' + t('graph.empty') + '</div>';
     else s += '<canvas id="fgCanvas"></canvas><div class="graph-focus-card" id="graphFocusCard" hidden></div>';
     s += '</div>';
     s += '<div class="graph-stats-footer" id="fgLegend">';
-    s += conceptCount + ' 概念 · ' + articleCount + ' 文章';
-    if (droppedNoise) s += ' · 已过滤 ' + droppedNoise + ' 个噪声标签';
+    s += t('unit.concepts', { n: conceptCount }) + ' \u00B7 ' + t('unit.articles', { n: articleCount });
+    if (droppedNoise) s += ' \u00B7 ' + t('graph.filtered', { n: droppedNoise });
     s += '</div>';
     s += '</div>';
     c.innerHTML = s;
@@ -56,7 +57,7 @@ export async function rGraph(c) {
       const sb = document.getElementById('graphSearchBox');
       if (sb) sb.addEventListener('input', () => applyGF());
     });
-  } catch { c.innerHTML = '<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败</div>'; }
+  } catch { c.innerHTML = '<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">' + t('common.loadFailed') + '</div>'; }
 }
 
 /* ── Force-directed graph (cluster-based layout) ── */
@@ -260,7 +261,7 @@ export function initFG(canvas, data, full) {
     card.hidden = false;
     let inner = '<div class="graph-focus-card-head">';
     inner += '<div class="graph-focus-card-title">' + h(label) + '</div>';
-    inner += '<div class="graph-focus-card-meta">' + count + ' 篇文章</div>';
+    inner += '<div class="graph-focus-card-meta">' + t('unit.articles', { n: count }) + '</div>';
     inner += '</div>';
     inner += '<div class="graph-focus-card-list">';
     if (list.length) {
@@ -269,10 +270,10 @@ export function initFG(canvas, data, full) {
         inner += '<a class="graph-focus-card-item" href="#/article/' + encodeURIComponent(a.id) + '" title="' + h(title) + '">' + h(title) + '</a>';
       }
     } else {
-      inner += '<div class="graph-focus-card-empty">暂无关联文章</div>';
+      inner += '<div class="graph-focus-card-empty">' + t('graph.noArticles') + '</div>';
     }
     inner += '</div>';
-    inner += '<a class="graph-focus-card-link" href="#/browse?tag=' + encodeURIComponent(label) + '">在浏览页筛选 →</a>';
+    inner += '<a class="graph-focus-card-link" href="#/browse?tag=' + encodeURIComponent(label) + '">' + t('graph.filterLink') + '</a>';
     // 小画布（dashboard 440px）上限制 card 高度别超出 canvas 高度 —— max-height CSS 用的是
     // 70vh 不知道 canvas 实际尺寸, 小屏/小组件里会溢出到容器外被 overflow:hidden 裁掉。
     card.style.maxHeight = Math.max(120, Math.floor(H * 0.85)) + 'px';

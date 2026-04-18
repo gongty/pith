@@ -326,7 +326,7 @@ function resolvePresetForProvider(presetKey, providerKey, cfg) {
   const contentModel = pickModelByUse(providerKey, preset.content.use, cfg);
   const retryModel   = pickModelByUse(providerKey, preset.content.retryUse, cfg);
   const stages = {
-    title:    { source: 'code' },
+    title:    { source: 'piggyback_on_content' },
     topic:    { source: 'user' },
     filename: { source: 'code' },
     content:  {
@@ -366,6 +366,7 @@ function loadConfig() {
     model: '',
     customBaseUrl: '',
     wikiLang: 'zh',
+    uiLang: 'en',
     providers: {},
     pipeline: null
   };
@@ -376,6 +377,7 @@ function loadConfig() {
       cfg.model = saved.model || '';
       cfg.customBaseUrl = saved.customBaseUrl || '';
       cfg.wikiLang = saved.wikiLang || 'zh';
+      cfg.uiLang = saved.uiLang || 'en';
       cfg.providers = saved.providers && typeof saved.providers === 'object' ? saved.providers : {};
       cfg.pipeline = saved.pipeline && typeof saved.pipeline === 'object' ? saved.pipeline : null;
     }
@@ -428,7 +430,8 @@ function saveConfig(cfg) {
     provider: cfg.provider,
     model: cfg.model,
     customBaseUrl: cfg.customBaseUrl || '',
-    wikiLang: cfg.wikiLang || 'zh'
+    wikiLang: cfg.wikiLang || 'zh',
+    uiLang: cfg.uiLang || 'en'
   };
   if (cfg.providers && typeof cfg.providers === 'object') toSave.providers = cfg.providers;
   if (cfg.pipeline && typeof cfg.pipeline === 'object') toSave.pipeline = cfg.pipeline;
@@ -5289,9 +5292,33 @@ ${trimmedArticle}
           filename: parsed.filename, url: parsed.url
         }];
         const modelOverrides = (parsed.provider && parsed.model) ? { provider: parsed.provider, model: parsed.model } : null;
-        const batchId = items.length > 1 ? genTaskId() : null;
 
-        const tasks = items.map((item, i) => {
+        // URL dedup: reject if the same URL is pending/processing/recently-done in the queue
+        const dupUrls = [];
+        for (const item of items) {
+          const url = item.url || (item.type === 'url' ? item.content : '');
+          if (!url) continue;
+          const norm = normalizeUrl(url);
+          const inQueue = taskQueue.find(t => {
+            if (t.status !== 'pending' && t.status !== 'processing' && t.status !== 'done' && t.status !== 'partial') return false;
+            if (!t.payload) return false;
+            return normalizeUrl(t.payload.url || (t.payload.type === 'url' ? t.payload.content : '') || '') === norm;
+          });
+          if (inQueue) { dupUrls.push(url); continue; }
+        }
+        if (dupUrls.length > 0 && dupUrls.length === items.length) {
+          return json(res, 409, { error: '链接已在队列中或已入库', duplicates: dupUrls });
+        }
+        // Filter out duplicates from batch, keep non-dup items
+        const dupSet = new Set(dupUrls.map(u => normalizeUrl(u)));
+        const filteredItems = items.filter(item => {
+          const url = item.url || (item.type === 'url' ? item.content : '');
+          return !url || !dupSet.has(normalizeUrl(url));
+        });
+
+        const batchId = filteredItems.length > 1 ? genTaskId() : null;
+
+        const tasks = filteredItems.map((item, i) => {
           const name = item.name || item.filename || (item.content ? item.content.slice(0, 40) : '') || (item.url || 'ingest');
           return enqueueTask(
             {
@@ -5311,6 +5338,7 @@ ${trimmedArticle}
           taskIds: tasks.map(t => t.id),
           batch: !!batchId,
           batchId,
+          skippedDuplicates: dupUrls.length > 0 ? dupUrls : undefined,
         });
       } catch (e) { json(res, 400, { error: safeErr(e) }); }
     });
@@ -5775,6 +5803,7 @@ ${trimmedArticle}
       model: config.model,
       customBaseUrl: config.customBaseUrl || '',
       wikiLang: config.wikiLang || 'zh',
+      uiLang: config.uiLang || 'en',
       providers: providersOut,
       pipeline: config.pipeline || { preset: 'balanced', stages: resolvePresetForProvider('balanced', config.provider, config) },
       hasKey: !!config.apiKey
@@ -5807,13 +5836,14 @@ ${trimmedArticle}
       try {
         const parsed = JSON.parse(body);
         // apiKey 字段若前端误发一律忽略；密钥只允许通过环境变量 WIKI_API_KEY 注入，绝不落盘。
-        const { provider, model, customBaseUrl, wikiLang, providers, pipeline } = parsed;
+        const { provider, model, customBaseUrl, wikiLang, uiLang, providers, pipeline } = parsed;
         const config = loadConfig();
         const prevProvider = config.provider;
         if (provider) config.provider = provider;
         if (typeof model === 'string') config.model = model;
         if (typeof customBaseUrl === 'string') config.customBaseUrl = customBaseUrl;
         if (typeof wikiLang === 'string') config.wikiLang = wikiLang;
+        if (typeof uiLang === 'string') config.uiLang = uiLang;
         if (providers && typeof providers === 'object') {
           config.providers = { ...(config.providers || {}), ...providers };
         }

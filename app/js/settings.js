@@ -1,4 +1,5 @@
 import { $, h, api, put, post, toast } from './utils.js';
+import { t, setLang, getLang } from './i18n.js';
 import state from './state.js';
 import { renderMemory } from './memory.js';
 
@@ -8,7 +9,7 @@ export function openSettings() { $('settingsModal').classList.add('open'); loadS
 export function closeSettings() { $('settingsModal').classList.remove('open'); }
 
 export function switchSettingsTab(tab) {
-  document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.settings-tab').forEach(te => te.classList.toggle('active', te.dataset.tab === tab));
   $('settingsTabGeneral').style.display  = tab === 'general'  ? '' : 'none';
   $('settingsTabProvider').style.display = tab === 'provider' ? '' : 'none';
   $('settingsTabMemory').style.display   = tab === 'memory'   ? '' : 'none';
@@ -48,6 +49,45 @@ function getWorkingModels(provKey) {
   return state.sModels[provKey];
 }
 
+/* ── custom select helpers ── */
+
+function buildCustomSelect(wrapId, hiddenId, options, currentValue) {
+  const wrap = $(wrapId);
+  const trigger = wrap && wrap.querySelector('.custom-select-trigger');
+  const list = wrap && wrap.querySelector('.custom-select-list');
+  const hidden = $(hiddenId);
+  if (!wrap || !trigger || !list || !hidden) return;
+  hidden.value = currentValue;
+  let s = '';
+  let label = '';
+  options.forEach(o => {
+    const active = o.value === currentValue ? ' active' : '';
+    if (o.value === currentValue) label = o.label;
+    s += '<div class="custom-select-opt' + active + '" data-value="' + h(o.value) + '">' + h(o.label) + '</div>';
+  });
+  list.innerHTML = s;
+  trigger.textContent = label;
+  if (!wrap.__wired) {
+    trigger.addEventListener('click', () => {
+      document.querySelectorAll('.custom-select.open').forEach(cs => { if (cs !== wrap) cs.classList.remove('open'); });
+      wrap.classList.toggle('open');
+    });
+    list.addEventListener('click', ev => {
+      const opt = ev.target.closest('.custom-select-opt');
+      if (!opt) return;
+      const val = opt.dataset.value;
+      hidden.value = val;
+      trigger.textContent = opt.textContent;
+      list.querySelectorAll('.custom-select-opt').forEach(o => o.classList.toggle('active', o.dataset.value === val));
+      wrap.classList.remove('open');
+    });
+    document.addEventListener('click', ev => {
+      if (!wrap.contains(ev.target)) wrap.classList.remove('open');
+    });
+    wrap.__wired = true;
+  }
+}
+
 /* ── load ── */
 
 async function loadSett() {
@@ -56,8 +96,20 @@ async function loadSett() {
     state.sModels = {}; // reset working copy on each load
     const prov = $('sProv'); prov.innerHTML = '';
     if (s.providers) for (const [k, v] of Object.entries(s.providers)) { const o = document.createElement('option'); o.value = k; o.textContent = v.name; prov.appendChild(o); }
-    prov.value = s.provider || 'local'; $('sKey').value = ''; $('sKey').placeholder = s.hasKey ? '已配置 (输入覆盖)' : '输入 API Key...';
-    $('sLang').value = s.wikiLang || 'zh';
+    prov.value = s.provider || 'local'; $('sKey').value = ''; $('sKey').placeholder = s.hasKey ? t('settings.apiKeySet') : t('settings.apiKeyPH');
+    buildCustomSelect('sLangWrap', 'sLang', [
+      { value: 'zh', label: t('settings.langZh') },
+      { value: 'en', label: t('settings.langEn') },
+      { value: 'ja', label: t('settings.langJa') },
+      { value: 'ko', label: t('settings.langKo') },
+      { value: 'auto', label: t('settings.langAuto') },
+    ], s.wikiLang || 'zh');
+    buildCustomSelect('sUiLangWrap', 'sUiLang', [
+      { value: 'en', label: 'English' },
+      { value: 'ja', label: '\u65E5\u672C\u8A9E' },
+      { value: 'ko', label: '\uD55C\uAD6D\uC5B4' },
+      { value: 'zh', label: '\u4E2D\u6587' },
+    ], getLang());
     // customBaseUrl 回填：仅 custom provider 才显示该字段，其它 provider 保持值但隐藏
     const cbu = $('sCustomBaseUrl'); if (cbu) cbu.value = s.customBaseUrl || '';
     onProvChange();
@@ -93,21 +145,21 @@ function renderModelList() {
   const p = currentProvKey();
   const models = getWorkingModels(p);
   if (!models.length) {
-    tbl.innerHTML = '<div class="model-list-empty">暂无模型，点击“添加模型”新增。</div>';
+    tbl.innerHTML = '<div class=”model-list-empty”>' + h(t('settings.modelEmpty')) + '</div>';
     return;
   }
   // 表头 + 行（仅 3 列：ID / 显示名 / 删除）
   const header = `
     <div class="model-row model-row-head">
-      <div class="mr-col-head">模型 ID</div>
-      <div class="mr-col-head">显示名</div>
+      <div class="mr-col-head">${h(t('settings.modelId'))}</div>
+      <div class="mr-col-head">${h(t('settings.modelLabel'))}</div>
       <div class="mr-col-head"></div>
     </div>`;
   tbl.innerHTML = header + models.map((m, i) => `
     <div class="model-row" data-idx="${i}">
       <input class="mr-id" data-f="id" value="${h(m.id)}" placeholder="model id">
-      <input class="mr-label" data-f="label" value="${h(m.label)}" placeholder="显示名">
-      <button class="mr-delete" type="button" data-action="del" title="删除" aria-label="删除">
+      <input class="mr-label" data-f="label" value="${h(m.label)}" placeholder="${h(t('settings.modelLabel'))}">
+      <button class="mr-delete" type="button" data-action="del" title="${h(t('common.delete'))}" aria-label="${h(t('common.delete'))}">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
       </button>
     </div>
@@ -173,14 +225,14 @@ async function restoreDefaults() {
     state.sModels[p] = normalizeModels(list);
     renderModelList();
     onProvChange();
-    toast('已恢复内建默认');
+    toast(t('settings.restoredDefaults'));
   } catch (e) {
     // fallback: re-read from cache
     const pc = state.sCache && state.sCache.providers && state.sCache.providers[p];
     state.sModels[p] = normalizeModels(pc && pc.models);
     renderModelList();
     onProvChange();
-    toast('已恢复（使用缓存默认）');
+    toast(t('settings.restoredCache'));
   }
 }
 
@@ -196,7 +248,9 @@ function wireProviderSection() {
 // 核心保存逻辑；silent=true 时不 toast、不关弹窗（用于"测试连接"前静默保存）
 async function doSave({ silent = false } = {}) {
   const prov = $('sProv').value;
+  const uiLangEl = $('sUiLang'); const uiLangValue = uiLangEl ? uiLangEl.value : '';
   const body = { provider: prov, model: $('sModel').value, wikiLang: $('sLang').value };
+  if (uiLangValue) body.uiLang = uiLangValue;
   const k = $('sKey').value; if (k) body.apiKey = k;
   // customBaseUrl 始终带上（后端只在 provider=custom 时生效，保留值在其它 provider 下也 OK）
   const cbu = $('sCustomBaseUrl'); if (cbu) body.customBaseUrl = (cbu.value || '').trim();
@@ -211,44 +265,46 @@ async function doSave({ silent = false } = {}) {
   let existingBio = '';
   try { const p = await api('/api/profile'); existingBio = p.bio || ''; } catch {}
   await put('/api/profile', { nickname, bio: existingBio });
+  if (uiLangValue) { setLang(uiLangValue); if (window.render) window.render(); }
   updateSidebarTitle(nickname);
-  if (!silent) { toast('已保存'); closeSettings(); }
+  if (!silent) { toast(t('common.saved')); closeSettings(); }
 }
 
 export async function saveSett() {
   try { await doSave({ silent: false }); }
-  catch (e) { toast('保存失败：' + e.message); }
+  catch (e) { toast(t('common.saveFailed', { msg: e.message })); }
 }
 
 export async function testConn() {
   const btn = $('testConnBtn');
-  if (btn) { btn.disabled = true; btn.textContent = '测试中…'; }
+  if (btn) { btn.disabled = true; btn.textContent = t('settings.testing'); }
   try {
     await doSave({ silent: true });
     const r = await post('/api/settings/test', {});
     if (r.ok) {
-      toast('连接成功' + (r.message ? '：' + r.message : ''));
+      toast(r.message ? t('settings.connOkMsg', { msg: r.message }) : t('settings.connOk'));
     } else {
-      toast('连接失败：' + (r.message || '未知错误'));
+      toast(t('settings.connFail', { msg: r.message || 'unknown' }));
     }
   } catch (e) {
-    toast('测试失败：' + e.message);
+    toast(t('settings.testFail', { msg: e.message }));
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '测试连接'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('settings.testConn'); }
   }
 }
 
 /* ── Sidebar title with username ── */
 export function updateSidebarTitle(nickname) {
   const el = $('sidebarTitle');
-  if (el) el.textContent = nickname ? nickname + ' 的知识库' : '知识库';
-  document.title = nickname ? nickname + ' 的知识库' : '知识库';
+  const title = nickname ? t('nav.kbOf', { name: nickname }) : t('nav.kb');
+  if (el) el.textContent = title;
+  document.title = title;
 }
 
 export async function initSidebarTitle() {
   try {
     const p = await api('/api/profile');
-    if (p && p.nickname) updateSidebarTitle(p.nickname);
+    updateSidebarTitle((p && p.nickname) || '');
   } catch {}
 }
 
@@ -353,49 +409,47 @@ function renderPipeline() {
 
   host.innerHTML = `
     <div class="stage-card">
-      <div class="stage-card-head">① 标题提取</div>
+      <div class="stage-card-head">${h(t('pipeline.titleExtract'))}</div>
       <div class="stage-card-body">
-        <label class="radio-line"><input type="radio" name="pl-title" value="code"  ${s.title.source==='code'?'checked':''}> 代码</label>
-        <label class="radio-line"><input type="radio" name="pl-title" value="llm"   ${s.title.source==='llm'?'checked':''}> LLM</label>
-        <select class="field-select stage-model" data-stage="title" ${s.title.source==='llm'?'':'disabled'}>${modelOptions(s.title.model || '')}</select>
+        <span class="stage-hint">${h(t('pipeline.titleHint'))}</span>
       </div>
     </div>
     <div class="stage-card">
-      <div class="stage-card-head">② 主题归类</div>
+      <div class="stage-card-head">${h(t('pipeline.topicClassify'))}</div>
       <div class="stage-card-body">
-        <label class="radio-line"><input type="radio" name="pl-topic" value="user" ${s.topic.source==='user'?'checked':''}> 用户选择</label>
-        <label class="radio-line"><input type="radio" name="pl-topic" value="llm"  ${s.topic.source==='llm'?'checked':''}> LLM 自动</label>
+        <label class="radio-line"><input type="radio" name="pl-topic" value="user" ${s.topic.source==='user'?'checked':''}> ${h(t('pipeline.userChoice'))}</label>
+        <label class="radio-line"><input type="radio" name="pl-topic" value="llm"  ${s.topic.source==='llm'?'checked':''}> ${h(t('pipeline.llmAuto'))}</label>
         <select class="field-select stage-model" data-stage="topic" ${s.topic.source==='llm'?'':'disabled'}>${modelOptions(s.topic.model || '')}</select>
       </div>
     </div>
     <div class="stage-card">
-      <div class="stage-card-head">③ 正文编译</div>
+      <div class="stage-card-head">${h(t('pipeline.contentCompile'))}</div>
       <div class="stage-card-body">
-        <div class="stage-field"><label>模型</label><select class="field-select" id="plContentModel">${modelOptions(s.content.model || '')}</select></div>
-        <div class="stage-field"><label><input type="checkbox" id="plContentThinking" ${s.content.thinking?'checked':''}> 开启推理 (仅 thinking 模型)</label></div>
-        <div class="stage-field"><label><input type="checkbox" id="plContentStream"   ${s.content.stream?'checked':''}> 流式输出</label></div>
-        <div class="stage-field"><label>max_tokens</label><input class="field-input" type="number" id="plContentMaxTokens" value="${s.content.maxTokens||16384}" min="512" max="131072"></div>
-        <div class="stage-field"><label>重试模型</label><select class="field-select" id="plContentRetry">${modelOptions(s.content.retryModel || '')}</select></div>
+        <div class="stage-field"><label>${h(t('pipeline.model'))}</label><select class="field-select" id="plContentModel">${modelOptions(s.content.model || '')}</select></div>
+        <div class="stage-field"><label><input type="checkbox" id="plContentThinking" ${s.content.thinking?'checked':''}> ${h(t('pipeline.enableThinking'))}</label></div>
+        <div class="stage-field"><label><input type="checkbox" id="plContentStream"   ${s.content.stream?'checked':''}> ${h(t('pipeline.streaming'))}</label></div>
+        <div class="stage-field"><label>${h(t('pipeline.maxTokens'))}</label><input class="field-input" type="number" id="plContentMaxTokens" value="${s.content.maxTokens||16384}" min="512" max="131072"></div>
+        <div class="stage-field"><label>${h(t('pipeline.retryModel'))}</label><select class="field-select" id="plContentRetry">${modelOptions(s.content.retryModel || '')}</select></div>
       </div>
     </div>
     <div class="stage-card">
-      <div class="stage-card-head">④ 摘要生成</div>
+      <div class="stage-card-head">${h(t('pipeline.summaryGen'))}</div>
       <div class="stage-card-body">
-        <label class="radio-line"><input type="radio" name="pl-summary" value="llm"    ${s.summary.source==='llm'?'checked':''}> LLM 独立</label>
-        <label class="radio-line"><input type="radio" name="pl-summary" value="inline" ${s.summary.source==='inline'?'checked':''}> 合并在正文</label>
-        <label class="radio-line"><input type="radio" name="pl-summary" value="skip"   ${s.summary.source==='skip'?'checked':''}> 跳过</label>
-        <div class="stage-field"><label>模型</label><select class="field-select" id="plSummaryModel" ${s.summary.source==='llm'?'':'disabled'}>${modelOptions(s.summary.model || '')}</select></div>
-        <div class="stage-field"><label>字数上限</label><input class="field-input" type="number" id="plSummaryMax" value="${s.summary.maxLength||30}" min="10" max="200"></div>
+        <label class="radio-line"><input type="radio" name="pl-summary" value="llm"    ${s.summary.source==='llm'?'checked':''}> ${h(t('pipeline.llmIndependent'))}</label>
+        <label class="radio-line"><input type="radio" name="pl-summary" value="inline" ${s.summary.source==='inline'?'checked':''}> ${h(t('pipeline.mergeContent'))}</label>
+        <label class="radio-line"><input type="radio" name="pl-summary" value="skip"   ${s.summary.source==='skip'?'checked':''}> ${h(t('pipeline.skip'))}</label>
+        <div class="stage-field"><label>${h(t('pipeline.model'))}</label><select class="field-select" id="plSummaryModel" ${s.summary.source==='llm'?'':'disabled'}>${modelOptions(s.summary.model || '')}</select></div>
+        <div class="stage-field"><label>${h(t('pipeline.wordLimit'))}</label><input class="field-input" type="number" id="plSummaryMax" value="${s.summary.maxLength||30}" min="10" max="200"></div>
       </div>
     </div>
     <div class="stage-card">
-      <div class="stage-card-head">⑤ See Also</div>
+      <div class="stage-card-head">${h(t('pipeline.seeAlso'))}</div>
       <div class="stage-card-body">
-        <label class="radio-line"><input type="radio" name="pl-seealso" value="code_plus_llm" ${s.seealso.source==='code_plus_llm'?'checked':''}> 代码 + LLM 精选</label>
-        <label class="radio-line"><input type="radio" name="pl-seealso" value="code"          ${s.seealso.source==='code'?'checked':''}> 纯代码</label>
-        <label class="radio-line"><input type="radio" name="pl-seealso" value="skip"          ${s.seealso.source==='skip'?'checked':''}> 跳过</label>
-        <div class="stage-field"><label>候选数 (topK)</label><input class="field-input" type="number" id="plSeeK" value="${s.seealso.topK||5}" min="1" max="20"></div>
-        <div class="stage-field"><label>精选模型</label><select class="field-select" id="plSeeModel" ${s.seealso.source==='code_plus_llm'?'':'disabled'}>${modelOptions(s.seealso.model || '')}</select></div>
+        <label class="radio-line"><input type="radio" name="pl-seealso" value="code_plus_llm" ${s.seealso.source==='code_plus_llm'?'checked':''}> ${h(t('pipeline.codePlusLlm'))}</label>
+        <label class="radio-line"><input type="radio" name="pl-seealso" value="code"          ${s.seealso.source==='code'?'checked':''}> ${h(t('pipeline.codeOnly'))}</label>
+        <label class="radio-line"><input type="radio" name="pl-seealso" value="skip"          ${s.seealso.source==='skip'?'checked':''}> ${h(t('pipeline.skip'))}</label>
+        <div class="stage-field"><label>${h(t('pipeline.topK'))}</label><input class="field-input" type="number" id="plSeeK" value="${s.seealso.topK||5}" min="1" max="20"></div>
+        <div class="stage-field"><label>${h(t('pipeline.curateModel'))}</label><select class="field-select" id="plSeeModel" ${s.seealso.source==='code_plus_llm'?'':'disabled'}>${modelOptions(s.seealso.model || '')}</select></div>
       </div>
     </div>
   `;
@@ -416,12 +470,6 @@ function markCustom() {
 
 function wireStageInputs() {
   const s = state.pipeline.stages;
-  // Title
-  document.querySelectorAll('input[name="pl-title"]').forEach(r => r.addEventListener('change', e => {
-    s.title.source = e.target.value;
-    const sel = document.querySelector('.stage-model[data-stage="title"]'); if (sel) sel.disabled = s.title.source !== 'llm';
-    markCustom();
-  }));
   // Topic
   document.querySelectorAll('input[name="pl-topic"]').forEach(r => r.addEventListener('change', e => {
     s.topic.source = e.target.value;
@@ -486,9 +534,9 @@ async function savePipeline() {
   try {
     await put('/api/settings', { pipeline: state.pipeline });
     state.sCache = null;
-    toast('流水线已保存');
+    toast(t('settings.pipelineSaved'));
   } catch (e) {
-    toast('保存失败: ' + e.message);
+    toast(t('common.saveFailed', { msg: e.message }));
   }
 }
 

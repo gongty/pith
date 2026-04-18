@@ -1,4 +1,5 @@
 import { $, h, api, go, relTime, toast, jsAttr } from '../utils.js';
+import { t } from '../i18n.js';
 
 function scoreColor(score) {
   if (score >= 90) return 'var(--green)';
@@ -19,8 +20,8 @@ function severityOrder(sev) {
 }
 
 function fmtWords(n) {
-  if (n >= 10000) return (n / 10000).toFixed(1) + ' 万';
-  return n.toLocaleString();
+  if (n >= 10000) return t('unit.wordsTenK', { n: (n / 10000).toFixed(1) });
+  return t('unit.words', { n: n.toLocaleString() });
 }
 
 function scoreBar(label, value) {
@@ -32,7 +33,7 @@ function scoreBar(label, value) {
 }
 
 export async function rHealth(c) {
-  c.innerHTML = '<div class="page-health"><div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载中...</div></div>';
+  c.innerHTML = '<div class="page-health"><div style="text-align:center;padding:60px;color:var(--fg-tertiary)">' + t('common.loading') + '</div></div>';
 
   try {
     const [data, listRes] = await Promise.all([
@@ -49,37 +50,37 @@ export async function rHealth(c) {
 
     // Header
     s += '<div class="health-header">';
-    s += '<h1 class="health-title">知识库健康报告</h1>';
-    s += '<div style="display:flex;align-items:center;gap:12px"><span class="health-time">最后检查: ' + (data.timestamp ? relTime(data.timestamp) : '未知') + '</span>';
-    s += '<button class="btn-outline" style="font-size:12px;padding:4px 12px" onclick="runLintNow()">立即检查</button></div>';
+    s += '<h1 class="health-title">' + t('health.title') + '</h1>';
+    s += '<div style="display:flex;align-items:center;gap:12px"><span class="health-time">' + t('health.lastCheck', { time: data.timestamp ? relTime(data.timestamp) : t('time.unknown') }) + '</span>';
+    s += '<button class="btn-outline" style="font-size:12px;padding:4px 12px" onclick="runLintNow()">' + t('health.runNow') + '</button></div>';
     s += '</div>';
 
     // Score + dimensions
     s += '<div class="health-score-section">';
     s += '<div class="health-dims">';
-    s += scoreBar('完整性', bd.completeness || 0);
-    s += scoreBar('新鲜度', bd.freshness || 0);
-    s += scoreBar('连通性', bd.connectivity || 0);
-    s += scoreBar('一致性', bd.consistency || 0);
+    s += scoreBar(t('health.completeness'), bd.completeness || 0);
+    s += scoreBar(t('health.freshness'), bd.freshness || 0);
+    s += scoreBar(t('health.connectivity'), bd.connectivity || 0);
+    s += scoreBar(t('health.consistency'), bd.consistency || 0);
     s += '</div>';
     s += '<div class="health-total">';
     s += '<div class="health-total-val" style="color:' + scoreColor(data.score || 0) + '">' + (data.score || 0) + '</div>';
-    s += '<div class="health-total-label">总分</div>';
+    s += '<div class="health-total-label">' + t('health.totalScore') + '</div>';
     s += '</div>';
     s += '</div>';
 
     // Stats overview
     s += '<div class="health-stats">';
-    s += '<div class="health-stat-item"><span class="health-stat-icon">&#128196;</span><span class="health-stat-num">' + (sm.totalArticles || 0) + '</span> 篇文章</div>';
-    s += '<div class="health-stat-item"><span class="health-stat-icon">&#128230;</span><span class="health-stat-num">' + (sm.totalRaw || 0) + '</span> 个源</div>';
-    s += '<div class="health-stat-item"><span class="health-stat-icon">&#128221;</span><span class="health-stat-num">' + fmtWords(sm.totalWords || 0) + '</span> 字</div>';
-    s += '<div class="health-stat-item"><span class="health-stat-icon">&#128279;</span><span class="health-stat-num">' + (sm.totalConnections || 0) + '</span> 条链接</div>';
+    s += '<div class="health-stat-item"><span class="health-stat-icon">&#128196;</span>' + t('unit.articles', { n: sm.totalArticles || 0 }) + '</div>';
+    s += '<div class="health-stat-item"><span class="health-stat-icon">&#128230;</span>' + t('unit.sources', { n: sm.totalRaw || 0 }) + '</div>';
+    s += '<div class="health-stat-item"><span class="health-stat-icon">&#128221;</span>' + fmtWords(sm.totalWords || 0) + '</div>';
+    s += '<div class="health-stat-item"><span class="health-stat-icon">&#128279;</span>' + t('unit.links', { n: sm.totalConnections || 0 }) + '</div>';
     s += '</div>';
 
     // Issues
-    s += '<div class="health-section-head">问题列表 (' + issues.length + ')</div>';
+    s += '<div class="health-section-head">' + t('health.issueList', { n: issues.length }) + '</div>';
     if (issues.length === 0) {
-      s += '<div class="health-empty">没有发现问题，知识库状态良好</div>';
+      s += '<div class="health-empty">' + t('health.noIssues') + '</div>';
     } else {
       s += '<div class="health-issues">';
       for (const issue of issues) {
@@ -88,11 +89,11 @@ export async function rHealth(c) {
         const cursor = clickPath ? ' style="cursor:pointer"' : '';
 
         let desc = '';
-        if (issue.type === 'broken_link') desc = '断开链接: ' + h(issue.path) + ' → ' + h(issue.message.replace('链接目标不存在: ', ''));
-        else if (issue.type === 'missing_index') desc = '索引缺失: ' + h(issue.path);
-        else if (issue.type === 'orphan') desc = '无入站链接: ' + h(issue.path);
-        else if (issue.type === 'stale') desc = '超过 30 天未更新: ' + h(issue.path);
-        else if (issue.type === 'mergeable') desc = '建议合并: ' + h((issue.paths || []).join(' + ')) + ' (' + h(issue.message) + ')';
+        if (issue.type === 'broken_link') desc = t('health.brokenLink', { path: h(issue.path), target: h(issue.message.replace(/^[^:]+:\s*/, '')) });
+        else if (issue.type === 'missing_index') desc = t('health.missingIndex', { path: h(issue.path) });
+        else if (issue.type === 'orphan') desc = t('health.orphan', { path: h(issue.path) });
+        else if (issue.type === 'stale') desc = t('health.stale', { path: h(issue.path) });
+        else if (issue.type === 'mergeable') desc = t('health.mergeable', { paths: h((issue.paths || []).join(' + ')), msg: h(issue.message) });
         else desc = h(issue.message || issue.type);
 
         s += '<div class="health-issue"' + clickable + cursor + '>' + severityIcon(issue.severity) + '<span class="health-issue-text">' + desc + '</span></div>';
@@ -101,9 +102,9 @@ export async function rHealth(c) {
     }
 
     // History
-    s += '<div class="health-section-head">历史记录</div>';
+    s += '<div class="health-section-head">' + t('health.history') + '</div>';
     if (files.length === 0) {
-      s += '<div class="health-empty">暂无历史报告</div>';
+      s += '<div class="health-empty">' + t('health.noHistory') + '</div>';
     } else {
       s += '<div class="health-history">';
       const historyFiles = files.slice(0, 10);
@@ -128,30 +129,30 @@ export async function rHealth(c) {
         const issueCount = (rpt.issues || []).length;
         const loading = item.querySelector('.health-history-loading');
         if (loading) {
-          loading.outerHTML = '<span class="health-history-score" style="color:' + scoreColor(rpt.score || 0) + '">' + (rpt.score || 0) + ' 分</span>' +
-            '<span class="health-history-issues">' + issueCount + ' 个问题</span>';
+          loading.outerHTML = '<span class="health-history-score" style="color:' + scoreColor(rpt.score || 0) + '">' + t('unit.pts', { n: rpt.score || 0 }) + '</span>' +
+            '<span class="health-history-issues">' + t('unit.issues', { n: issueCount }) + '</span>';
         }
       }).catch(() => {});
     });
     await Promise.all(historyPromises);
 
   } catch (e) {
-    c.innerHTML = '<div class="page-health"><div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败: ' + h(e.message) + '</div></div>';
+    c.innerHTML = '<div class="page-health"><div style="text-align:center;padding:60px;color:var(--fg-tertiary)">' + t('common.loadFailedMsg', { msg: h(e.message) }) + '</div></div>';
   }
 }
 
 // 手动触发检查并刷新页面
 window.runLintNow = async function () {
   const btn = document.querySelector('.health-header .btn-outline');
-  if (btn) { btn.disabled = true; btn.textContent = '检查中...'; }
-  toast('正在检查...');
+  if (btn) { btn.disabled = true; btn.textContent = t('health.running'); }
+  toast(t('health.running'));
   try {
     await api('/api/wiki/lint');
-    toast('检查完成');
+    toast(t('health.checkDone'));
     const c = $('content');
     if (c) await rHealth(c);
   } catch (e) {
-    toast('检查失败: ' + e.message);
-    if (btn) { btn.disabled = false; btn.textContent = '立即检查'; }
+    toast(t('health.checkFailed', { msg: e.message }));
+    if (btn) { btn.disabled = false; btn.textContent = t('health.runNow'); }
   }
 };

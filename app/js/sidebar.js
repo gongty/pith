@@ -1,4 +1,5 @@
 import { $, h, api, jsAttr, isUnread, initReadState } from './utils.js';
+import { t } from './i18n.js';
 import state from './state.js';
 
 export function toggleSidebar() {
@@ -45,16 +46,16 @@ function dateBucketKey(ms) {
 }
 
 function dateBucketLabel(key) {
-  if (key === 'unknown') return '未知时间';
+  if (key === 'unknown') return t('time.unknown');
   const [y, m, day] = key.split('-').map(Number);
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const target = new Date(y, m - 1, day);
   const diffDays = Math.round((today - target) / 86400000);
-  if (diffDays === 0) return '今天';
-  if (diffDays === 1) return '昨天';
-  if (diffDays > 1 && diffDays < 7) return diffDays + ' 天前';
-  if (y === today.getFullYear()) return m + '月' + day + '日';
-  return y + '年' + m + '月' + day + '日';
+  if (diffDays === 0) return t('time.today');
+  if (diffDays === 1) return t('time.yesterday');
+  if (diffDays > 1 && diffDays < 7) return t('time.daysAgo', {n: diffDays});
+  if (y === today.getFullYear()) return t('time.dateMD', {m, d: day});
+  return t('time.dateYMD', {y, m, d: day});
 }
 
 export async function updSidebarPages() {
@@ -79,7 +80,7 @@ export async function updSidebarPages() {
       const folded = state.foldedDates.has(b.key) ? ' folded' : '';
       s += '<div class="sidebar-date-head' + folded + '" onclick="toggleDateFold(this,\'' + h(b.key) + '\')">'
         + '<span class="sidebar-date-label">' + h(dateBucketLabel(b.key)) + '</span>'
-        + '<span class="sidebar-date-count">' + b.items.length + ' 篇</span>'
+        + '<span class="sidebar-date-count">' + t('unit.articles', {n: b.items.length}) + '</span>'
         + '<span class="sidebar-date-arr"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>'
         + '</div>';
       b.items.forEach(c => {
@@ -90,7 +91,7 @@ export async function updSidebarPages() {
         s += '<div class="sidebar-page' + active + unread + '" data-date="' + h(b.key) + '" data-path="' + h(c.path) + '"' + hidden + ' onclick="go(\'#/article/' + jsAttr(c.path) + '\')" title="' + h(titleText) + '">'
           + (unread ? '<span class="unread-dot"></span>' : '')
           + '<span class="page-title">' + h(titleText) + '</span>'
-          + '<button class="sidebar-page-del" onclick="event.stopPropagation();requestDelArticle(\'' + jsAttr(c.path) + '\',\'' + jsAttr(titleText) + '\')" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>'
+          + '<button class="sidebar-page-del" onclick="event.stopPropagation();requestDelArticle(\'' + jsAttr(c.path) + '\',\'' + jsAttr(titleText) + '\')" title="' + h(t('common.delete')) + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>'
           + '</div>';
       });
     });
@@ -117,7 +118,7 @@ export function initSidebarPreview() {
       const title = page.getAttribute('title') || '';
       const preview = $('sidebarPreview');
       $('spTitle').textContent = title;
-      $('spSummary').textContent = '加载中...';
+      $('spSummary').textContent = t('common.loading');
       $('spTime').textContent = '';
       const rect = page.getBoundingClientRect();
       preview.style.top = Math.min(rect.top, window.innerHeight - 160) + 'px';
@@ -161,7 +162,7 @@ export async function updSidebarChats() {
     items.forEach(c => {
       const active = (state.cv === 'chat' && state.convId === c.id) ? ' active' : '';
       s += '<div class="sidebar-chat-item' + active + '" onclick="go(\'#/chat/' + jsAttr(c.id) + '\')" title="' + h(c.title) + '"><span class="chat-title">' + h(c.title) + '</span>'
-        + '<button class="sidebar-chat-archive" onclick="event.stopPropagation();archiveChat(\'' + jsAttr(c.id) + '\')" title="归档"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg></button>'
+        + '<button class="sidebar-chat-archive" onclick="event.stopPropagation();archiveChat(\'' + jsAttr(c.id) + '\')" title="' + h(t('chat.archived')) + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg></button>'
         + '</div>';
     });
     sc.innerHTML = s;

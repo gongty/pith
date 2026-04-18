@@ -1,4 +1,5 @@
 /* Utility functions */
+import { t } from './i18n.js';
 
 export const $ = id => document.getElementById(id);
 export const h = s => s ? String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') : '';
@@ -27,19 +28,19 @@ export const jsAttr = s => String(s || '')
 export function relTime(d) {
   if (!d) return '';
   const now = new Date(), then = new Date(d), diff = Math.floor((now - then) / 1000);
-  if (diff < 60) return '刚刚';
-  if (diff < 3600) return Math.floor(diff / 60) + '分钟前';
-  if (diff < 86400) return Math.floor(diff / 3600) + '小时前';
-  if (diff < 604800) return Math.floor(diff / 86400) + '天前';
+  if (diff < 60) return t('time.justNow');
+  if (diff < 3600) return t('time.minAgo', {n: Math.floor(diff / 60)});
+  if (diff < 86400) return t('time.hrAgo', {n: Math.floor(diff / 3600)});
+  if (diff < 604800) return t('time.dayAgo', {n: Math.floor(diff / 86400)});
   return d.slice(5);
 }
 
-export const placeholders = ['输入问题...', '问问知识库的内容', '有什么想了解的？', '试试「总结最近的文章」'];
 let phIdx = 0;
 export function rotatePH(id) {
   const el = $(id);
   if (!el || el.value) return;
-  el.placeholder = placeholders[phIdx % placeholders.length];
+  const phs = [t('ph.ask1'), t('ph.ask2'), t('ph.ask3'), t('ph.ask4')];
+  el.placeholder = phs[phIdx % phs.length];
   phIdx++;
 }
 
@@ -74,11 +75,11 @@ export async function apiDel(p) { return api(p, { method: 'DELETE' }); }
 
 let undoTimer = null;
 export function toast(m, undoFn) {
-  const t = $('toast');
-  t.innerHTML = h(m) + (undoFn ? '<span class="toast-undo" id="toastUndo">撤销</span>' : '');
-  t.classList.add('show');
-  if (undoFn) { const btn = $('toastUndo'); if (btn) btn.onclick = () => { undoFn(); t.classList.remove('show'); }; }
-  clearTimeout(undoTimer); undoTimer = setTimeout(() => t.classList.remove('show'), undoFn ? 6000 : 2500);
+  const te = $('toast');
+  te.innerHTML = h(m) + (undoFn ? '<span class="toast-undo" id="toastUndo">' + t('common.undo') + '</span>' : '');
+  te.classList.add('show');
+  if (undoFn) { const btn = $('toastUndo'); if (btn) btn.onclick = () => { undoFn(); te.classList.remove('show'); }; }
+  clearTimeout(undoTimer); undoTimer = setTimeout(() => te.classList.remove('show'), undoFn ? 6000 : 2500);
 }
 
 export function go(hash) { location.hash = hash; }

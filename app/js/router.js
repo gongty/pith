@@ -1,4 +1,5 @@
 import { $, h, go } from './utils.js';
+import { t } from './i18n.js';
 import state from './state.js';
 import { updSidebarPages, updSidebarChats, switchSidebarTab } from './sidebar.js';
 import { hideFormatToolbar, closeSlashMenu, deselectImg, hideArticleQA } from './pages/article.js';
@@ -55,23 +56,23 @@ function updNav(v) {
 function updBC(r) {
   const bc = $('breadcrumb');
   if (r.v === 'dashboard') bc.innerHTML = '';
-  else if (r.v === 'chat') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>对话';
-  else if (r.v === 'graph') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>知识图谱';
-  else if (r.v === 'health') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>健康报告';
+  else if (r.v === 'chat') bc.innerHTML = '<a href="#/">' + h(t('bc.kb')) + '</a><span class="sep">/</span>' + h(t('bc.chat'));
+  else if (r.v === 'graph') bc.innerHTML = '<a href="#/">' + h(t('bc.kb')) + '</a><span class="sep">/</span>' + h(t('bc.graph'));
+  else if (r.v === 'health') bc.innerHTML = '<a href="#/">' + h(t('bc.kb')) + '</a><span class="sep">/</span>' + h(t('bc.health'));
   else if (r.v === 'browse') bc.innerHTML = r.tag
-    ? '<a href="#/">知识库</a><span class="sep">/</span><a href="#/browse">全部文章</a><span class="sep">/</span>标签 · ' + h(r.tag)
-    : '<a href="#/">知识库</a><span class="sep">/</span>全部文章';
-  else if (r.v === 'autotask') bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span>自动任务';
+    ? '<a href="#/">' + h(t('bc.kb')) + '</a><span class="sep">/</span><a href="#/browse">' + h(t('bc.browse')) + '</a><span class="sep">/</span>' + h(t('bc.tag')) + ' · ' + h(r.tag)
+    : '<a href="#/">' + h(t('bc.kb')) + '</a><span class="sep">/</span>' + h(t('bc.browse'));
+  else if (r.v === 'autotask') bc.innerHTML = '<a href="#/">' + h(t('bc.kb')) + '</a><span class="sep">/</span>' + h(t('bc.autotask'));
   else if (r.v === 'raw' && r.p) {
     const pts = r.p.split('/'); const f = pts[pts.length - 1];
     const ft = f.length > 30 ? f.slice(0, 30) + '…' : f;
-    bc.innerHTML = '<a href="#/">知识库</a><span class="sep">/</span><a href="#/browse">全部文章</a><span class="sep">/</span>原文 · ' + h(ft);
+    bc.innerHTML = '<a href="#/">' + h(t('bc.kb')) + '</a><span class="sep">/</span><a href="#/browse">' + h(t('bc.browse')) + '</a><span class="sep">/</span>' + h(t('bc.raw')) + ' · ' + h(ft);
   }
   else if (r.v === 'article' && r.p) {
     const pts = r.p.split('/'), topic = pts.length > 1 ? pts[0] : '', f = pts[pts.length - 1].replace('.md', '');
     const topicColors = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
     const tci = topic ? Math.abs([...topic].reduce((a, c) => a + c.charCodeAt(0), 0)) % topicColors.length : 0;
-    let s = '<a href="#/">知识库</a>';
+    let s = '<a href="#/">' + h(t('bc.kb')) + '</a>';
     if (topic) s += '<span class="sep">/</span><span class="topic-dot" style="background:' + topicColors[tci] + '"></span><a href="#/browse">' + h(topic) + '</a>';
     const ft = f.length > 40 ? f.slice(0, 40) + '…' : f;
     s += '<span class="sep">/</span>' + h(ft); bc.innerHTML = s;

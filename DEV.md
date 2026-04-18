@@ -4,7 +4,7 @@
 
 ## What This Is
 
-Personal knowledge base app — AI-assisted wiki with chat, knowledge graph, content ingestion, and automated task scheduling. Chinese UI. Zero external dependencies on frontend.
+Personal knowledge base app — AI-assisted wiki with chat, knowledge graph, content ingestion, and automated task scheduling. Multilingual UI (English / Chinese / Japanese / Korean). Zero external dependencies on frontend.
 
 ## Running
 
@@ -50,10 +50,11 @@ Vanilla JS with ES modules (`<script type="module">`). No framework, no bundler.
 **Module dependency graph** (entry: `js/app.js`):
 ```
 app.js -> router.js -> pages/{dashboard,chat,article,graph,browse,autotask,health,raw}.js
-       -> sidebar.js, composer.js, search.js, settings.js, ingest.js, ingest-queue.js, memory.js
+       -> sidebar.js, composer.js, search.js, settings.js (-> memory.js), ingest.js, ingest-queue.js
        -> state.js (shared mutable state), utils.js (DOM/$, API, toast)
-       -> theme.js, markdown.js
+       -> theme.js
 ```
+`markdown.js` is not directly imported by app.js; page modules (article/chat/dashboard etc.) import it themselves.
 
 **Routing:** Hash-based. `#/` dashboard, `#/chat/:id` chat, `#/article/:path` article, `#/graph` graph, `#/browse` browse (supports `?tag=xxx` filter), `#/autotask` automated tasks. Router in `js/router.js`.
 
@@ -98,6 +99,7 @@ data/uploads/       -> Uploaded files
 - **`dedupe-wiki.js`** — 按原文聚合找重复；`--shells` 模式扫编译失败占位。
 - **`clean-seealso.js`** — 扫文章 body 里的 markdown 链接，修复死链。
 - **`rename-dirty-wiki.js`** — 把脏字符文件名重命名为 slug 化版本。
+- **`seed-concepts.js`** — 聚合文章 tags，按 normalize key 分组选 canonical + 注册 alias，写入 `data/concepts.json`。
 - **`bench.js`** — 向量 vs 关键词检索 A/B 测试。
 
 ## Key Patterns
@@ -117,8 +119,8 @@ data/uploads/       -> Uploaded files
 
 ## Conventions
 
-- UI language: Chinese
-- Wiki articles written in Chinese; raw materials preserve original language
+- **UI language**: Multilingual — English (en), Chinese (zh), Japanese (ja), Korean (ko). Default: English. All user-facing strings go through `t(key, params)` from `i18n.js`; static HTML uses `data-i18n` / `data-i18n-title` / `data-i18n-ph` attributes. Adding a new i18n key requires entries in all 4 language blocks in `i18n.js`.
+- Wiki articles written in Chinese (configurable via `wikiLang` setting); raw materials preserve original language
 - Design tokens use CSS custom properties — change colors/radius in `base.css :root`
 - Dark mode: `[data-theme="dark"]` overrides in each CSS file
 

@@ -223,6 +223,35 @@
   background-image:url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23ffffff' stroke-width='1.5' stroke-linecap='round' opacity='0.5'/%3E%3C/svg%3E");
 }
 .field-select:focus{border-color:var(--fg-tertiary);outline:none}
+
+/* ── Custom select (replaces native <select> dropdown) ── */
+.custom-select{position:relative;width:100%}
+.custom-select-trigger{
+  width:100%;padding:8px 12px;font-size:14px;
+  border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--bg) url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2337352F' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 12px center;
+  cursor:pointer;transition:border-color var(--t);
+  color:var(--fg);user-select:none;
+}
+[data-theme="dark"] .custom-select-trigger{
+  background-image:url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23ffffff' stroke-width='1.5' stroke-linecap='round' opacity='0.5'/%3E%3C/svg%3E");
+}
+.custom-select.open .custom-select-trigger{border-color:var(--fg-tertiary)}
+.custom-select-list{
+  display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;
+  background:var(--bg);border-radius:var(--radius-lg);
+  box-shadow:0 0 0 1px var(--border),0 8px 30px rgba(0,0,0,0.08);
+  z-index:60;padding:4px;max-height:220px;overflow-y:auto;
+}
+[data-theme="dark"] .custom-select-list{box-shadow:0 0 0 1px var(--border),0 8px 30px rgba(0,0,0,0.3)}
+.custom-select.open .custom-select-list{display:block}
+.custom-select-opt{
+  padding:7px 10px;border-radius:6px;font-size:14px;
+  color:var(--fg-secondary);cursor:pointer;transition:background var(--t);
+}
+.custom-select-opt:hover{background:var(--bg-hover);color:var(--fg)}
+.custom-select-opt.active{color:var(--accent);font-weight:500}
+
 .btn-fill{
   padding:10px 16px;border-radius:8px;background:var(--accent);
   color:#fff;font-size:14px;font-weight:600;width:100%;
@@ -426,3 +455,4 @@
 .stage-card-body .stage-model{padding:4px 8px;font-size:12px;min-width:160px}
 .stage-card-body .stage-model:disabled{opacity:0.4}
 .stage-readonly-note{font-size:12px;color:var(--fg-tertiary);font-style:italic}
+.stage-hint{font-size:12px;color:var(--fg-tertiary)}

@@ -1,34 +1,37 @@
 import { $, h, api, toast, go } from './utils.js';
+import { t } from './i18n.js';
 import state from './state.js';
 import { updSidebarPages } from './sidebar.js';
+import { openIngestQueue } from './ingest-queue.js';
 
 // ── 文件类型检测 ──
 
 const FILE_TYPE_MAP = {
-  pdf:  { type: 'pdf',   icon: '\u{1F4C4}', label: 'PDF' },
-  png:  { type: 'image', icon: '\u{1F5BC}', label: '\u56FE\u7247' },
-  jpg:  { type: 'image', icon: '\u{1F5BC}', label: '\u56FE\u7247' },
-  jpeg: { type: 'image', icon: '\u{1F5BC}', label: '\u56FE\u7247' },
-  webp: { type: 'image', icon: '\u{1F5BC}', label: '\u56FE\u7247' },
-  gif:  { type: 'image', icon: '\u{1F5BC}', label: '\u56FE\u7247' },
-  mp3:  { type: 'audio', icon: '\u{1F3B5}', label: '\u97F3\u9891' },
-  wav:  { type: 'audio', icon: '\u{1F3B5}', label: '\u97F3\u9891' },
-  m4a:  { type: 'audio', icon: '\u{1F3B5}', label: '\u97F3\u9891' },
-  ogg:  { type: 'audio', icon: '\u{1F3B5}', label: '\u97F3\u9891' },
-  mp4:  { type: 'video', icon: '\u{1F3AC}', label: '\u89C6\u9891' },
-  webm: { type: 'video', icon: '\u{1F3AC}', label: '\u89C6\u9891' },
-  txt:  { type: 'text',  icon: '\u{1F4DD}', label: '\u6587\u672C' },
-  md:   { type: 'text',  icon: '\u{1F4DD}', label: '\u6587\u672C' },
-  html: { type: 'text',  icon: '\u{1F4DD}', label: '\u6587\u672C' },
-  json: { type: 'text',  icon: '\u{1F4DD}', label: '\u6587\u672C' },
-  csv:  { type: 'text',  icon: '\u{1F4DD}', label: '\u6587\u672C' },
-  xml:  { type: 'text',  icon: '\u{1F4DD}', label: '\u6587\u672C' },
-  zip:  { type: 'zip',   icon: '\u{1F4E6}', label: 'ZIP' },
+  pdf:  { type: 'pdf',   icon: '\u{1F4C4}', labelKey: null },
+  png:  { type: 'image', icon: '\u{1F5BC}', labelKey: 'file.image' },
+  jpg:  { type: 'image', icon: '\u{1F5BC}', labelKey: 'file.image' },
+  jpeg: { type: 'image', icon: '\u{1F5BC}', labelKey: 'file.image' },
+  webp: { type: 'image', icon: '\u{1F5BC}', labelKey: 'file.image' },
+  gif:  { type: 'image', icon: '\u{1F5BC}', labelKey: 'file.image' },
+  mp3:  { type: 'audio', icon: '\u{1F3B5}', labelKey: 'file.audio' },
+  wav:  { type: 'audio', icon: '\u{1F3B5}', labelKey: 'file.audio' },
+  m4a:  { type: 'audio', icon: '\u{1F3B5}', labelKey: 'file.audio' },
+  ogg:  { type: 'audio', icon: '\u{1F3B5}', labelKey: 'file.audio' },
+  mp4:  { type: 'video', icon: '\u{1F3AC}', labelKey: 'file.video' },
+  webm: { type: 'video', icon: '\u{1F3AC}', labelKey: 'file.video' },
+  txt:  { type: 'text',  icon: '\u{1F4DD}', labelKey: 'file.text' },
+  md:   { type: 'text',  icon: '\u{1F4DD}', labelKey: 'file.text' },
+  html: { type: 'text',  icon: '\u{1F4DD}', labelKey: 'file.text' },
+  json: { type: 'text',  icon: '\u{1F4DD}', labelKey: 'file.text' },
+  csv:  { type: 'text',  icon: '\u{1F4DD}', labelKey: 'file.text' },
+  xml:  { type: 'text',  icon: '\u{1F4DD}', labelKey: 'file.text' },
+  zip:  { type: 'zip',   icon: '\u{1F4E6}', labelKey: null },
 };
 
 function detectFileType(filename) {
   const ext = (filename || '').split('.').pop().toLowerCase();
-  return FILE_TYPE_MAP[ext] || { type: 'text', icon: '\u{1F4DD}', label: '\u6587\u672C' };
+  const entry = FILE_TYPE_MAP[ext] || { type: 'text', icon: '\u{1F4DD}', labelKey: 'file.text' };
+  return { ...entry, label: entry.labelKey ? t(entry.labelKey) : (ext === 'pdf' ? 'PDF' : 'ZIP') };
 }
 
 function isBinaryType(type) {
@@ -63,7 +66,7 @@ function isUrl(s) { return /^https?:\/\/.{3,}/.test(s.trim()); }
 function addIngestUrl(url) {
   url = url.trim();
   if (!url || !isUrl(url)) return false;
-  if (_ingestUrls.length >= MAX_URLS) { toast('最多 ' + MAX_URLS + ' 个链接'); return false; }
+  if (_ingestUrls.length >= MAX_URLS) { toast(t('ingest.maxUrls', {n: MAX_URLS})); return false; }
   if (_ingestUrls.includes(url)) return false;
   _ingestUrls.push(url);
   renderUrlChips();
@@ -80,9 +83,9 @@ function renderUrlChips() {
   const ta = $('ingestContent');
   if (!_ingestUrls.length) {
     wrap.style.display = 'none';
-    ta.placeholder = '粘贴文本、拖入文件、或输入 https:// 链接...';
+    ta.placeholder = t('ingest.placeholder');
     ta.style.minHeight = '200px';
-    $('ingestBtn').textContent = '开始编译';
+    $('ingestBtn').textContent = t('ingest.compile');
     return;
   }
   wrap.style.display = 'flex';
@@ -90,9 +93,9 @@ function renderUrlChips() {
     const short = u.replace(/^https?:\/\//, '').slice(0, 45) + (u.length > 55 ? '...' : '');
     return '<div class="url-chip"><span class="url-chip-icon">🔗</span><span class="url-chip-text" title="' + h(u) + '">' + h(short) + '</span><button class="url-chip-del" onclick="removeIngestUrl(' + i + ')">×</button></div>';
   }).join('');
-  ta.placeholder = _ingestUrls.length < MAX_URLS ? '继续粘贴链接，或输入补充说明...' : '已达上限 ' + MAX_URLS + ' 个链接';
+  ta.placeholder = _ingestUrls.length < MAX_URLS ? t('ingest.moreUrls') : t('ingest.urlLimit', {n: MAX_URLS});
   ta.style.minHeight = '60px';
-  $('ingestBtn').textContent = _ingestUrls.length > 1 ? '开始编译 (' + _ingestUrls.length + ' 个链接)' : '开始编译';
+  $('ingestBtn').textContent = _ingestUrls.length > 1 ? t('ingest.compileN', {n: _ingestUrls.length}) : t('ingest.compile');
 }
 
 function initIngestUrlDetect() {
@@ -137,13 +140,13 @@ function resetIngestUI() {
   _ingestUrls = [];
   $('ingestContent').value = '';
   $('ingestBtn').disabled = false;
-  $('ingestBtn').textContent = '开始编译';
+  $('ingestBtn').textContent = t('ingest.compile');
   $('ingestBatchPreview').style.display = 'none';
   $('ingestBatchList').innerHTML = '';
   $('ingestFileName').textContent = '';
   $('ingestUrlChips').innerHTML = '';
   $('ingestUrlChips').style.display = 'none';
-  $('ingestContent').placeholder = '粘贴文本、拖入文件、或输入 https:// 链接...';
+  $('ingestContent').placeholder = t('ingest.placeholder');
   $('ingestFile').value = '';
 }
 
@@ -193,12 +196,12 @@ async function handleBinaryFile(f) {
   const ft = detectFileType(f.name);
   $('ingestFileName').textContent = ft.icon + ' ' + f.name;
   $('ingestContent').value = '';
-  $('ingestContent').placeholder = ft.icon + ' ' + ft.label + ' \u6587\u4EF6\u5DF2\u9009\u62E9\uFF0C\u70B9\u51FB\u201C\u5F00\u59CB\u7F16\u8BD1\u201D\u5904\u7406...';
+  $('ingestContent').placeholder = ft.icon + ' ' + t('ingest.binarySelected', {label: ft.label});
   try {
     const b64 = await readFileAsBase64(f);
     state.pendingBinaryFile = { type: ft.type, content: b64, filename: f.name };
   } catch (e) {
-    toast('\u6587\u4EF6\u8BFB\u53D6\u5931\u8D25: ' + e.message);
+    toast(t('ingest.readFailed', {msg: e.message}));
     $('ingestFileName').textContent = '';
   }
 }
@@ -208,7 +211,7 @@ async function handleMultipleFiles(fileList) {
   state.pendingBinaryFile = null;
   let loaded = 0;
   const total = fileList.length;
-  $('ingestFileName').textContent = total + ' \u4E2A\u6587\u4EF6\u5DF2\u9009\u62E9';
+  $('ingestFileName').textContent = t('ingest.filesSelected', {n: total});
   $('ingestContent').value = '';
   for (let i = 0; i < total; i++) {
     const f = fileList[i];
@@ -231,7 +234,7 @@ async function handleMultipleFiles(fileList) {
 }
 
 async function handleZipFile(f) {
-  $('ingestFileName').textContent = f.name + ' (\u89E3\u538B\u4E2D...)';
+  $('ingestFileName').textContent = f.name + ' ' + t('ingest.extracting');
   $('ingestBtn').disabled = true;
   const reader = new FileReader();
   reader.onload = async () => {
@@ -239,12 +242,12 @@ async function handleZipFile(f) {
       const base64 = reader.result.split(',')[1];
       const resp = await fetch('/api/ingest/extract-zip', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: base64 }) });
       const result = await resp.json();
-      if (!resp.ok) throw new Error(result.error || '\u89E3\u538B\u5931\u8D25');
+      if (!resp.ok) throw new Error(result.error || t('ingest.zipFailed', {msg: ''}));
       state.batchFiles = result.files.map(f => ({ ...f, checked: true, fileType: 'text', isBinary: false }));
-      $('ingestFileName').textContent = f.name + ' (' + state.batchFiles.length + ' \u4E2A\u6587\u4EF6)';
+      $('ingestFileName').textContent = f.name + ' ' + t('ingest.zipFiles', {n: state.batchFiles.length});
       showBatchPreview();
     } catch (e) {
-      toast('ZIP \u89E3\u538B\u5931\u8D25: ' + e.message);
+      toast(t('ingest.zipFailed', {msg: e.message}));
       $('ingestFileName').textContent = '';
     }
     $('ingestBtn').disabled = false;
@@ -255,7 +258,7 @@ async function handleZipFile(f) {
 function showBatchPreview() {
   const preview = $('ingestBatchPreview'); const list = $('ingestBatchList'); const summary = $('ingestBatchSummary');
   preview.style.display = 'block';
-  summary.textContent = '\u5171 ' + state.batchFiles.length + ' \u4E2A\u6587\u4EF6';
+  summary.textContent = t('ingest.totalFiles', {n: state.batchFiles.length});
   list.innerHTML = state.batchFiles.map((f, i) => {
     const ft = detectFileType(f.name);
     const typeTag = f.isBinary ? '<span class="batch-type-tag type-' + ft.type + '">' + ft.icon + ' ' + ft.label + '</span>' : '';
@@ -274,12 +277,12 @@ export function batchToggleAll(v) {
 
 function updateBatchSummary() {
   const checked = state.batchFiles.filter(f => f.checked).length;
-  $('ingestBatchSummary').textContent = '\u5DF2\u9009 ' + checked + ' / ' + state.batchFiles.length + ' \u4E2A\u6587\u4EF6';
-  $('ingestBtn').textContent = '\u5F00\u59CB\u7F16\u8BD1' + (checked > 1 ? ' (' + checked + ' \u4E2A\u6587\u4EF6)' : '');
+  $('ingestBatchSummary').textContent = t('ingest.selectedFiles', {n: checked, total: state.batchFiles.length});
+  $('ingestBtn').textContent = checked > 1 ? t('ingest.compileFiles', {n: checked}) : t('ingest.compile');
 }
 
 async function loadTopics() {
-  try { const tree = state.td || await api('/api/wiki/tree'); state.td = tree; const s = $('ingestTopic'); const v = s.value; s.innerHTML = '<option value="auto">\u81EA\u52A8\u5206\u7C7B</option>'; if (tree) tree.forEach(t => { const o = document.createElement('option'); o.value = t.name; o.textContent = t.name; s.appendChild(o); }); if (v) s.value = v; } catch {}
+  try { const tree = state.td || await api('/api/wiki/tree'); state.td = tree; const s = $('ingestTopic'); const v = s.value; s.innerHTML = '<option value="auto">' + h(t('ingest.autoClassify')) + '</option>'; if (tree) tree.forEach(tp => { const o = document.createElement('option'); o.value = tp.name; o.textContent = tp.name; s.appendChild(o); }); if (v) s.value = v; } catch {}
 }
 
 async function loadModels2(id) {
@@ -314,7 +317,7 @@ export async function submitIngest() {
     const settings = state.sCache || await api('/api/settings');
     state.sCache = settings;
     if (!settings.hasKey && settings.provider !== 'local') {
-      toast('\u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u914D\u7F6E API Key'); return;
+      toast(t('ingest.configKey')); return;
     }
   } catch {}
 
@@ -324,13 +327,13 @@ export async function submitIngest() {
   const hasUrls = _ingestUrls.length > 0;
   const isBatch = checkedBatch.length > 1 || _ingestUrls.length > 1;
 
-  if (!isBatch && !hasUrls && !content && !hasPendingBinary && checkedBatch.length === 0) { toast('请输入内容'); return; }
+  if (!isBatch && !hasUrls && !content && !hasPendingBinary && checkedBatch.length === 0) { toast(t('ingest.enterContent')); return; }
 
   const topic = $('ingestTopic').value;
   const model = $('ingestModel');
   const btn = $('ingestBtn');
   btn.disabled = true;
-  btn.textContent = '提交中...';
+  btn.textContent = t('ingest.submitting');
 
   let modelBody = {};
   if (model && model.value) { const p = model.value.split('|'); if (p.length === 2) { modelBody.provider = p[0]; modelBody.model = p[1]; } }
@@ -375,18 +378,21 @@ export async function submitIngest() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(bodyData)
     });
+    const result = await resp.json().catch(() => ({}));
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err.error || '\u63D0\u4EA4\u5931\u8D25');
+      throw new Error(result.error || t('ingest.compileFailed'));
     }
 
-    // 成功 → 立即关闭投喂面板；进度反馈改由 topbar 队列入口承担，不再自动弹 toast
     closeIngest();
+    if (result.skippedDuplicates && result.skippedDuplicates.length > 0) {
+      toast(t('ingest.dupSkipped', {n: result.skippedDuplicates.length}));
+    }
     if (typeof window.refreshIngestQueue === 'function') window.refreshIngestQueue();
+    openIngestQueue();
   } catch (e) {
-    toast('\u63D0\u4EA4\u5931\u8D25: ' + e.message);
+    toast(t('ingest.submitFailed', {msg: e.message}));
     btn.disabled = false;
-    btn.textContent = '\u5F00\u59CB\u7F16\u8BD1';
+    btn.textContent = t('ingest.compile');
   }
 }
 
@@ -400,11 +406,11 @@ function stageMeta(st) {
   const parts = [];
   if (st.source) {
     if (st.source.startsWith('llm:')) parts.push(st.source.slice(4));
-    else if (st.source === 'code') parts.push('代码');
-    else if (st.source === 'user') parts.push('用户');
+    else if (st.source === 'code') parts.push(t('stage.code'));
+    else if (st.source === 'user') parts.push(t('stage.user'));
     else if (st.source === 'llm')  parts.push('LLM');
-    else if (st.source === 'code_plus_llm') parts.push('代码+LLM');
-    else if (st.source === 'piggyback_on_content') parts.push('随正文生成');
+    else if (st.source === 'code_plus_llm') parts.push(t('stage.codePlusLlm'));
+    else if (st.source === 'piggyback_on_content') parts.push(t('stage.piggyback'));
     else parts.push(st.source);
   }
   if (typeof st.durationMs === 'number') parts.push(st.durationMs + 'ms');
@@ -436,13 +442,13 @@ function renderStagesHtml(stages) {
 
 function renderMultiTasks(items) {
   const host = $('itStages'); if (!host) return;
-  host.innerHTML = items.map((t, i) => {
-    const running = (t.stages || []).find(st => st.status === 'running');
-    const title = t.article?.title || (running ? running.label : (t.message || t.id));
-    const cls = t.status === 'done' ? 'task-done' : (t.status === 'error' ? 'task-error' : 'task-running');
+  host.innerHTML = items.map((tk, i) => {
+    const running = (tk.stages || []).find(st => st.status === 'running');
+    const title = tk.article?.title || (running ? running.label : (tk.message || tk.id));
+    const cls = tk.status === 'done' ? 'task-done' : (tk.status === 'error' ? 'task-error' : 'task-running');
     return `<div class="task-group ${cls}">
-      <div class="task-group-head"><span class="task-group-num">#${i+1}</span><span class="task-group-title">${h(title)}</span><span class="task-group-status">${h(t.status)}</span></div>
-      <div class="task-group-stages">${renderStagesHtml(t.stages)}</div>
+      <div class="task-group-head"><span class="task-group-num">#${i+1}</span><span class="task-group-title">${h(title)}</span><span class="task-group-status">${h(tk.status)}</span></div>
+      <div class="task-group-stages">${renderStagesHtml(tk.stages)}</div>
     </div>`;
   }).join('');
 }
@@ -459,7 +465,7 @@ function startProgressTracking(isBatch, totalFiles) {
   el.className = 'ingest-toast show';
   el.onclick = null;
   el.style.cursor = '';
-  $('itTitle').textContent = isBatch ? '\u7F16\u8BD1\u4E2D... 0/' + totalFiles : '\u7F16\u8BD1\u4E2D...';
+  $('itTitle').textContent = isBatch ? t('ingest.compilingN', {done: 0, total: totalFiles}) : t('ingest.compiling');
   $('itDetail').textContent = '';
   $('itFill').style.width = '0%';
   // reset stages block (hidden by default)
@@ -481,20 +487,20 @@ function startProgressTracking(isBatch, totalFiles) {
         if (s.status === 'idle') return;
         const pct = s.total > 0 ? Math.round(s.completed / s.total * 100) : 0;
         $('itFill').style.width = pct + '%';
-        $('itTitle').textContent = '\u7F16\u8BD1\u4E2D... ' + s.completed + '/' + s.total;
+        $('itTitle').textContent = t('ingest.compilingN', {done: s.completed, total: s.total});
         if (s.estimatedRemaining != null && s.status === 'processing') {
           const mins = Math.floor(s.estimatedRemaining / 60); const secs = s.estimatedRemaining % 60;
-          $('itDetail').textContent = '\u9884\u8BA1 ' + (mins > 0 ? mins + '\u5206' : '') + (secs > 0 ? secs + '\u79D2' : '');
+          $('itDetail').textContent = mins > 0 && secs > 0 ? t('ingest.estTime', {min: mins, sec: secs}) : (mins > 0 ? t('ingest.estMin', {min: mins}) : t('ingest.estTime', {min: 0, sec: secs}));
         }
         if (s.status === 'done') {
           clearInterval(state.ipt); state.ipt = null;
-          showProgressDone(true, s.completed + ' \u7BC7\u5DF2\u5165\u5E93' + (s.failed > 0 ? '\uFF0C' + s.failed + ' \u5931\u8D25' : ''));
+          showProgressDone(true, s.failed > 0 ? t('ingest.doneFail', {n: s.completed, fail: s.failed}) : t('ingest.doneN', {n: s.completed}));
         }
       } else {
         // 多任务模式：/api/ingest/active 返回 {items:[]}
         const items = Array.isArray(s.items) ? s.items : [];
-        const running = items.filter(t => t.status === 'compiling');
-        const finished = items.filter(t => t.status === 'done' || t.status === 'error');
+        const running = items.filter(tk => tk.status === 'compiling');
+        const finished = items.filter(tk => tk.status === 'done' || tk.status === 'error');
 
         if (items.length === 0) {
           // 既无活跃任务也无最近完成 → 结束轮询
@@ -504,8 +510,8 @@ function startProgressTracking(isBatch, totalFiles) {
 
         // 单任务：显示主任务摘要；多任务：显示计数
         if (items.length === 1) {
-          const t = items[0];
-          const stgs = t.stages || [];
+          const tk = items[0];
+          const stgs = tk.stages || [];
           if (stgs.length) {
             renderStages(stgs);
             $('itFill').style.width = computeStagePct(stgs) + '%';
@@ -516,20 +522,20 @@ function startProgressTracking(isBatch, totalFiles) {
             const run = stgs.find(st => st.status === 'running');
             $('itDetail').textContent = run ? ((run.label || run.key) + '...') : '';
           }
-          if (t.status === 'done') {
-            $('itTitle').textContent = (t.article?.title || '新文章') + ' 已入库';
+          if (tk.status === 'done') {
+            $('itTitle').textContent = (tk.article?.title || t('ingest.newArticle')) + ' ' + t('ingest.ingested');
             $('itFill').style.width = '100%';
-          } else if (t.status === 'error') {
-            $('itTitle').textContent = t.message || '编译失败';
+          } else if (tk.status === 'error') {
+            $('itTitle').textContent = tk.message || t('ingest.compileFailed');
           } else {
-            $('itTitle').textContent = '编译中...';
+            $('itTitle').textContent = t('ingest.compiling');
           }
         } else {
           // 多任务并发
           renderMultiTasks(items);
-          const allStages = items.flatMap(t => t.stages || []);
+          const allStages = items.flatMap(tk => tk.stages || []);
           $('itFill').style.width = computeStagePct(allStages) + '%';
-          $('itTitle').textContent = `${running.length} 个编译中 · ${finished.length} 完成`;
+          $('itTitle').textContent = t('iq.compilingN', {n: running.length, done: finished.length});
           $('itDetail').textContent = running.length > 0 ? (running[0].stages?.find(st=>st.status==='running')?.label || '') : '';
           // 多任务时默认展开
           const host = $('itStages'); const btn = $('itExpand');
@@ -539,17 +545,17 @@ function startProgressTracking(isBatch, totalFiles) {
         // 全部结束：停止轮询 + 触发完成 UI
         if (running.length === 0 && finished.length > 0) {
           clearInterval(state.ipt); state.ipt = null;
-          const lastDone = finished.filter(t => t.status === 'done').slice(-1)[0];
-          const anyError = finished.some(t => t.status === 'error');
+          const lastDone = finished.filter(tk => tk.status === 'done').slice(-1)[0];
+          const anyError = finished.some(tk => tk.status === 'error');
           if (items.length === 1 && lastDone) {
-            showProgressDone(true, (lastDone.article?.title || '新文章') + ' 已入库', lastDone.article?.path || '');
+            showProgressDone(true, (lastDone.article?.title || t('ingest.newArticle')) + ' ' + t('ingest.ingested'), lastDone.article?.path || '');
           } else if (items.length > 1) {
-            const doneCnt = finished.filter(t => t.status === 'done').length;
+            const doneCnt = finished.filter(tk => tk.status === 'done').length;
             const errCnt = finished.length - doneCnt;
-            showProgressDone(!anyError, `${doneCnt} 篇已入库${errCnt>0?`，${errCnt} 失败`:''}`);
+            showProgressDone(!anyError, errCnt > 0 ? t('ingest.doneFail', {n: doneCnt, fail: errCnt}) : t('ingest.doneN', {n: doneCnt}));
           } else if (anyError) {
-            const errTask = finished.find(t => t.status === 'error');
-            showProgressDone(false, errTask?.message || '编译失败');
+            const errTask = finished.find(tk => tk.status === 'error');
+            showProgressDone(false, errTask?.message || t('ingest.compileFailed'));
           }
         }
       }
@@ -578,12 +584,12 @@ function showProgressDone(success, msg, articlePath) {
   void el.offsetWidth;
   el.classList.add('show');
   $('itTitle').textContent = msg;
-  $('itDetail').textContent = success && articlePath ? '\u67E5\u770B \u2192' : '';
+  $('itDetail').textContent = success && articlePath ? t('ingest.view') : '';
 
   state.gd = null; state.td = null; state.sd = null; state.chatList = null;
   state.pendingBinaryFile = null;
   if (success) {
-    toast('\u77E5\u8BC6\u5E93\u5DF2\u66F4\u65B0');
+    toast(t('ingest.kbUpdated'));
     updSidebarPages();
     if (state.cv === 'browse' || state.cv === 'dashboard') {
       if (typeof window.render === 'function') window.render();

@@ -1,5 +1,6 @@
 import { $, h, relTime, api, post, put, apiDel, toast, skelLines } from '../utils.js';
 import state from '../state.js';
+import { t } from '../i18n.js';
 
 /* ── Local state ── */
 const TAB_STORAGE_KEY = 'autotask.tab';
@@ -40,35 +41,28 @@ let feedbackPending = new Set(); // `${runId}:${itemUrl}` keys disabled after su
 let wizardAdvancedOpen = false;
 
 /* ── Labels ── */
-const SOURCE_LABELS = { rss: 'RSS', webpage: '网页', api: 'API' };
-const SCHEDULE_LABELS = { daily: '每日', hourly: '每小时', manual: '仅手动' };
+function getSourceLabels() { return { rss: t('autotask.sourceType.rss'), webpage: t('autotask.sourceType.webpage'), api: t('autotask.sourceType.api') }; }
+function getScheduleLabels() { return { daily: t('autotask.schedule.daily'), hourly: t('autotask.schedule.hourly'), manual: t('autotask.schedule.manual') }; }
 const STATUS_COLORS = { success: 'var(--green)', error: 'var(--red)', partial: 'var(--yellow)', running: 'var(--accent)' };
 
-/* ── Intent presets: 一键填入常见任务模板，给空白框一个起点
-   主力受众：AI 音乐方向的产品经理 / 运营，兼顾通用 AI 与技术 ── */
-const INTENT_PRESETS = [
-  // AI 音乐（主战场）
-  { group: 'AI 音乐', label: 'AI 音乐产品动态', text: '跟踪 AI 音乐生成产品的新动态（Suno、Udio、Stable Audio、ElevenLabs、Mubert 等），重点是新功能、新模型和公开的效果对比，跳过融资八卦和广告软文' },
-  { group: 'AI 音乐', label: '音频与语音模型', text: '关注音频 / 语音生成与处理的新模型和开源项目（TTS、voice cloning、vocal stems 分离、音色迁移、伴奏生成），重点是可复现的技术方案和 demo' },
-  { group: 'AI 音乐', label: '音乐创作工具', text: '关注 AI 辅助音乐创作工具和 DAW 生态的更新（Ableton、Native Instruments、Output、Splice 等），重点是实际能落到创作流程里的功能' },
-  { group: 'AI 音乐', label: '音乐行业与版权', text: '了解音乐行业的商业与政策动态，重点是 AI 音乐相关的版权诉讼、平台规则变化（Spotify、YouTube、TikTok）、AI 生成音乐的发行与分成，跳过娱乐八卦' },
-
-  // 产品与运营（AI PM / 运营视角）
-  { group: '产品与运营', label: 'AI 产品发版', text: '跟踪头部 AI 产品的发版与功能更新（ChatGPT、Claude、Gemini、DeepSeek、阿里百炼等），重点是定价、限流、新能力与用户反馈，便于做竞品对标' },
-  { group: '产品与运营', label: 'AI 创业与融资', text: '了解 AI 赛道的创业公司动态，重点是新产品发布、融资与被收购、团队变动，按赛道聚合（音频 / 视频 / Agent / 创作工具），跳过纯股价讨论' },
-  { group: '产品与运营', label: '出海与增长案例', text: '关注 AI 产品的出海与增长案例，重点是 Product Hunt 新品、海外 AI 工具的获客策略、定价实验、内容营销，跳过国内公众号软文' },
-  { group: '产品与运营', label: '社交平台算法', text: '跟踪 TikTok / YouTube Shorts / Instagram Reels 的算法和创作者政策变化，重点是与 AI 生成内容、AI 音乐分发相关的规则，跳过网红八卦' },
-
-  // 通用 AI 研究
-  { group: '通用 AI 研究', label: '大厂研究进展', text: '了解头部 AI 公司（OpenAI、Anthropic、Google DeepMind、Meta、Mistral、DeepSeek）的研究进展，重点是论文和官方技术博客，跳过招聘和市场活动' },
-  { group: '通用 AI 研究', label: '开源模型新版本', text: '关注主流开源模型的新版本（Llama、Qwen、DeepSeek、Mistral、Gemma 等）及其多模态 / 音频 / 推理能力更新，跳过纯基准测试刷榜' },
-  { group: '通用 AI 研究', label: 'Agent / RAG / 多模态', text: '跟踪 AI Agent、RAG、多模态（图 / 音 / 视频）方向的新论文和工程实践，重点是可落地的架构与开源实现' },
-  { group: '通用 AI 研究', label: '视频与图像 AI', text: '关注视频 / 图像生成模型的新动态（Sora、Veo、Runway、Luma、Flux 等），重点是与音乐 MV、短视频创作相关的跨界可能性' },
-
-  // 技术（偶尔用）
-  { group: '技术', label: 'arxiv 论文跟踪', text: '跟踪 cs.LG、cs.CL、cs.AI、cs.SD（音频）方向的最新 arxiv 论文，重点是 LLM、agent、audio / music generation、推理相关' },
-  { group: '技术', label: '前端 / 工具链', text: '跟踪主流前端框架和开发工具的版本更新（React、Vue、Next.js、TypeScript、Vite、Bun 等），重点是 release notes 和 breaking changes' }
-];
+/* ── Intent presets: one-click fill common task templates
+   Called as function so t() runs at render time, not import time ── */
+function getIntentPresets() { return [
+  { group: t('autotask.preset.group.aiMusic'), label: t('autotask.preset.aiMusicProducts'), text: t('autotask.preset.aiMusicProductsText') },
+  { group: t('autotask.preset.group.aiMusic'), label: t('autotask.preset.audioVoiceModels'), text: t('autotask.preset.audioVoiceModelsText') },
+  { group: t('autotask.preset.group.aiMusic'), label: t('autotask.preset.musicCreationTools'), text: t('autotask.preset.musicCreationToolsText') },
+  { group: t('autotask.preset.group.aiMusic'), label: t('autotask.preset.musicIndustryCopyright'), text: t('autotask.preset.musicIndustryCopyrightText') },
+  { group: t('autotask.preset.group.prodOps'), label: t('autotask.preset.aiProductReleases'), text: t('autotask.preset.aiProductReleasesText') },
+  { group: t('autotask.preset.group.prodOps'), label: t('autotask.preset.aiStartupsFunding'), text: t('autotask.preset.aiStartupsFundingText') },
+  { group: t('autotask.preset.group.prodOps'), label: t('autotask.preset.overseasGrowth'), text: t('autotask.preset.overseasGrowthText') },
+  { group: t('autotask.preset.group.prodOps'), label: t('autotask.preset.socialAlgorithms'), text: t('autotask.preset.socialAlgorithmsText') },
+  { group: t('autotask.preset.group.aiResearch'), label: t('autotask.preset.bigLabResearch'), text: t('autotask.preset.bigLabResearchText') },
+  { group: t('autotask.preset.group.aiResearch'), label: t('autotask.preset.openSourceModels'), text: t('autotask.preset.openSourceModelsText') },
+  { group: t('autotask.preset.group.aiResearch'), label: t('autotask.preset.agentRagMultimodal'), text: t('autotask.preset.agentRagMultimodalText') },
+  { group: t('autotask.preset.group.aiResearch'), label: t('autotask.preset.videoImageAI'), text: t('autotask.preset.videoImageAIText') },
+  { group: t('autotask.preset.group.tech'), label: t('autotask.preset.arxivTracking'), text: t('autotask.preset.arxivTrackingText') },
+  { group: t('autotask.preset.group.tech'), label: t('autotask.preset.frontendToolchain'), text: t('autotask.preset.frontendToolchainText') }
+]; }
 
 /* ── Helpers ── */
 function statusDot(enabled) {
@@ -76,16 +70,17 @@ function statusDot(enabled) {
 }
 
 function scheduleText(task) {
-  let s = SCHEDULE_LABELS[task.schedule] || task.schedule || '每日';
+  const labels = getScheduleLabels();
+  let s = labels[task.schedule] || task.schedule || t('autotask.schedule.daily');
   if (task.schedule === 'daily' && task.scheduleTime) s += ' ' + task.scheduleTime;
   return s;
 }
 
 function runStatusText(run) {
-  if (run.status === 'running') return '<span style="color:var(--accent)">运行中</span>';
-  if (run.status === 'success') return '<span style="color:var(--green)">成功</span>';
-  if (run.status === 'error') return '<span style="color:var(--red)">失败</span>';
-  if (run.status === 'partial') return '<span style="color:var(--yellow)">部分成功</span>';
+  if (run.status === 'running') return '<span style="color:var(--accent)">' + h(t('autotask.status.running')) + '</span>';
+  if (run.status === 'success') return '<span style="color:var(--green)">' + h(t('autotask.status.success')) + '</span>';
+  if (run.status === 'error') return '<span style="color:var(--red)">' + h(t('autotask.status.error')) + '</span>';
+  if (run.status === 'partial') return '<span style="color:var(--yellow)">' + h(t('autotask.status.partial')) + '</span>';
   return h(run.status || '');
 }
 
@@ -121,15 +116,15 @@ function formatNextRun(d) {
   const now = new Date();
   const diffMs = d - now;
   const mins = Math.round(diffMs / 60000);
-  if (mins < 60) return `${mins} 分钟后`;
+  if (mins < 60) return t('autotask.nextMinutes', { n: mins });
   const hours = Math.round(mins / 60);
-  if (hours < 24) return `约 ${hours} 小时后`;
+  if (hours < 24) return t('autotask.nextHours', { n: hours });
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
   const sameDay = d.toDateString() === now.toDateString();
-  if (sameDay) return `今天 ${hh}:${mm}`;
+  if (sameDay) return t('autotask.nextToday', { time: `${hh}:${mm}` });
   const tmr = new Date(now); tmr.setDate(tmr.getDate() + 1);
-  if (d.toDateString() === tmr.toDateString()) return `明天 ${hh}:${mm}`;
+  if (d.toDateString() === tmr.toDateString()) return t('autotask.nextTomorrow', { time: `${hh}:${mm}` });
   return `${d.getMonth() + 1}/${d.getDate()} ${hh}:${mm}`;
 }
 
@@ -148,8 +143,8 @@ function computeHistoryStats(rangeDays) {
   const cutoff = rangeDays > 0 ? (Date.now() - rangeDays * 86400000) : 0;
   let runs = 0, ingested = 0, errors = 0;
   history.forEach(r => {
-    const t = r.startedAt ? new Date(r.startedAt).getTime() : 0;
-    if (t < cutoff) return;
+    const ts = r.startedAt ? new Date(r.startedAt).getTime() : 0;
+    if (ts < cutoff) return;
     runs += 1;
     if (typeof r.itemsIngested === 'number') ingested += r.itemsIngested;
     if (r.status === 'error') errors += 1;
@@ -170,28 +165,28 @@ export async function rAutotask(c) {
     try {
       const tree = state.td || await api('/api/wiki/tree');
       state.td = tree;
-      topicsList = (tree || []).map(t => t.name);
+      topicsList = (tree || []).map(tp => tp.name);
     } catch (_) { topicsList = []; }
     renderPage(c);
   } catch (e) {
-    c.innerHTML = '<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败: ' + h(e.message) + '</div>';
+    c.innerHTML = '<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">' + h(t('autotask.loadFailed', { msg: e.message })) + '</div>';
   }
 }
 
 function renderPage(c) {
   let s = '<div class="page-autotask">';
   s += '<div class="autotask-header">';
-  s += '<h1 class="autotask-title">自动化任务</h1>';
+  s += '<h1 class="autotask-title">' + h(t('autotask.title')) + '</h1>';
   const showHeaderBtn = !(currentTab === 'tasks' && tasks.length === 0) && currentTab !== 'history';
   if (showHeaderBtn) {
-    s += '<button class="btn-fill" style="width:auto;padding:8px 20px;font-size:13px" onclick="openAutotaskModal()">+ 新建任务</button>';
+    s += '<button class="btn-fill" style="width:auto;padding:8px 20px;font-size:13px" onclick="openAutotaskModal()">' + h(t('autotask.createBtn')) + '</button>';
   } else {
     s += '<span></span>';
   }
   s += '</div>';
   s += '<div class="autotask-tabs">';
-  s += '<button class="autotask-tab' + (currentTab === 'tasks' ? ' active' : '') + '" onclick="switchAutotaskTab(\'tasks\')">任务列表</button>';
-  s += '<button class="autotask-tab' + (currentTab === 'history' ? ' active' : '') + '" onclick="switchAutotaskTab(\'history\')">执行历史</button>';
+  s += '<button class="autotask-tab' + (currentTab === 'tasks' ? ' active' : '') + '" onclick="switchAutotaskTab(\'tasks\')">' + h(t('autotask.tabTasks')) + '</button>';
+  s += '<button class="autotask-tab' + (currentTab === 'history' ? ' active' : '') + '" onclick="switchAutotaskTab(\'history\')">' + h(t('autotask.tabHistory')) + '</button>';
   s += '</div>';
   if (currentTab === 'tasks') s += renderTaskList();
   else s += renderHistory();
@@ -204,60 +199,59 @@ function renderTaskList() {
   if (!tasks.length) {
     return '<div class="autotask-empty">'
       + '<div class="autotask-empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg></div>'
-      + '<p class="autotask-empty-title">还没有自动化任务</p>'
-      + '<p class="autotask-empty-desc">创建你的第一个自动任务，让知识库自动增长</p>'
-      + '<button class="btn-fill" style="width:auto;padding:10px 24px" onclick="openAutotaskModal()">+ 新建任务</button>'
+      + '<p class="autotask-empty-title">' + h(t('autotask.emptyTitle')) + '</p>'
+      + '<p class="autotask-empty-desc">' + h(t('autotask.emptyDesc')) + '</p>'
+      + '<button class="btn-fill" style="width:auto;padding:10px 24px" onclick="openAutotaskModal()">' + h(t('autotask.createBtn')) + '</button>'
       + '</div>';
   }
   let s = '<div class="autotask-cards">';
-  tasks.forEach(t => {
-    const sources = Array.isArray(t.sources) ? t.sources : [];
+  tasks.forEach(tk => {
+    const sources = Array.isArray(tk.sources) ? tk.sources : [];
     const tagSet = new Set();
     sources.forEach(src => {
       const tags = Array.isArray(src && src.tags) ? src.tags : [];
       tags.forEach(tg => tagSet.add(tg));
     });
     const tagsArr = Array.from(tagSet);
-    const recent = lastRunIngested(t.id, 3);
-    const hasExpandable = recent.length || tagsArr.length || (t.provider && t.model);
-    const isExpanded = expandedTasks.has(t.id);
-    const intent = t.intent || (t.sourceConfig && t.sourceConfig.url) || '';
+    const recent = lastRunIngested(tk.id, 3);
+    const hasExpandable = recent.length || tagsArr.length || (tk.provider && tk.model);
+    const isExpanded = expandedTasks.has(tk.id);
+    const intent = tk.intent || (tk.sourceConfig && tk.sourceConfig.url) || '';
 
     s += '<div class="autotask-card' + (isExpanded ? ' expanded' : '') + '">';
 
-    // Head: 状态点 / 名字 / 源数 / 开关
     s += '<div class="autotask-card-head">';
-    s += statusDot(t.enabled !== false);
-    s += '<span class="autotask-card-name">' + h(t.name || '未命名任务') + '</span>';
+    s += statusDot(tk.enabled !== false);
+    s += '<span class="autotask-card-name">' + h(tk.name || t('autotask.unnamed')) + '</span>';
     if (sources.length) {
-      s += '<span class="autotask-card-srcbadge" title="' + sources.length + ' 个源">' + sources.length + ' 源</span>';
-    } else if (t.sourceType) {
-      s += '<span class="autotask-card-srcbadge">' + h(SOURCE_LABELS[t.sourceType] || t.sourceType) + '</span>';
+      s += '<span class="autotask-card-srcbadge" title="' + h(t('autotask.sourceCountTitle', { n: sources.length })) + '">' + h(t('autotask.sourceCount', { n: sources.length })) + '</span>';
+    } else if (tk.sourceType) {
+      const srcLabels = getSourceLabels();
+      s += '<span class="autotask-card-srcbadge">' + h(srcLabels[tk.sourceType] || tk.sourceType) + '</span>';
     }
     s += '<label class="autotask-toggle" onclick="event.stopPropagation()">';
-    s += '<input type="checkbox"' + (t.enabled !== false ? ' checked' : '') + ' onchange="toggleAutotaskEnabled(\'' + h(t.id) + '\')">';
+    s += '<input type="checkbox"' + (tk.enabled !== false ? ' checked' : '') + ' onchange="toggleAutotaskEnabled(\'' + h(tk.id) + '\')">';
     s += '<span class="autotask-toggle-slider"></span>';
     s += '</label>';
     s += '</div>';
 
-    // Intent（单行 ellipsis，不加"意图："前缀，留给 CSS truncate）
     if (intent) {
       s += '<div class="autotask-card-intent" title="' + h(intent) + '">' + h(intent) + '</div>';
     }
 
-    // Health line: [● 状态] 时间 · 下次 xxx（或 仅手动）
-    const nr = computeNextRun(t);
-    const nextText = nr ? '下次 ' + formatNextRun(nr)
-      : (t.schedule === 'manual' ? '仅手动' : (t.enabled === false ? '已停用' : ''));
-    if (t.lastRunAt || nextText) {
+    const nr = computeNextRun(tk);
+    const nextText = nr ? t('autotask.nextPrefix', { time: formatNextRun(nr) })
+      : (tk.schedule === 'manual' ? t('autotask.status.manualOnly') : (tk.enabled === false ? t('autotask.status.disabled') : ''));
+    if (tk.lastRunAt || nextText) {
       s += '<div class="autotask-card-health">';
-      if (t.lastRunAt) {
-        const stColor = t.lastRunStatus === 'success' ? 'var(--green)' : t.lastRunStatus === 'error' ? 'var(--red)' : t.lastRunStatus === 'partial' ? 'var(--yellow)' : 'var(--fg-tertiary)';
-        const stLabel = t.lastRunStatus === 'success' ? '成功' : t.lastRunStatus === 'error' ? '失败' : t.lastRunStatus === 'partial' ? '部分成功' : (t.lastRunStatus || '未知');
+      if (tk.lastRunAt) {
+        const stColor = tk.lastRunStatus === 'success' ? 'var(--green)' : tk.lastRunStatus === 'error' ? 'var(--red)' : tk.lastRunStatus === 'partial' ? 'var(--yellow)' : 'var(--fg-tertiary)';
+        const statusKey = 'autotask.status.' + (tk.lastRunStatus || 'unknown');
+        const stLabel = t(statusKey);
         s += '<span class="autotask-card-health-run"><span class="autotask-card-health-dot" style="background:' + stColor + '"></span>'
-          + h(stLabel) + ' · ' + h(relTime(t.lastRunAt)) + '</span>';
+          + h(stLabel) + ' · ' + h(relTime(tk.lastRunAt)) + '</span>';
       } else {
-        s += '<span class="autotask-card-health-run autotask-card-health-idle">从未执行</span>';
+        s += '<span class="autotask-card-health-run autotask-card-health-idle">' + h(t('autotask.neverRun')) + '</span>';
       }
       if (nextText) {
         s += '<span class="autotask-card-health-sep">·</span>';
@@ -266,15 +260,14 @@ function renderTaskList() {
       s += '</div>';
     }
 
-    // Expand area (默认折叠)：上次抓到的文章 / tags / model
     if (hasExpandable) {
       s += '<div class="autotask-card-expand">';
       if (recent.length) {
         s += '<div class="autotask-card-preview">';
-        s += '<div class="autotask-card-preview-label">上次抓到 ' + recent.length + ' 篇</div>';
+        s += '<div class="autotask-card-preview-label">' + h(t('autotask.lastIngested', { n: recent.length })) + '</div>';
         s += '<ul class="autotask-card-preview-list">';
         recent.forEach(it => {
-          const title = h(it.title || '无标题');
+          const title = h(it.title || t('autotask.noTitle'));
           if (it.articlePath) {
             s += '<li><a href="#/article/' + h(it.articlePath) + '" onclick="event.stopPropagation()">' + title + '</a></li>';
           } else {
@@ -285,28 +278,27 @@ function renderTaskList() {
         s += '</div>';
       }
       if (tagsArr.length) {
-        s += '<div class="autotask-card-expand-row"><span class="autotask-card-expand-label">标签</span>';
+        s += '<div class="autotask-card-expand-row"><span class="autotask-card-expand-label">' + h(t('autotask.labelTags')) + '</span>';
         tagsArr.forEach(tg => { s += '<span class="autotask-source-chip">' + h(tg) + '</span>'; });
         s += '</div>';
       }
-      if (t.provider && t.model) {
-        s += '<div class="autotask-card-expand-row"><span class="autotask-card-expand-label">模型</span>'
-          + '<span class="autotask-model-badge" title="此任务使用独立模型">' + h(t.model) + '</span></div>';
+      if (tk.provider && tk.model) {
+        s += '<div class="autotask-card-expand-row"><span class="autotask-card-expand-label">' + h(t('autotask.labelModel')) + '</span>'
+          + '<span class="autotask-model-badge" title="' + h(t('autotask.modelBadgeTitle')) + '">' + h(tk.model) + '</span></div>';
       }
       s += '</div>';
     }
 
-    // Actions
     s += '<div class="autotask-card-actions">';
     if (hasExpandable) {
-      s += '<button class="autotask-action-btn autotask-action-expand' + (isExpanded ? ' is-open' : '') + '" onclick="toggleTaskExpand(\'' + h(t.id) + '\')" title="' + (isExpanded ? '收起' : '展开') + '">'
-        + (isExpanded ? '收起' : '详情')
+      s += '<button class="autotask-action-btn autotask-action-expand' + (isExpanded ? ' is-open' : '') + '" onclick="toggleTaskExpand(\'' + h(tk.id) + '\')" title="' + (isExpanded ? h(t('autotask.collapse')) : h(t('autotask.expand'))) + '">'
+        + (isExpanded ? h(t('autotask.collapse')) : h(t('autotask.expand')))
         + '<svg class="autotask-action-expand-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
         + '</button>';
     }
-    s += '<button class="autotask-action-btn" onclick="runAutotask(\'' + h(t.id) + '\')" title="立即执行">执行</button>';
-    s += '<button class="autotask-action-btn" onclick="openAutotaskModal(\'' + h(t.id) + '\')" title="编辑">编辑</button>';
-    s += '<button class="autotask-action-btn autotask-action-del" onclick="deleteAutotask(\'' + h(t.id) + '\')" title="删除">删除</button>';
+    s += '<button class="autotask-action-btn" onclick="runAutotask(\'' + h(tk.id) + '\')" title="' + h(t('autotask.actionRunTitle')) + '">' + h(t('autotask.actionRun')) + '</button>';
+    s += '<button class="autotask-action-btn" onclick="openAutotaskModal(\'' + h(tk.id) + '\')" title="' + h(t('autotask.actionEdit')) + '">' + h(t('autotask.actionEdit')) + '</button>';
+    s += '<button class="autotask-action-btn autotask-action-del" onclick="deleteAutotask(\'' + h(tk.id) + '\')" title="' + h(t('autotask.actionDelete')) + '">' + h(t('autotask.actionDelete')) + '</button>';
     s += '</div>';
     s += '</div>';
   });
@@ -326,32 +318,33 @@ function renderHistory() {
   if (!history.length) {
     return '<div class="autotask-empty">'
       + '<div class="autotask-empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg></div>'
-      + '<p class="autotask-empty-title">暂无执行记录</p>'
-      + '<p class="autotask-empty-desc">任务执行后，记录会显示在这里</p>'
+      + '<p class="autotask-empty-title">' + h(t('autotask.emptyHistoryTitle')) + '</p>'
+      + '<p class="autotask-empty-desc">' + h(t('autotask.emptyHistoryDesc')) + '</p>'
       + '</div>';
   }
   const stats = computeHistoryStats(historyRange);
-  const rangeLabel = historyRange === 7 ? '近 7 天' : historyRange === 30 ? '近 30 天' : '全部';
+  const rangeLabelKey = historyRange === 7 ? 'autotask.historyRangeLabel7' : historyRange === 30 ? 'autotask.historyRangeLabel30' : 'autotask.historyRangeLabelAll';
+  const rangeLabel = t(rangeLabelKey);
   let s = '<div class="autotask-history-summary">';
   s += '<div class="autotask-history-summary-stats">';
-  s += '<span class="autotask-history-stat"><span class="autotask-history-stat-num">' + stats.runs + '</span><span class="autotask-history-stat-lbl">' + h(rangeLabel) + '执行</span></span>';
-  s += '<span class="autotask-history-stat"><span class="autotask-history-stat-num">' + stats.ingested + '</span><span class="autotask-history-stat-lbl">入库文章</span></span>';
-  s += '<span class="autotask-history-stat"><span class="autotask-history-stat-num" style="color:' + (stats.errors > 0 ? 'var(--red)' : 'var(--fg-secondary)') + '">' + stats.errors + '</span><span class="autotask-history-stat-lbl">失败</span></span>';
+  s += '<span class="autotask-history-stat"><span class="autotask-history-stat-num">' + stats.runs + '</span><span class="autotask-history-stat-lbl">' + h(rangeLabel) + h(t('autotask.historyRuns')) + '</span></span>';
+  s += '<span class="autotask-history-stat"><span class="autotask-history-stat-num">' + stats.ingested + '</span><span class="autotask-history-stat-lbl">' + h(t('autotask.historyIngested')) + '</span></span>';
+  s += '<span class="autotask-history-stat"><span class="autotask-history-stat-num" style="color:' + (stats.errors > 0 ? 'var(--red)' : 'var(--fg-secondary)') + '">' + stats.errors + '</span><span class="autotask-history-stat-lbl">' + h(t('autotask.historyErrors')) + '</span></span>';
   s += '</div>';
   s += '<div class="autotask-history-range">';
-  [[7, '7 天'], [30, '30 天'], [0, '全部']].forEach(([v, lbl]) => {
-    s += '<button class="autotask-history-range-btn' + (historyRange === v ? ' active' : '') + '" onclick="switchHistoryRange(' + v + ')">' + lbl + '</button>';
+  [[7, t('autotask.historyRange7')], [30, t('autotask.historyRange30')], [0, t('autotask.historyRangeAll')]].forEach(([v, lbl]) => {
+    s += '<button class="autotask-history-range-btn' + (historyRange === v ? ' active' : '') + '" onclick="switchHistoryRange(' + v + ')">' + h(lbl) + '</button>';
   });
   s += '</div>';
   s += '</div>';
 
   const cutoff = historyRange > 0 ? (Date.now() - historyRange * 86400000) : 0;
   const rows = history.filter(r => {
-    const t = r.startedAt ? new Date(r.startedAt).getTime() : 0;
-    return t >= cutoff;
+    const ts = r.startedAt ? new Date(r.startedAt).getTime() : 0;
+    return ts >= cutoff;
   });
   if (!rows.length) {
-    s += '<div class="autotask-empty" style="padding:40px 20px"><p class="autotask-empty-desc">' + h(rangeLabel) + '内暂无记录</p></div>';
+    s += '<div class="autotask-empty" style="padding:40px 20px"><p class="autotask-empty-desc">' + h(t('autotask.emptyRange', { range: rangeLabel })) + '</p></div>';
     return s;
   }
   rows.sort((a, b) => {
@@ -385,8 +378,8 @@ function renderRunSummaryCard(run) {
     const ms = new Date(run.finishedAt) - new Date(run.startedAt);
     if (ms > 0) durStr = (ms / 1000).toFixed(1) + 's';
   }
-  const statusLabelMap = { success: '成功', error: '失败', partial: '部分成功', running: '运行中' };
-  const statusLabel = statusLabelMap[run.status] || (run.status || '未知');
+  const statusLabelMap = { success: t('autotask.status.success'), error: t('autotask.status.error'), partial: t('autotask.status.partial'), running: t('autotask.status.running') };
+  const statusLabel = statusLabelMap[run.status] || (run.status || t('autotask.status.unknown'));
 
   // Precompute counts / sources / reasons for non-running rows
   const found = run.itemsFound != null ? run.itemsFound : (run.items ? run.items.length : 0);
@@ -411,22 +404,22 @@ function renderRunSummaryCard(run) {
     s += '<span class="autotask-status-dot" style="background:' + dotColor + '"></span>';
   }
   if (isRunning) {
-    s += '<span class="autotask-running-badge">运行中</span>';
+    s += '<span class="autotask-running-badge">' + h(t('autotask.runBadge')) + '</span>';
   }
-  s += '<span class="autotask-history-name">' + h(run.taskName || '未知任务');
+  s += '<span class="autotask-history-name">' + h(run.taskName || t('autotask.unknownTask'));
   if (run.status !== 'success' && !isRunning) {
     s += ' <span class="autotask-history-status" style="color:' + dotColor + '">· ' + h(statusLabel) + '</span>';
   }
   s += '</span>';
   if (!isRunning && ingested > 0) {
-    s += '<span class="autotask-history-ingested" title="本次入库">入库 ' + ingested + '</span>';
+    s += '<span class="autotask-history-ingested">' + h(t('autotask.ingestedCount', { n: ingested })) + '</span>';
   }
   s += '<span class="autotask-history-time">' + h(relTime(run.startedAt));
   if (durStr && !isRunning) s += ' · ' + h(durStr);
   s += '</span>';
   // Expand chevron (non-running only) - 移动到头行末尾而不是单独的 actions 行
   if (!isRunning) {
-    s += '<button class="autotask-history-chevron' + (expanded ? ' is-open' : '') + '" onclick="toggleRunExpand(\'' + h(runId) + '\')" title="' + (expanded ? '收起' : '展开') + '">'
+    s += '<button class="autotask-history-chevron' + (expanded ? ' is-open' : '') + '" onclick="toggleRunExpand(\'' + h(runId) + '\')" title="' + (expanded ? h(t('autotask.collapse')) : h(t('autotask.expand'))) + '">'
       + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
       + '</button>';
   }
@@ -435,7 +428,7 @@ function renderRunSummaryCard(run) {
   if (isRunning) {
     // 保持原有 running UI
     const prog = run.progress || { phase: 'fetching', current: 0, total: 0, currentTitle: null };
-    const phaseLabel = prog.phase === 'fetching' ? '抓取数据源...' : prog.phase === 'filtering' ? '过滤中...' : '处理条目';
+    const phaseLabel = prog.phase === 'fetching' ? t('autotask.phaseFetching') : prog.phase === 'filtering' ? t('autotask.phaseFiltering') : t('autotask.phaseProcessing');
     const total = prog.total || 0;
     const cur = prog.current || 0;
     const pct = total > 0 ? Math.min(100, Math.round((cur / total) * 100)) : (prog.phase === 'fetching' ? 10 : 5);
@@ -443,9 +436,9 @@ function renderRunSummaryCard(run) {
     s += '<div class="autotask-history-meta">';
     if (prog.phase === 'processing' && total > 0) s += h(phaseLabel) + ' ' + cur + '/' + total;
     else s += h(phaseLabel);
-    if (run.itemsIngested) s += ' · 已入库 ' + run.itemsIngested;
-    if (run.itemsSkipped) s += ' · 已跳过 ' + run.itemsSkipped;
-    if (prog.currentTitle) s += '<div class="autotask-progress-current">当前: ' + h(prog.currentTitle.length > 80 ? prog.currentTitle.slice(0, 78) + '...' : prog.currentTitle) + '</div>';
+    if (run.itemsIngested) s += ' · ' + h(t('autotask.progressIngested', { n: run.itemsIngested }));
+    if (run.itemsSkipped) s += ' · ' + h(t('autotask.progressSkipped', { n: run.itemsSkipped }));
+    if (prog.currentTitle) s += '<div class="autotask-progress-current">' + h(t('autotask.progressCurrent', { title: prog.currentTitle.length > 80 ? prog.currentTitle.slice(0, 78) + '...' : prog.currentTitle })) + '</div>';
     s += '</div>';
   } else {
     // 失败或需要一眼看到信息时才渲染副行（非 noise）
@@ -453,22 +446,22 @@ function renderRunSummaryCard(run) {
     // 错误消息：折叠态截断显示，展开看完整
     if (run.error) {
       const errShort = truncate(run.error, 120);
-      subParts.push('<span class="autotask-history-sub-err">错误：' + h(errShort) + '</span>');
+      subParts.push('<span class="autotask-history-sub-err">' + h(t('autotask.errorPrefix', { msg: errShort })) + '</span>');
     }
     // 有过滤/跳过数据时展示
     if (!run.error && (found > 0 || skipped > 0)) {
       const parts = [];
-      parts.push('考虑 ' + found);
-      if (skipped > 0) parts.push('跳过 ' + skipped);
-      subParts.push('<span class="autotask-history-sub-counts">' + parts.join(' · ') + '</span>');
+      parts.push(t('autotask.considered', { n: found }));
+      if (skipped > 0) parts.push(t('autotask.skipped', { n: skipped }));
+      subParts.push('<span class="autotask-history-sub-counts">' + h(parts.join(' · ')) + '</span>');
     }
     // 源状态：仅当有失败或部分失败时才展示，全 OK 不占位置
     if (failed.length > 0) {
-      subParts.push('<span class="autotask-history-sub-src autotask-history-sub-src-bad">源 ' + okCount + '/' + totalSrc + ' · ' + failed.length + ' 失败</span>');
+      subParts.push('<span class="autotask-history-sub-src autotask-history-sub-src-bad">' + h(t('autotask.sourceStat', { ok: okCount, total: totalSrc })) + ' · ' + h(t('autotask.sourceStatFailed', { n: failed.length })) + '</span>');
     }
     // brief link
     if (run.briefPath) {
-      subParts.push('<a class="autotask-history-sub-brief" href="#/article/' + h(run.briefPath) + '">简报 →</a>');
+      subParts.push('<a class="autotask-history-sub-brief" href="#/article/' + h(run.briefPath) + '">' + h(t('autotask.briefLink')) + '</a>');
     }
     if (subParts.length) {
       s += '<div class="autotask-history-sub">' + subParts.join('<span class="autotask-history-sub-sep">·</span>') + '</div>';
@@ -477,31 +470,25 @@ function renderRunSummaryCard(run) {
     // Expand area
     if (expanded) {
       s += '<div class="autotask-history-expand">';
-      // 精确时间戳
-      s += '<div class="autotask-history-expand-line"><span class="autotask-history-expand-lbl">时间</span>' + h(tsStr) + (durStr ? ' · 耗时 ' + h(durStr) : '') + '</div>';
-      // 完整计数
-      s += '<div class="autotask-history-expand-line"><span class="autotask-history-expand-lbl">计数</span>考虑 ' + found + ' · 入库 ' + ingested + ' · 跳过 ' + skipped + '</div>';
-      // 完整错误
+      s += '<div class="autotask-history-expand-line"><span class="autotask-history-expand-lbl">' + h(t('autotask.expandTime')) + '</span>' + h(tsStr) + (durStr ? ' · ' + h(t('autotask.expandDuration', { dur: durStr })) : '') + '</div>';
+      s += '<div class="autotask-history-expand-line"><span class="autotask-history-expand-lbl">' + h(t('autotask.expandCounts')) + '</span>' + h(t('autotask.expandCountDetail', { found, ingested, skipped })) + '</div>';
       if (run.error) {
-        s += '<div class="autotask-history-expand-line autotask-history-expand-err"><span class="autotask-history-expand-lbl">错误</span>' + h(run.error) + '</div>';
+        s += '<div class="autotask-history-expand-line autotask-history-expand-err"><span class="autotask-history-expand-lbl">' + h(t('autotask.expandError')) + '</span>' + h(run.error) + '</div>';
       }
-      // skip reasons
       if (topReasons.length) {
-        s += '<div class="autotask-history-expand-line"><span class="autotask-history-expand-lbl">跳过原因</span>';
+        s += '<div class="autotask-history-expand-line"><span class="autotask-history-expand-lbl">' + h(t('autotask.expandSkipReasons')) + '</span>';
         s += topReasons.map(r => '<span class="autotask-source-chip">' + h(r.label) + ' · ' + r.count + '</span>').join('');
         s += '</div>';
       }
-      // 失败源详情
       if (failed.length > 0) {
-        s += '<div class="autotask-history-expand-line"><span class="autotask-history-expand-lbl">失败源</span><ul class="autotask-history-expand-sources">';
+        s += '<div class="autotask-history-expand-line"><span class="autotask-history-expand-lbl">' + h(t('autotask.expandFailedSources')) + '</span><ul class="autotask-history-expand-sources">';
         failed.forEach(([id, v]) => {
-          s += '<li>' + h(id) + '：' + h(truncate(v.error || '未知错误', 120)) + '</li>';
+          s += '<li>' + h(id) + ': ' + h(truncate(v.error || t('autotask.expandUnknownError'), 120)) + '</li>';
         });
         s += '</ul></div>';
       }
-      // 全 OK 但展开了也展示源总数
       if (totalSrc > 0 && failed.length === 0) {
-        s += '<div class="autotask-history-expand-line"><span class="autotask-history-expand-lbl">源</span>' + okCount + '/' + totalSrc + ' OK</div>';
+        s += '<div class="autotask-history-expand-line"><span class="autotask-history-expand-lbl">' + h(t('autotask.expandSourcesOk')) + '</span>' + okCount + '/' + totalSrc + ' OK</div>';
       }
       // per-item
       if ((run.items || []).length) s += renderRunItems(run);
@@ -519,7 +506,7 @@ function computeTopReasons(run) {
   const serverList = run.topGatedReasons || run.gatedOutTopReasons;
   if (Array.isArray(serverList) && serverList.length) {
     return serverList.slice(0, 3).map(r => ({
-      label: r.reason || r.label || '其他',
+      label: r.reason || r.label || t('autotask.otherReason'),
       count: r.count || 0
     }));
   }
@@ -528,7 +515,7 @@ function computeTopReasons(run) {
   const counter = new Map();
   items.forEach(it => {
     if (it.status === 'skipped' || it.status === 'gated_out') {
-      const k = (it.reason || '其他').slice(0, 40);
+      const k = (it.reason || t('autotask.otherReason')).slice(0, 40);
       counter.set(k, (counter.get(k) || 0) + 1);
     }
   });
@@ -554,7 +541,7 @@ function renderRunItems(run) {
     const isSmartFill = (!!it.smartFill || status === 'smart_fill') && !isPending;
     const isGated = status === 'skipped' || status === 'gated_out';
     const isIngested = status === 'ingested';
-    const titleStr = h(it.title || '无标题');
+    const titleStr = h(it.title || t('autotask.noTitle'));
     // Brief row: title 指向简报文章; compile_error: 可点原 URL; 其他沿用现有逻辑
     let titleHtml;
     if (isBrief && it.articlePath) {
@@ -583,7 +570,7 @@ function renderRunItems(run) {
 
     // Brief 分支最优先:只渲染 badge + title,不走任何反馈/后续逻辑
     if (isBrief) {
-      s += '<span class="autotask-run-item-badge-brief">简报</span>';
+      s += '<span class="autotask-run-item-badge-brief">' + h(t('autotask.badgeBrief')) + '</span>';
       s += '<span class="autotask-run-item-title">' + titleHtml + '</span>';
       s += '</div>';
       void itemKey;
@@ -593,18 +580,17 @@ function renderRunItems(run) {
     // compile_error:红字错误文案 + 可选原始素材链接,不渲染反馈按钮
     if (isCompileError) {
       s += '<span class="autotask-run-item-title">' + titleHtml + '</span>';
-      let errText = '内容生成失败';
-      if (it.reason) errText += '：' + truncate(it.reason, 60);
+      let errText = it.reason ? t('autotask.compileFailedReason', { reason: truncate(it.reason, 60) }) : t('autotask.compileFailed');
       s += '<span class="autotask-run-item-reason" style="color:var(--red)">' + h(errText) + '</span>';
       if (it.rawArchivePath) {
-        s += '<a class="autotask-run-item-raw" href="/raw/' + h(it.rawArchivePath) + '" target="_blank" rel="noopener">查看原始素材</a>';
+        s += '<a class="autotask-run-item-raw" href="/raw/' + h(it.rawArchivePath) + '" target="_blank" rel="noopener">' + h(t('autotask.viewRawMaterial')) + '</a>';
       }
       s += '</div>';
       void itemKey;
       return;
     }
 
-    if (isSmartFill) s += '<span class="autotask-item-badge">前 3 天</span>';
+    if (isSmartFill) s += '<span class="autotask-item-badge">' + h(t('autotask.badgeSmartFill')) + '</span>';
     s += '<span class="autotask-run-item-title">' + titleHtml + '</span>';
 
     if (isIngested) {
@@ -613,26 +599,26 @@ function renderRunItems(run) {
       }
       // Up + Down buttons
       s += '<span class="autotask-feedback-actions">';
-      s += '<button class="autotask-fb-btn" title="想要更多这种"' + upKey + ' onclick="submitFeedback(\'' + h(taskId || '') + '\',\'' + h(runId || '') + '\',\'' + escapeAttr(it.url || it.title || '') + '\',\'up\',this)">↑</button>';
-      s += '<button class="autotask-fb-btn" title="不想要这种"' + upKey + ' onclick="submitFeedback(\'' + h(taskId || '') + '\',\'' + h(runId || '') + '\',\'' + escapeAttr(it.url || it.title || '') + '\',\'down\',this)">↓</button>';
+      s += '<button class="autotask-fb-btn" title="' + h(t('autotask.feedbackWantMore')) + '"' + upKey + ' onclick="submitFeedback(\'' + h(taskId || '') + '\',\'' + h(runId || '') + '\',\'' + escapeAttr(it.url || it.title || '') + '\',\'up\',this)">\u2191</button>';
+      s += '<button class="autotask-fb-btn" title="' + h(t('autotask.feedbackDontWant')) + '"' + upKey + ' onclick="submitFeedback(\'' + h(taskId || '') + '\',\'' + h(runId || '') + '\',\'' + escapeAttr(it.url || it.title || '') + '\',\'down\',this)">\u2193</button>';
       s += '</span>';
     } else if (isGated) {
       if (it.reason) s += '<span class="autotask-run-item-reason">' + h(truncate(it.reason, 40)) + '</span>';
       s += '<span class="autotask-feedback-actions">';
-      s += '<button class="autotask-fb-btn"' + upKey + ' title="其实我想要" onclick="submitFeedback(\'' + h(taskId || '') + '\',\'' + h(runId || '') + '\',\'' + escapeAttr(it.url || it.title || '') + '\',\'up\',this)">↑ 其实我想要</button>';
+      s += '<button class="autotask-fb-btn"' + upKey + ' title="' + h(t('autotask.feedbackActuallyWant')) + '" onclick="submitFeedback(\'' + h(taskId || '') + '\',\'' + h(runId || '') + '\',\'' + escapeAttr(it.url || it.title || '') + '\',\'up\',this)">\u2191 ' + h(t('autotask.feedbackActuallyWant')) + '</button>';
       s += '</span>';
     } else if (isSmartFill) {
       s += '<span class="autotask-feedback-actions">';
-      s += '<button class="autotask-fb-btn"' + upKey + ' title="不想要这种" onclick="submitFeedback(\'' + h(taskId || '') + '\',\'' + h(runId || '') + '\',\'' + escapeAttr(it.url || it.title || '') + '\',\'down\',this)">↓</button>';
+      s += '<button class="autotask-fb-btn"' + upKey + ' title="' + h(t('autotask.feedbackDontWant')) + '" onclick="submitFeedback(\'' + h(taskId || '') + '\',\'' + h(runId || '') + '\',\'' + escapeAttr(it.url || it.title || '') + '\',\'down\',this)">\u2193</button>';
       s += '</span>';
     } else if (status === 'kept_pending' || status === 'smart_fill_pending') {
       // In-flight: gate passed, processing not done yet
-      s += '<span class="autotask-run-item-reason autotask-run-item-pending">处理中…</span>';
+      s += '<span class="autotask-run-item-reason autotask-run-item-pending">' + h(t('autotask.itemPending')) + '</span>';
       if (typeof it.confidence === 'number') {
         s += '<span class="autotask-run-item-conf">confidence: ' + it.confidence.toFixed(2) + '</span>';
       }
     } else if (status === 'fetch_error') {
-      s += '<span class="autotask-run-item-reason" style="color:var(--red)">抓取失败' + (it.reason ? '：' + h(truncate(it.reason, 40)) : '') + '</span>';
+      s += '<span class="autotask-run-item-reason" style="color:var(--red)">' + (it.reason ? h(t('autotask.fetchFailedReason', { reason: truncate(it.reason, 40) })) : h(t('autotask.fetchFailed'))) + '</span>';
     } else {
       // unknown
       if (it.reason) s += '<span class="autotask-run-item-reason">' + h(truncate(it.reason, 40)) + '</span>';
@@ -685,9 +671,9 @@ export async function submitFeedback(taskId, runId, itemUrl, action, btnEl) {
   }
   try {
     await post('/api/autotask/feedback', { taskId, runId, itemUrl, action });
-    toast('已记录，AI 下次会参考');
+    toast(t('autotask.feedbackRecorded'));
   } catch (e) {
-    toast('反馈接口尚未就绪');
+    toast(t('autotask.feedbackNotReady'));
     feedbackPending.delete(fbKey);
     if (btnEl && btnEl.parentElement) {
       btnEl.parentElement.querySelectorAll('button').forEach(b => { b.disabled = false; });
@@ -721,8 +707,8 @@ export function openAutotaskModal(taskId) {
   if (!modal) return;
 
   if (taskId) {
-    const task = tasks.find(t => t.id === taskId);
-    title.textContent = '编辑任务';
+    const task = tasks.find(tk => tk.id === taskId);
+    title.textContent = t('autotask.wizard.editTitle');
     if (task) {
       // Pre-fill draft from task to land on step 2 directly
       wizardIntent = task.intent || '';
@@ -741,7 +727,7 @@ export function openAutotaskModal(taskId) {
       wizardStep = 2;
     }
   } else {
-    title.textContent = '新建任务';
+    title.textContent = t('autotask.wizard.createTitle');
   }
 
   if (wizardStep === 2 && wizardDraft) renderWizardStep2();
@@ -766,19 +752,19 @@ function renderWizardStep1() {
   const wiz = $('autotaskWizard');
   if (!wiz) return;
   let s = '<div class="autotask-wizard-step1">';
-  s += '<div class="autotask-intent-label">描述你想了解什么：</div>';
+  s += '<div class="autotask-intent-label">' + h(t('autotask.wizard.intentLabel')) + '</div>';
   s += '<div class="autotask-nl-section">';
-  s += '<textarea class="autotask-nl-textarea" id="autotaskIntentInput" rows="4" placeholder="了解大厂 AI 研究新进展，重点是论文和技术博客，跳过招聘和市场活动" oninput="window._autotaskIntentChange&&window._autotaskIntentChange(this.value)">' + h(wizardIntent) + '</textarea>';
+  s += '<textarea class="autotask-nl-textarea" id="autotaskIntentInput" rows="4" placeholder="' + h(t('autotask.wizard.intentPlaceholder')) + '" oninput="window._autotaskIntentChange&&window._autotaskIntentChange(this.value)">' + h(wizardIntent) + '</textarea>';
   s += '</div>';
 
   // Preset chips: one-click fill the textarea. Grouped by topic.
   s += '<div class="autotask-intent-presets">';
-  s += '<div class="autotask-intent-presets-label">不知道写什么？试试这些：</div>';
+  s += '<div class="autotask-intent-presets-label">' + h(t('autotask.wizard.presetHint')) + '</div>';
   // Preserve original order while grouping by `group` field
   const _groupOrder = [];
   const _grouped = new Map();
-  INTENT_PRESETS.forEach((p, i) => {
-    const g = p.group || '其他';
+  getIntentPresets().forEach((p, i) => {
+    const g = p.group || t('autotask.source.otherGroup');
     if (!_grouped.has(g)) { _grouped.set(g, []); _groupOrder.push(g); }
     _grouped.get(g).push({ p, i });
   });
@@ -795,15 +781,15 @@ function renderWizardStep1() {
   s += '</div>';
 
   if (wizardBusy) {
-    s += '<div class="autotask-loading-msg">AI 正在挑选合适的信息源…</div>';
+    s += '<div class="autotask-loading-msg">' + h(t('autotask.wizard.aiPickingSources')) + '</div>';
   }
 
   s += '</div>';
 
   // Footer
   s += '<div class="autotask-wizard-footer">';
-  s += '<button class="btn-outline" onclick="closeAutotaskModal()">取消</button>';
-  s += '<button class="btn-sm-fill" id="autotaskConfigureBtn"' + (wizardBusy ? ' disabled' : '') + ' onclick="submitConfigureIntent()">' + (wizardBusy ? '配置中…' : '让 AI 配 →') + '</button>';
+  s += '<button class="btn-outline" onclick="closeAutotaskModal()">' + h(t('common.cancel')) + '</button>';
+  s += '<button class="btn-sm-fill" id="autotaskConfigureBtn"' + (wizardBusy ? ' disabled' : '') + ' onclick="submitConfigureIntent()">' + (wizardBusy ? h(t('autotask.wizard.configuring')) : h(t('autotask.wizard.configureBtn'))) + '</button>';
   s += '</div>';
 
   wiz.innerHTML = s;
@@ -819,7 +805,7 @@ function renderWizardStep1() {
 /* ── Pick a preset: fill textarea + sync state ── */
 export function pickAutotaskIntentPreset(idx) {
   if (wizardBusy) return;
-  const preset = INTENT_PRESETS[idx];
+  const preset = getIntentPresets()[idx];
   if (!preset) return;
   wizardIntent = preset.text;
   const ta = $('autotaskIntentInput');
@@ -835,17 +821,17 @@ export function pickAutotaskIntentPreset(idx) {
 export async function submitConfigureIntent() {
   if (wizardBusy) return;
   const intent = (wizardIntent || '').trim();
-  if (!intent) { toast('请描述你想了解什么'); return; }
+  if (!intent) { toast(t('autotask.wizard.describeEmpty')); return; }
   wizardBusy = true;
   renderWizardStep1();
   try {
     const body = { intent };
     if (wizardTaskId && wizardDraft) body.current = wizardDraft;
     const res = await postRaw('/api/autotask/configure', body);
-    if (!res || !res.ok) throw new Error((res && res.error) || 'AI 配置失败');
+    if (!res || !res.ok) throw new Error((res && res.error) || t('autotask.wizard.aiConfigError'));
     const cfg = res.config || res;
     wizardDraft = {
-      name: cfg.name || '新任务',
+      name: cfg.name || t('autotask.wizard.defaultName'),
       intent,
       sources: Array.isArray(cfg.sources) ? cfg.sources : [],
       preferences: cfg.preferences || { expanded_keywords: [], style_hint: '', must_exclude: [] },
@@ -861,7 +847,7 @@ export async function submitConfigureIntent() {
     renderWizardStep2();
   } catch (e) {
     wizardBusy = false;
-    toast('AI 配置失败: ' + (e.message || '请稍后重试'));
+    toast(t('autotask.wizard.configureFailed', { msg: e.message || '' }));
     renderWizardStep1();
   }
 }
@@ -876,28 +862,28 @@ function renderWizardStep2() {
 
   // Task name
   s += '<div class="autotask-section">';
-  s += '<label class="autotask-section-label">任务名</label>';
+  s += '<label class="autotask-section-label">' + h(t('autotask.wizard.taskName')) + '</label>';
   s += '<input class="autotask-input" id="autotaskNameInput" type="text" value="' + h(d.name || '') + '" oninput="window._autotaskNameChange&&window._autotaskNameChange(this.value)">';
   s += '</div>';
 
   // Sources chips
   s += '<div class="autotask-section">';
-  s += '<label class="autotask-section-label">匹配的源 (' + (d.sources || []).length + ')</label>';
+  s += '<label class="autotask-section-label">' + h(t('autotask.wizard.matchedSources', { n: (d.sources || []).length })) + '</label>';
   s += '<div class="autotask-source-list">';
   (d.sources || []).forEach((src, idx) => {
-    const name = src.label || src.name || src.id || '未命名源';
+    const name = src.label || src.name || src.id || t('autotask.wizard.unnamedSource');
     s += '<span class="autotask-source-tag">';
     s += '<span class="autotask-source-tag-name">' + h(name) + '</span>';
-    s += '<button class="autotask-source-tag-x" title="移除" onclick="removeSourceFromDraft(' + idx + ')">×</button>';
+    s += '<button class="autotask-source-tag-x" title="' + h(t('autotask.wizard.removeSource')) + '" onclick="removeSourceFromDraft(' + idx + ')">×</button>';
     s += '</span>';
   });
-  s += '<button class="autotask-add-source-btn" onclick="openSourcePicker()">+ 添加更多源</button>';
+  s += '<button class="autotask-add-source-btn" onclick="openSourcePicker()">' + h(t('autotask.wizard.addMoreSources')) + '</button>';
   s += '</div>';
   s += '</div>';
 
   // LLM smart filter (locked ON)
   s += '<div class="autotask-section autotask-section-row">';
-  s += '<label class="autotask-section-label">LLM 智能筛选</label>';
+  s += '<label class="autotask-section-label">' + h(t('autotask.wizard.llmFilter')) + '</label>';
   s += '<span class="autotask-toggle-locked"><span class="autotask-toggle-locked-dot"></span>ON</span>';
   s += '</div>';
 
@@ -905,7 +891,7 @@ function renderWizardStep2() {
   const exKw = (d.preferences && d.preferences.expanded_keywords) || [];
   if (exKw.length) {
     s += '<div class="autotask-section">';
-    s += '<label class="autotask-section-label">扩展关键词</label>';
+    s += '<label class="autotask-section-label">' + h(t('autotask.wizard.expandedKeywords')) + '</label>';
     s += '<div class="autotask-keyword-chips">';
     exKw.forEach(kw => {
       s += '<span class="autotask-keyword-chip">' + h(kw) + '</span>';
@@ -916,29 +902,29 @@ function renderWizardStep2() {
 
   // Schedule
   s += '<div class="autotask-section autotask-section-row">';
-  s += '<label class="autotask-section-label">执行时机</label>';
+  s += '<label class="autotask-section-label">' + h(t('autotask.wizard.schedule')) + '</label>';
   s += '<span class="autotask-schedule-row">';
-  s += '<span>每天</span>';
+  s += '<span>' + h(t('autotask.wizard.everyDay')) + '</span>';
   s += '<input class="autotask-input-sm" type="time" value="' + h(d.scheduleTime || '09:00') + '" oninput="window._autotaskScheduleTimeChange&&window._autotaskScheduleTimeChange(this.value)">';
   s += '<select class="autotask-input-sm" onchange="window._autotaskScheduleChange&&window._autotaskScheduleChange(this.value)">';
   ['daily', 'hourly', 'manual'].forEach(v => {
-    s += '<option value="' + v + '"' + (d.schedule === v ? ' selected' : '') + '>' + SCHEDULE_LABELS[v] + '</option>';
+    s += '<option value="' + v + '"' + (d.schedule === v ? ' selected' : '') + '>' + h(getScheduleLabels()[v]) + '</option>';
   });
   s += '</select>';
-  s += '<span>执行</span>';
+  s += '<span>' + h(t('autotask.wizard.executeLabel')) + '</span>';
   s += '</span>';
   s += '</div>';
 
   // More settings (collapsed)
   s += '<div class="autotask-section">';
-  s += '<button class="autotask-advanced-toggle" onclick="toggleWizardAdvanced()">▾ 更多设置</button>';
+  s += '<button class="autotask-advanced-toggle" onclick="toggleWizardAdvanced()">\u25BE ' + h(t('autotask.wizard.moreSettings')) + '</button>';
   if (wizardAdvancedOpen) {
     s += '<div class="autotask-advanced-panel">';
     // Topic
     s += '<div class="autotask-adv-row">';
-    s += '<label class="autotask-section-label">主题分类</label>';
+    s += '<label class="autotask-section-label">' + h(t('autotask.wizard.topicClassify')) + '</label>';
     s += '<select class="autotask-input-sm" onchange="window._autotaskTopicChange&&window._autotaskTopicChange(this.value)">';
-    s += '<option value="auto"' + (d.topic === 'auto' ? ' selected' : '') + '>auto (自动分类)</option>';
+    s += '<option value="auto"' + (d.topic === 'auto' ? ' selected' : '') + '>' + h(t('autotask.wizard.topicAuto')) + '</option>';
     topicsList.forEach(tp => {
       s += '<option value="' + h(tp) + '"' + (d.topic === tp ? ' selected' : '') + '>' + h(tp) + '</option>';
     });
@@ -946,19 +932,19 @@ function renderWizardStep2() {
     s += '</div>';
     // maxPerRun
     s += '<div class="autotask-adv-row">';
-    s += '<label class="autotask-section-label">每次最多入库</label>';
+    s += '<label class="autotask-section-label">' + h(t('autotask.wizard.maxPerRun')) + '</label>';
     s += '<input class="autotask-input-sm" type="number" min="1" max="50" value="' + (d.maxPerRun || 10) + '" oninput="window._autotaskMaxPerRunChange&&window._autotaskMaxPerRunChange(this.value)">';
     s += '</div>';
     // Must exclude (chips + add)
     const mustExc = (d.preferences && d.preferences.must_exclude) || [];
     s += '<div class="autotask-adv-row autotask-adv-row-block">';
-    s += '<label class="autotask-section-label">必须排除关键词</label>';
+    s += '<label class="autotask-section-label">' + h(t('autotask.wizard.mustExclude')) + '</label>';
     s += '<div class="autotask-keyword-chips" id="autotaskMustExcChips">';
     mustExc.forEach((kw, idx) => {
       s += '<span class="autotask-keyword-chip removable">' + h(kw) + '<button class="autotask-keyword-chip-x" onclick="removeMustExclude(' + idx + ')">×</button></span>';
     });
     s += '</div>';
-    s += '<input class="autotask-input-sm" type="text" placeholder="输入后回车" onkeydown="window._autotaskMustExcKey&&window._autotaskMustExcKey(event,this)">';
+    s += '<input class="autotask-input-sm" type="text" placeholder="' + h(t('autotask.wizard.mustExcludePH')) + '" onkeydown="window._autotaskMustExcKey&&window._autotaskMustExcKey(event,this)">';
     s += '</div>';
     s += '</div>';
   }
@@ -968,8 +954,8 @@ function renderWizardStep2() {
 
   // Footer
   s += '<div class="autotask-wizard-footer">';
-  s += '<button class="btn-outline" onclick="backToWizardStep1()">← 重新描述</button>';
-  s += '<button class="btn-sm-fill" id="autotaskConfirmBtn"' + (wizardBusy ? ' disabled' : '') + ' onclick="confirmCreateTask()">' + (wizardTaskId ? '保存修改 →' : '确认创建 →') + '</button>';
+  s += '<button class="btn-outline" onclick="backToWizardStep1()">' + h(t('autotask.wizard.backBtn')) + '</button>';
+  s += '<button class="btn-sm-fill" id="autotaskConfirmBtn"' + (wizardBusy ? ' disabled' : '') + ' onclick="confirmCreateTask()">' + (wizardTaskId ? h(t('autotask.wizard.confirmEdit')) : h(t('autotask.wizard.confirmCreate'))) + '</button>';
   s += '</div>';
 
   wiz.innerHTML = s;
@@ -1048,7 +1034,7 @@ export async function openSourcePicker() {
       sourceLibraryError = null;
     } catch (e) {
       sourceLibrary = [];
-      sourceLibraryError = '源库未加载';
+      sourceLibraryError = t('autotask.source.loadError');
     }
     sourceLibraryLoaded = true;
   }
@@ -1081,24 +1067,24 @@ function renderSourcePicker() {
   // Group by first tag
   const groups = new Map();
   filtered.forEach(s => {
-    const tag = (s.tags && s.tags[0]) || '其他';
+    const tag = (s.tags && s.tags[0]) || t('autotask.source.otherGroup');
     if (!groups.has(tag)) groups.set(tag, []);
     groups.get(tag).push(s);
   });
 
   let s = '<div class="autotask-modal autotask-source-picker-modal">';
-  s += '<div class="modal-top"><h3>选择信息源</h3><button onclick="closeSourcePicker()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>';
+  s += '<div class="modal-top"><h3>' + h(t('autotask.source.title')) + '</h3><button onclick="closeSourcePicker()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>';
   s += '<div class="autotask-source-picker-search">';
-  s += '<input class="autotask-input" type="text" placeholder="搜索源..." value="' + h(sourcePickerSearch) + '" oninput="window._autotaskSrcSearchChange&&window._autotaskSrcSearchChange(this.value)" autofocus>';
+  s += '<input class="autotask-input" type="text" placeholder="' + h(t('autotask.source.searchPH')) + '" value="' + h(sourcePickerSearch) + '" oninput="window._autotaskSrcSearchChange&&window._autotaskSrcSearchChange(this.value)" autofocus>';
   s += '</div>';
   s += '<div class="autotask-source-picker-body">';
 
   if (sourceLibraryError) {
     s += '<div class="autotask-source-picker-empty">' + h(sourceLibraryError) + '</div>';
   } else if (!lib.length) {
-    s += '<div class="autotask-source-picker-empty">源库为空</div>';
+    s += '<div class="autotask-source-picker-empty">' + h(t('autotask.source.empty')) + '</div>';
   } else if (!filtered.length) {
-    s += '<div class="autotask-source-picker-empty">没有匹配的源</div>';
+    s += '<div class="autotask-source-picker-empty">' + h(t('autotask.source.noMatch')) + '</div>';
   } else {
     Array.from(groups.entries()).forEach(([tag, items]) => {
       s += '<div class="autotask-source-picker-group">';
@@ -1119,8 +1105,8 @@ function renderSourcePicker() {
 
   s += '</div>';
   s += '<div class="autotask-wizard-footer">';
-  s += '<button class="btn-outline" onclick="closeSourcePicker()">取消</button>';
-  s += '<button class="btn-sm-fill" onclick="confirmSourcePicker()">确定</button>';
+  s += '<button class="btn-outline" onclick="closeSourcePicker()">' + h(t('common.cancel')) + '</button>';
+  s += '<button class="btn-sm-fill" onclick="confirmSourcePicker()">' + h(t('common.confirm')) + '</button>';
   s += '</div>';
   s += '</div>';
 
@@ -1157,14 +1143,14 @@ export function confirmSourcePicker() {
 /* ── Step 2 confirm: create task ── */
 export async function confirmCreateTask() {
   if (wizardBusy) return;
-  if (!wizardDraft) { toast('没有可保存的配置'); return; }
+  if (!wizardDraft) { toast(t('autotask.wizard.noConfig')); return; }
   const d = wizardDraft;
-  if (!d.name || !d.name.trim()) { toast('请填写任务名'); return; }
-  if (!Array.isArray(d.sources) || !d.sources.length) { toast('请至少添加一个源'); return; }
+  if (!d.name || !d.name.trim()) { toast(t('autotask.wizard.nameRequired')); return; }
+  if (!Array.isArray(d.sources) || !d.sources.length) { toast(t('autotask.wizard.sourceRequired')); return; }
 
   wizardBusy = true;
   const btn = $('autotaskConfirmBtn');
-  if (btn) { btn.disabled = true; btn.textContent = '保存中...'; }
+  if (btn) { btn.disabled = true; btn.textContent = t('autotask.wizard.saving'); }
 
   const body = {
     name: d.name.trim(),
@@ -1182,17 +1168,17 @@ export async function confirmCreateTask() {
   try {
     if (wizardTaskId) {
       await put('/api/autotask/' + wizardTaskId, body);
-      toast('任务已更新');
+      toast(t('autotask.wizard.taskUpdated'));
     } else {
       await post('/api/autotask', body);
-      toast('任务已创建');
+      toast(t('autotask.wizard.taskCreated'));
     }
     closeAutotaskModal();
     const c = $('content');
     if (c) await rAutotask(c);
   } catch (e) {
-    toast('保存失败: ' + e.message);
-    if (btn) { btn.disabled = false; btn.textContent = wizardTaskId ? '保存修改 →' : '确认创建 →'; }
+    toast(t('autotask.wizard.saveFailed', { msg: e.message }));
+    if (btn) { btn.disabled = false; btn.textContent = wizardTaskId ? t('autotask.wizard.confirmEdit') : t('autotask.wizard.confirmCreate'); }
   } finally {
     wizardBusy = false;
   }
@@ -1209,7 +1195,7 @@ export async function runAutotask(taskId) {
   try {
     const res = await post('/api/autotask/' + taskId + '/run', {});
     const runId = res && res.runId;
-    if (!runId) { toast('已触发但未拿到 runId'); return; }
+    if (!runId) { toast(t('autotask.triggered')); return; }
     watchingRunId = runId;
     currentTab = 'history';
     try { localStorage.setItem(TAB_STORAGE_KEY, 'history'); } catch (_) {}
@@ -1217,9 +1203,9 @@ export async function runAutotask(taskId) {
     const c = $('content');
     if (c) renderPage(c);
     startPolling();
-    toast('任务执行中，已跳转到执行历史');
+    toast(t('autotask.runStarted'));
   } catch (e) {
-    toast('执行失败: ' + e.message);
+    toast(t('autotask.runFailed', { msg: e.message }));
   }
 }
 
@@ -1268,7 +1254,7 @@ function patchRunningCardInPlace(run) {
   const fill = row.querySelector('.autotask-progress-fill');
   if (fill) fill.style.width = pct + '%';
 
-  const phaseLabel = prog.phase === 'fetching' ? '抓取数据源...' : prog.phase === 'filtering' ? '过滤中...' : '处理条目';
+  const phaseLabel = prog.phase === 'fetching' ? t('autotask.phaseFetching') : prog.phase === 'filtering' ? t('autotask.phaseFiltering') : t('autotask.phaseProcessing');
   const meta = row.querySelector('.autotask-history-meta');
   if (meta) {
     let metaHtml;
@@ -1277,11 +1263,11 @@ function patchRunningCardInPlace(run) {
     } else {
       metaHtml = h(phaseLabel);
     }
-    if (run.itemsIngested) metaHtml += ' · 已入库 ' + run.itemsIngested;
-    if (run.itemsSkipped) metaHtml += ' · 已跳过 ' + run.itemsSkipped;
+    if (run.itemsIngested) metaHtml += ' \u00B7 ' + h(t('autotask.progressIngested', { n: run.itemsIngested }));
+    if (run.itemsSkipped) metaHtml += ' \u00B7 ' + h(t('autotask.progressSkipped', { n: run.itemsSkipped }));
     if (prog.currentTitle) {
-      const t = prog.currentTitle.length > 80 ? prog.currentTitle.slice(0, 78) + '...' : prog.currentTitle;
-      metaHtml += '<div class="autotask-progress-current">当前: ' + h(t) + '</div>';
+      const titleTrunc = prog.currentTitle.length > 80 ? prog.currentTitle.slice(0, 78) + '...' : prog.currentTitle;
+      metaHtml += '<div class="autotask-progress-current">' + h(t('autotask.progressCurrent', { title: titleTrunc })) + '</div>';
     }
     meta.innerHTML = metaHtml;
   }
@@ -1319,8 +1305,8 @@ async function pollOnce() {
       } catch (_) {}
       if (onHistoryTab) renderPage(c);
       if (run) {
-        const label = run.status === 'success' ? '执行完成' : run.status === 'partial' ? '部分完成' : '执行失败';
-        toast(label + '：入库 ' + (run.itemsIngested || 0) + ' · 跳过 ' + (run.itemsSkipped || 0));
+        const label = run.status === 'success' ? t('autotask.runDoneSuccess') : run.status === 'partial' ? t('autotask.runDonePartial') : t('autotask.runDoneError');
+        toast(t('autotask.runDone', { label, ingested: run.itemsIngested || 0, skipped: run.itemsSkipped || 0 }));
       }
     }
   } catch (_) {
@@ -1332,26 +1318,26 @@ async function pollOnce() {
 export async function toggleAutotaskEnabled(taskId) {
   try {
     const res = await api('/api/autotask/' + taskId + '/toggle');
-    const t = tasks.find(x => x.id === taskId);
-    if (t) t.enabled = res.enabled;
-    toast(res.enabled ? '任务已启用' : '任务已暂停');
+    const tk = tasks.find(x => x.id === taskId);
+    if (tk) tk.enabled = res.enabled;
+    toast(res.enabled ? t('autotask.taskEnabled') : t('autotask.taskPaused'));
   } catch (e) {
-    toast('操作失败: ' + e.message);
+    toast(t('autotask.opFailed', { msg: e.message }));
     const c = $('content');
     if (c) renderPage(c);
   }
 }
 
 export async function deleteAutotask(taskId) {
-  if (!confirm('确定要删除这个任务吗？')) return;
+  if (!confirm(t('autotask.confirmDelete'))) return;
   try {
     await apiDel('/api/autotask/' + taskId);
-    tasks = tasks.filter(t => t.id !== taskId);
-    toast('任务已删除');
+    tasks = tasks.filter(tk => tk.id !== taskId);
+    toast(t('autotask.taskDeleted'));
     const c = $('content');
     if (c) renderPage(c);
   } catch (e) {
-    toast('删除失败: ' + e.message);
+    toast(t('autotask.deleteFailed', { msg: e.message }));
   }
 }
 

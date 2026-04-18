@@ -3,6 +3,7 @@ import state from '../state.js';
 import { buildComposer, initComposer } from '../composer.js';
 import { fmtChat } from '../markdown.js';
 import { updSidebarChats } from '../sidebar.js';
+import { t } from '../i18n.js';
 
 export async function rChatList(c) {
   c.innerHTML = '<div class="page-chat-list">' + skelLines(5) + '</div>';
@@ -10,9 +11,9 @@ export async function rChatList(c) {
     const raw = await api('/api/chat/list');
     const list = Array.isArray(raw) ? raw : (raw && raw.conversations) || [];
     state.chatList = list;
-    let s = '<div class="page-chat-list"><div class="chat-list-heading">对话</div>';
+    let s = '<div class="page-chat-list"><div class="chat-list-heading">' + t('chat.heading') + '</div>';
     if (!list.length) {
-      s += '<div class="chat-list-empty"><p style="margin-bottom:4px">还没有对话</p><p style="font-size:12px;color:var(--fg-tertiary);margin-bottom:14px">开始你的第一个提问，AI 会结合知识库内容回答</p><button class="btn-fill" style="width:auto;padding:8px 20px" onclick="go(\'#/\')">开始提问</button></div>';
+      s += '<div class="chat-list-empty"><p style="margin-bottom:4px">' + t('chat.empty') + '</p><p style="font-size:12px;color:var(--fg-tertiary);margin-bottom:14px">' + t('chat.emptyHint') + '</p><button class="btn-fill" style="width:auto;padding:8px 20px" onclick="go(\'#/\')">' + t('chat.startAsk') + '</button></div>';
     } else {
       list.forEach(ch => {
         const d = ch.updatedAt ? new Date(ch.updatedAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) : '';
@@ -24,7 +25,7 @@ export async function rChatList(c) {
       });
     }
     s += '</div>'; c.innerHTML = s;
-  } catch (e) { c.innerHTML = '<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败</div>'; }
+  } catch (e) { c.innerHTML = '<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">' + t('common.loadFailed') + '</div>'; }
 }
 
 export async function delChat(id) {
@@ -34,7 +35,7 @@ export async function delChat(id) {
     const listBefore = Array.isArray(state.chatList) ? state.chatList.slice() : [];
     await apiDel('/api/chat/' + id);
     state.chatList = null;
-    toast('已归档');
+    toast(t('chat.archived'));
     // 若归档的是正在看的那条，必须清掉 convId/msgs/override，否则 rChat 里
     // sameConv=(state.convId===id && state.msgs.length>0) 判定为 true，
     // 会直接复用内存里缓存的消息重渲染，右侧看起来"没归档"。
@@ -54,7 +55,7 @@ export async function delChat(id) {
       return;
     }
     window.render();
-  } catch { toast('归档失败'); }
+  } catch { toast(t('chat.archiveFailed')); }
 }
 export { delChat as archiveChat };
 
@@ -90,18 +91,18 @@ export async function rChat(c, id) {
         : null;
     }
     renderChatPage(c);
-  } catch (e) { c.innerHTML = '<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败: ' + h(e.message) + '</div>'; }
+  } catch (e) { c.innerHTML = '<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">' + t('common.loadFailedMsg', { msg: h(e.message) }) + '</div>'; }
 }
 
 function renderChatPage(c) {
   let s = '<div class="page-chat"><div class="chat-messages" id="chatMsgs"><div class="chat-messages-inner">';
   if (!state.msgs.length) {
-    s += '<div class="chat-empty-state"><h3>开始新对话</h3><p>基于知识库的内容提问</p>';
+    s += '<div class="chat-empty-state"><h3>' + t('chat.newChat') + '</h3><p>' + t('chat.newChatSub') + '</p>';
     s += '<div class="chat-suggest-cards">';
-    s += '<div class="chat-suggest-card" onclick="$(\'cpIn\').value=this.textContent;$(\'cpSendBtn\').disabled=false;chatSend()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>知识库概览</div>';
-    s += '<div class="chat-suggest-card" onclick="$(\'cpIn\').value=this.textContent;$(\'cpSendBtn\').disabled=false;chatSend()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>最近更新了什么</div>';
-    s += '<div class="chat-suggest-card" onclick="$(\'cpIn\').value=this.textContent;$(\'cpSendBtn\').disabled=false;chatSend()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>总结一篇文章</div>';
-    s += '<div class="chat-suggest-card" onclick="$(\'cpIn\').value=this.textContent;$(\'cpSendBtn\').disabled=false;chatSend()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>有哪些主题</div>';
+    s += '<div class="chat-suggest-card" onclick="$(\'cpIn\').value=this.textContent;$(\'cpSendBtn\').disabled=false;chatSend()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' + t('chat.suggest1') + '</div>';
+    s += '<div class="chat-suggest-card" onclick="$(\'cpIn\').value=this.textContent;$(\'cpSendBtn\').disabled=false;chatSend()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' + t('chat.suggest2') + '</div>';
+    s += '<div class="chat-suggest-card" onclick="$(\'cpIn\').value=this.textContent;$(\'cpSendBtn\').disabled=false;chatSend()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>' + t('chat.suggest3') + '</div>';
+    s += '<div class="chat-suggest-card" onclick="$(\'cpIn\').value=this.textContent;$(\'cpSendBtn\').disabled=false;chatSend()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>' + t('chat.suggest4') + '</div>';
     s += '</div></div>';
   } else state.msgs.forEach(m => s += renderMsg(m));
   s += '</div></div>';
@@ -115,7 +116,7 @@ function renderChatPage(c) {
     const pbtn = document.createElement('button');
     pbtn.id = 'topbarPrecip'; pbtn.className = 'topbar-btn'; pbtn.style.color = 'var(--fg-tertiary)';
     pbtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg>';
-    pbtn.title = '沉淀对话';
+    pbtn.title = t('chat.precipitate');
     pbtn.onclick = () => precipitateConv();
     topActs.insertBefore(pbtn, topActs.firstChild);
   }
@@ -143,9 +144,9 @@ function renderMsg(m) {
     // Precipitate button (hover-visible) + precipitated badge
     s += '<div class="chat-msg-actions">';
     if (m.precipitated) {
-      s += '<a class="precip-badge" href="#/article/' + h(m.precipitated.articlePath) + '" title="' + h(m.precipitated.articleTitle) + '">已沉淀</a>';
+      s += '<a class="precip-badge" href="#/article/' + h(m.precipitated.articlePath) + '" title="' + h(m.precipitated.articleTitle) + '">' + t('chat.precipitatedBadge') + '</a>';
     } else if (m.id) {
-      s += '<button class="precip-btn" onclick="precipitateMsg(\'' + h(m.id) + '\')" title="沉淀为知识"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg></button>';
+      s += '<button class="precip-btn" onclick="precipitateMsg(\'' + h(m.id) + '\')" title="' + t('chat.precipitateMsg') + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg></button>';
     }
     s += '</div>';
   }
@@ -154,50 +155,50 @@ function renderMsg(m) {
 }
 
 export async function chatSend() {
-  const inp = $('cpIn'); const t = inp.value.trim(); if (!t || state.chatBusy) return;
+  const inp = $('cpIn'); const txt = inp.value.trim(); if (!txt || state.chatBusy) return;
   state.chatBusy = true; $('cpSendBtn').disabled = true;
   const emptyState = document.querySelector('.chat-empty-state'); if (emptyState) emptyState.remove();
   // 为本次发送生成唯一 id，占位符 / AI body 目标 dom id 都带 uid，避免叠发时 getElementById 拿到先前的元素。
   const uid = 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
   const typId = 'chatTyp_' + uid;
   const aiTypId = 'aiTyp_' + uid;
-  state.msgs.push({ role: 'user', content: t });
+  state.msgs.push({ role: 'user', content: txt });
   const msgsEl = $('chatMsgs');
   if (msgsEl) {
     const inner = msgsEl.querySelector('.chat-messages-inner');
     if (inner) {
-      inner.innerHTML += renderMsg({ role: 'user', content: t });
-      inner.innerHTML += '<div class="chat-msg assistant" id="' + typId + '"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body"><div class="chat-thinking"><span class="thinking-icon">🔍</span> 检索知识库…</div></div></div>';
+      inner.innerHTML += renderMsg({ role: 'user', content: txt });
+      inner.innerHTML += '<div class="chat-msg assistant" id="' + typId + '"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body"><div class="chat-thinking">' + t('chat.searching') + '</div></div></div>';
       msgsEl.scrollTop = msgsEl.scrollHeight;
     }
   }
   inp.value = ''; inp.style.height = 'auto';
   // 先检索，显示引用来源
   try {
-    const sr = await api('/api/search?q=' + encodeURIComponent(t));
+    const sr = await api('/api/search?q=' + encodeURIComponent(txt));
     const hits = (Array.isArray(sr) ? sr : sr.results || []).filter(r => !r.path.endsWith('index.md') && !r.path.endsWith('log.md')).slice(0, 5);
     const typ0 = document.getElementById(typId);
     if (typ0 && hits.length > 0) {
       const body = typ0.querySelector('.chat-msg-body');
       if (body) {
-        body.innerHTML = '<div class="chat-thinking"><span class="thinking-icon">📖</span> 参考 ' + hits.length + ' 篇文章'
+        body.innerHTML = '<div class="chat-thinking">' + t('chat.refArticles', { n: hits.length })
           + '<div class="chat-thinking-refs">' + hits.map(r => '<a href="#/article/' + h(r.path) + '">' + h(r.title || r.path) + '</a>').join('') + '</div>'
           + '</div><div class="chat-typing-dots"><span></span><span></span><span></span></div>';
         msgsEl.scrollTop = msgsEl.scrollHeight;
       }
     } else if (typ0) {
       const body = typ0.querySelector('.chat-msg-body');
-      if (body) body.innerHTML = '<div class="chat-thinking"><span class="thinking-icon">💭</span> 思考中…</div><div class="chat-typing-dots"><span></span><span></span><span></span></div>';
+      if (body) body.innerHTML = '<div class="chat-thinking">' + t('chat.thinking') + '</div><div class="chat-typing-dots"><span></span><span></span><span></span></div>';
     }
   } catch {}
   try {
     if (!state.convId) {
-      const body = { firstMessage: t };
+      const body = { firstMessage: txt };
       if (state.pendingModel) { Object.assign(body, state.pendingModel); }
       const newRes = await post('/api/chat/new', body);
       state.pendingModel = null;
       state.convId = newRes.conversation.id;
-      state.msgs = [{ role: 'user', content: t }, newRes.message];
+      state.msgs = [{ role: 'user', content: txt }, newRes.message];
       state.chatList = null;
       history.replaceState(null, '', '#/chat/' + state.convId);
       updSidebarChats();
@@ -206,7 +207,7 @@ export async function chatSend() {
       state.chatBusy = false; $('cpSendBtn').disabled = false;
       return;
     }
-    const res = await post('/api/chat/' + state.convId + '/message', { content: t });
+    const res = await post('/api/chat/' + state.convId + '/message', { content: txt });
     state.msgs.push(res.message);
     const typ = document.getElementById(typId);
     if (typ && msgsEl) {
@@ -234,7 +235,7 @@ export async function chatSend() {
         }
         // Show precipitate button
         if (msg.id) {
-          actionsEl.innerHTML = '<button class="precip-btn" onclick="precipitateMsg(\'' + h(msg.id) + '\')" title="沉淀为知识"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg></button>';
+          actionsEl.innerHTML = '<button class="precip-btn" onclick="precipitateMsg(\'' + h(msg.id) + '\')" title="' + t('chat.precipitateMsg') + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg></button>';
           actionsEl.style.opacity = '';
         }
         msgsEl.scrollTop = msgsEl.scrollHeight;
@@ -249,7 +250,7 @@ export async function chatSend() {
     const typ = document.getElementById(typId); if (typ) typ.remove();
     if (msgsEl) {
       const inner = msgsEl.querySelector('.chat-messages-inner');
-      if (inner) inner.innerHTML += '<div class="chat-msg assistant"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body" style="color:var(--red)">错误: ' + h(e.message) + '</div></div>';
+      if (inner) inner.innerHTML += '<div class="chat-msg assistant"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body" style="color:var(--red)">' + t('common.error', { msg: h(e.message) }) + '</div></div>';
     }
     // 出错分支同步释放，否则按钮永远灰
     state.chatBusy = false; $('cpSendBtn').disabled = false;
@@ -269,7 +270,7 @@ async function sendNewChat(text) {
   if (msgsEl) {
     const inner = msgsEl.querySelector('.chat-messages-inner');
     if (inner) {
-      inner.innerHTML += '<div class="chat-msg assistant" id="' + typId + '"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body"><div class="chat-thinking"><span class="thinking-icon">🔍</span> 检索知识库…</div></div></div>';
+      inner.innerHTML += '<div class="chat-msg assistant" id="' + typId + '"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body"><div class="chat-thinking">' + t('chat.searching') + '</div></div></div>';
       msgsEl.scrollTop = msgsEl.scrollHeight;
     }
   }
@@ -281,14 +282,14 @@ async function sendNewChat(text) {
     if (typ0 && hits.length > 0) {
       const body = typ0.querySelector('.chat-msg-body');
       if (body) {
-        body.innerHTML = '<div class="chat-thinking"><span class="thinking-icon">📖</span> 参考 ' + hits.length + ' 篇文章'
+        body.innerHTML = '<div class="chat-thinking">' + t('chat.refArticles', { n: hits.length })
           + '<div class="chat-thinking-refs">' + hits.map(r => '<a href="#/article/' + h(r.path) + '">' + h(r.title || r.path) + '</a>').join('') + '</div>'
           + '</div><div class="chat-typing-dots"><span></span><span></span><span></span></div>';
         msgsEl.scrollTop = msgsEl.scrollHeight;
       }
     } else if (typ0) {
       const body = typ0.querySelector('.chat-msg-body');
-      if (body) body.innerHTML = '<div class="chat-thinking"><span class="thinking-icon">💭</span> 思考中…</div><div class="chat-typing-dots"><span></span><span></span><span></span></div>';
+      if (body) body.innerHTML = '<div class="chat-thinking">' + t('chat.thinking') + '</div><div class="chat-typing-dots"><span></span><span></span><span></span></div>';
     }
   } catch {}
   try {
@@ -323,7 +324,7 @@ async function sendNewChat(text) {
           target.insertAdjacentHTML('beforeend', refsHtml);
         }
         if (msg.id) {
-          actionsEl.innerHTML = '<button class="precip-btn" onclick="precipitateMsg(\'' + h(msg.id) + '\')" title="沉淀为知识"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg></button>';
+          actionsEl.innerHTML = '<button class="precip-btn" onclick="precipitateMsg(\'' + h(msg.id) + '\')" title="' + t('chat.precipitateMsg') + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg></button>';
           actionsEl.style.opacity = '';
         }
         msgsEl.scrollTop = msgsEl.scrollHeight;
@@ -337,7 +338,7 @@ async function sendNewChat(text) {
     const typ = document.getElementById(typId); if (typ) typ.remove();
     if (msgsEl) {
       const inner = msgsEl.querySelector('.chat-messages-inner');
-      if (inner) inner.innerHTML += '<div class="chat-msg assistant"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body" style="color:var(--red)">错误: ' + h(e.message) + '</div></div>';
+      if (inner) inner.innerHTML += '<div class="chat-msg assistant"><div class="chat-msg-avatar">AI</div><div class="chat-msg-body" style="color:var(--red)">' + t('common.error', { msg: h(e.message) }) + '</div></div>';
     }
     // 出错分支同步释放
     state.chatBusy = false;
@@ -353,7 +354,7 @@ export function precipitateMsg(msgId) {
   if (idx < 0) return;
   const msg = state.msgs[idx];
   const userMsg = idx > 0 && state.msgs[idx - 1].role === 'user' ? state.msgs[idx - 1] : null;
-  const preview = (userMsg ? '问：' + userMsg.content.slice(0, 100) + '\n' : '') + '答：' + msg.content.slice(0, 200);
+  const preview = (userMsg ? t('chat.q') + userMsg.content.slice(0, 100) + '\n' : '') + t('chat.a') + msg.content.slice(0, 200);
   const msgIds = userMsg ? [userMsg.id, msg.id].filter(Boolean) : [msg.id].filter(Boolean);
   _showPrecipModal(preview, msgIds);
 }
@@ -361,7 +362,7 @@ export function precipitateMsg(msgId) {
 export function precipitateConv() {
   if (!state.convId || !state.msgs.length) return;
   const preview = state.msgs.filter(m => m.role !== 'system').slice(0, 4)
-    .map(m => (m.role === 'user' ? '问：' : '答：') + m.content.slice(0, 80)).join('\n');
+    .map(m => (m.role === 'user' ? t('chat.q') : t('chat.a')) + m.content.slice(0, 80)).join('\n');
   _showPrecipModal(preview, []);
 }
 
@@ -369,7 +370,7 @@ function _showPrecipModal(preview, msgIds) {
   _precipData = { msgIds };
   let modal = document.getElementById('precipModal');
   if (!modal) { modal = document.createElement('div'); modal.id = 'precipModal'; modal.className = 'precip-modal-bg'; modal.onclick = e => { if (e.target === modal) closePrecipModal(); }; document.body.appendChild(modal); }
-  modal.innerHTML = '<div class="precip-modal-card"><h3>沉淀为知识</h3><div class="precip-preview-label">将沉淀以下内容：</div><pre class="precip-preview">' + h(preview) + '</pre><div class="modal-foot"><button class="btn-outline" onclick="closePrecipModal()">取消</button><button class="btn-sm-fill" onclick="doPrecipitate()">确认沉淀</button></div></div>';
+  modal.innerHTML = '<div class="precip-modal-card"><h3>' + t('chat.precipitateTitle') + '</h3><div class="precip-preview-label">' + t('chat.precipitateHint') + '</div><pre class="precip-preview">' + h(preview) + '</pre><div class="modal-foot"><button class="btn-outline" onclick="closePrecipModal()">' + t('common.cancel') + '</button><button class="btn-sm-fill" onclick="doPrecipitate()">' + t('chat.precipitateConfirm') + '</button></div></div>';
   modal.classList.add('open');
 }
 
@@ -383,12 +384,12 @@ window.doPrecipitate = async function () {
   if (!_precipData || !state.convId) return;
   const msgIds = _precipData.msgIds;
   closePrecipModal();
-  toast('正在沉淀...');
+  toast(t('chat.precipitating'));
   try {
     const body = msgIds.length ? { messageIds: msgIds } : {};
     const res = await post('/api/chat/' + state.convId + '/precipitate', body);
     if (res.success && res.article) {
-      toast('已沉淀为《' + res.article.title + '》');
+      toast(t('chat.precipitated', { title: res.article.title }));
       // 刷新知识库缓存（图谱、统计等）
       state.gd = null; state.td = null; state.sd = null;
       // Mark messages as precipitated
@@ -401,5 +402,5 @@ window.doPrecipitate = async function () {
       const msgsEl = $('chatMsgs');
       if (msgsEl) { const inner = msgsEl.querySelector('.chat-messages-inner'); if (inner) inner.innerHTML = state.msgs.map(m => renderMsg(m)).join(''); }
     }
-  } catch (e) { toast('沉淀失败: ' + e.message); }
+  } catch (e) { toast(t('chat.precipitateFailed', { msg: e.message })); }
 };

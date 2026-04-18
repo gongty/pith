@@ -1,4 +1,5 @@
 import { $, h, api, put, toast, rotatePH } from './utils.js';
+import { t } from './i18n.js';
 import state from './state.js';
 
 // localStorage key for "尚未创建会话时用户选的模型"
@@ -12,11 +13,11 @@ function saveAskModel(provider, model) { try { localStorage.setItem(ASK_MODEL_KE
 
 export function buildComposer(ctx) {
   let s = '<div class="chat-composer-wrap"><div class="chat-composer">';
-  s += '<textarea class="chat-textarea" id="' + ctx + 'In" placeholder="输入问题..." rows="1"></textarea>';
+  s += '<textarea class="chat-textarea" id="' + ctx + 'In" placeholder="' + h(t('ph.ask1')) + '" rows="1"></textarea>';
   s += '<div class="chat-toolbar"><div class="chat-toolbar-left">';
-  s += '<button class="chat-attach-btn" title="附件"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>';
+  s += '<button class="chat-attach-btn" title="' + h(t('composer.attach')) + '"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>';
   s += '</div><div class="chat-toolbar-right">';
-  s += '<span class="chat-model-tag" id="' + ctx + 'ModelTag" onclick="toggleDD(\'' + ctx + 'ModelDD\')"><span id="' + ctx + 'ModelName">选择模型</span> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span>';
+  s += '<span class="chat-model-tag" id="' + ctx + 'ModelTag" onclick="toggleDD(\'' + ctx + 'ModelDD\')"><span id="' + ctx + 'ModelName">' + h(t('settings.selectModel')) + '</span> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span>';
   s += '<button class="chat-send-btn" id="' + ctx + 'SendBtn" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>';
   s += '</div></div></div>';
   s += '<div class="chat-model-dropdown" id="' + ctx + 'ModelDD"></div>';
@@ -65,7 +66,7 @@ export async function loadModels(ddId, tagId, override) {
     }
     dd.innerHTML = html;
     // 从 prov.models 里查 label 展示，找不到 fallback 到原始 id
-    let displayText = effModel || '选择模型';
+    let displayText = effModel || t('settings.selectModel');
     if (prov && effModel) {
       const found = prov.models.find(m => {
         const id = (m && typeof m === 'object') ? m.id : m;
@@ -97,7 +98,7 @@ export function pickModel(el, ddId, tagId) {
   if (state.convId) {
     // 同步更新 override，避免下次 loadModels 读到旧值
     state.currentConvOverride = { provider, model };
-    put('/api/chat/' + state.convId + '/model', { provider, model }).catch(() => toast('模型切换失败'));
+    put('/api/chat/' + state.convId + '/model', { provider, model }).catch(() => toast(t('chat.modelSwitchFailed')));
   } else {
     state.pendingModel = { provider, model };
     // 同时落盘，下次刷新 / 回到 dashboard 仍保留这个选择

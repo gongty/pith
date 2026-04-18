@@ -1,6 +1,7 @@
 import { $, h, api, put, apiDel, toast, go, skelLines, jsAttr, markRead } from '../utils.js';
 import state from '../state.js';
 import { renderMd, html2md, parseFrontmatter, initTableResize, fmtChat } from '../markdown.js';
+import { t } from '../i18n.js';
 
 export async function rArticle(c, p) {
   c.innerHTML = '<div class="page-article"><div class="page-article-inner">' + skelLines(8) + '</div></div>';
@@ -26,11 +27,11 @@ export async function rArticle(c, p) {
       let safe = '<div class="page-article"><div class="page-article-inner">';
       safe += '<div class="article-title" style="pointer-events:none">' + h(title) + '</div>';
       safe += '<div style="padding:12px 16px;margin:12px 0;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-hover);color:var(--fg-secondary);font-size:13px;line-height:1.6">'
-        + '此文章内容异常（约 ' + Math.round(md.length / 1024) + ' KB，可能包含未提取成功的二进制素材），已切换为只读安全视图，前 5000 字预览如下。建议删除并重新投喂来源。'
+        + t('article.safeViewMsg', { size: Math.round(md.length / 1024) })
         + '</div>';
       safe += '<pre style="white-space:pre-wrap;word-break:break-word;font-size:12.5px;line-height:1.55;color:var(--fg-secondary);max-height:70vh;overflow:auto;padding:12px;border:1px solid var(--border);border-radius:var(--radius)">'
         + h(md.slice(0, 5000))
-        + (md.length > 5000 ? '\n\n…（已截断）' : '')
+        + (md.length > 5000 ? '\n\n' + t('article.truncated') : '')
         + '</pre>';
       safe += '</div></div>';
       c.innerHTML = safe;
@@ -40,7 +41,7 @@ export async function rArticle(c, p) {
         const delBtn = document.createElement('button');
         delBtn.id = 'topbarDel'; delBtn.className = 'topbar-btn'; delBtn.style.color = 'var(--fg-tertiary)';
         delBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>';
-        delBtn.title = '删除文章'; delBtn.onclick = showDel;
+        delBtn.title = t('article.delete'); delBtn.onclick = showDel;
         topActs.insertBefore(delBtn, topActs.firstChild);
       }
       return;
@@ -92,7 +93,7 @@ export async function rArticle(c, p) {
       const delBtn = document.createElement('button');
       delBtn.id = 'topbarDel'; delBtn.className = 'topbar-btn'; delBtn.style.color = 'var(--fg-tertiary)';
       delBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>';
-      delBtn.title = '删除文章'; delBtn.onclick = showDel;
+      delBtn.title = t('article.delete'); delBtn.onclick = showDel;
       topActs.insertBefore(delBtn, topActs.firstChild);
     }
     setupTitlePlainPaste();
@@ -104,20 +105,33 @@ export async function rArticle(c, p) {
     setupLinkNav();
     initTableResize($('artBody'));
     setupArticleQA(p);
-  } catch (e) { c.innerHTML = '<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败: ' + h(e.message) + '</div>'; }
+  } catch (e) { c.innerHTML = '<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">' + t('common.loadFailedMsg', { msg: h(e.message) }) + '</div>'; }
 }
 
 async function buildRelated(curPath) {
   try {
     const tree = state.td || await api('/api/wiki/tree'); state.td = tree;
-    const parts = curPath.split('/'); if (parts.length < 2) return '';
-    const topic = parts[0];
-    const topicNode = (tree || []).find(t => t.name === topic);
-    if (!topicNode) return '';
-    const siblings = topicNode.children.filter(c => c.path !== curPath);
-    if (!siblings.length) return '';
-    let s = '<div class="article-related"><div class="article-related-title">同主题文章</div>';
-    siblings.forEach(c => {
+    if (!tree || !tree.length) return '';
+    const curTopic = curPath.split('/')[0];
+    let curTags = [];
+    for (const t2 of tree) for (const c of (t2.children || []))
+      if (c.path === curPath) { curTags = (c.tags || []).map(g => g.toLowerCase()); break; }
+    if (!curTags.length) return '';
+    const scored = [];
+    for (const t2 of tree) for (const c of (t2.children || [])) {
+      if (c.path === curPath) continue;
+      const tags = (c.tags || []).map(g => g.toLowerCase());
+      let shared = 0;
+      for (const g of tags) if (curTags.includes(g)) shared++;
+      if (!shared) continue;
+      const bonus = c.path.startsWith(curTopic + '/') ? 0.5 : 0;
+      scored.push({ ...c, score: shared + bonus });
+    }
+    if (!scored.length) return '';
+    scored.sort((a, b) => b.score - a.score);
+    const top = scored.slice(0, 10);
+    let s = '<div class="article-related"><div class="article-related-title">' + t('article.related') + '</div>';
+    top.forEach(c => {
       s += '<div class="article-related-item" onclick="go(\'#/article/' + jsAttr(c.path) + '\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>' + h(c.title || c.file) + '</div>';
     });
     s += '</div>'; return s;
@@ -135,7 +149,7 @@ function buildArticleTOC(md) {
   if (headings.length < 2) return '';
   const collapsed = localStorage.getItem('kb-toc-collapsed') === '1' ? ' collapsed' : '';
   let s = '<div class="article-toc' + collapsed + '" id="articleToc">';
-  s += '<div class="article-toc-head" onclick="toggleToc()"><span class="article-toc-label">目录</span><span class="article-toc-toggle"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></span></div>';
+  s += '<div class="article-toc-head" onclick="toggleToc()"><span class="article-toc-label">' + t('article.toc') + '</span><span class="article-toc-toggle"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></span></div>';
   s += '<div class="article-toc-body">';
   headings.forEach(heading => {
     const cls = 'article-toc-item lvl' + heading.level;
@@ -198,14 +212,14 @@ export function scrollToH(id) {
 
 export function onArtChange() {
   clearTimeout(state.saveT);
-  const ind = $('saveInd'); if (ind) { ind.textContent = '编辑中...'; ind.classList.add('show'); }
+  const ind = $('saveInd'); if (ind) { ind.textContent = t('article.editing'); ind.classList.add('show'); }
   state.saveT = setTimeout(autoSave, 1500);
 }
 
 async function autoSave() {
   const titleEl = $('artTitle'), bodyEl = $('artBody'), ind = $('saveInd');
   if (!titleEl || !bodyEl) return;
-  if (ind) { ind.textContent = '保存中...'; ind.classList.add('show'); }
+  if (ind) { ind.textContent = t('article.saving'); ind.classList.add('show'); }
   const title = titleEl.innerText.trim();
   const bodyHtml = bodyEl.innerHTML;
   const bodyMd = html2md(bodyHtml);
@@ -224,8 +238,8 @@ async function autoSave() {
   try {
     await put('/api/wiki/article', { path: state.artPath, content: fullMd });
     state.artMd = fullMd; state.td = null;
-    if (ind) { ind.textContent = '已保存'; setTimeout(() => ind.classList.remove('show'), 2000); }
-  } catch { if (ind) { ind.textContent = '保存失败'; ind.style.color = 'var(--red)'; } }
+    if (ind) { ind.textContent = t('article.saved'); setTimeout(() => ind.classList.remove('show'), 2000); }
+  } catch { if (ind) { ind.textContent = t('article.saveFailed'); ind.style.color = 'var(--red)'; } }
 }
 
 /* ── Title: 纯文本粘贴 ──
@@ -350,7 +364,7 @@ export function fmtCmd(cmd) {
     if (sel.rangeCount) { const text = sel.toString(); document.execCommand('insertHTML', '<code>' + h(text) + '</code>'); }
   }
   else if (cmd === 'link') {
-    const url = prompt('链接地址:', 'https://');
+    const url = prompt(t('article.linkPrompt'), 'https://');
     if (url) document.execCommand('createLink', false, url);
   }
   else if (cmd === 'h2') document.execCommand('formatBlock', false, 'h2');
@@ -359,19 +373,21 @@ export function fmtCmd(cmd) {
 }
 
 /* ── Slash command menu (/ 块插入) ── */
-const SLASH_BLOCKS = [
-  { icon: 'H1', label: '一级标题', cat: 'basic', insert: () => execBlock('formatBlock', 'h1') },
-  { icon: 'H2', label: '二级标题', cat: 'basic', insert: () => execBlock('formatBlock', 'h2') },
-  { icon: 'H3', label: '三级标题', cat: 'basic', insert: () => execBlock('formatBlock', 'h3') },
-  { icon: '•', label: '无序列表', cat: 'basic', insert: () => execBlock('insertUnorderedList') },
-  { icon: '1.', label: '有序列表', cat: 'basic', insert: () => execBlock('insertOrderedList') },
-  { icon: '☑', label: '待办', cat: 'block', insert: () => insertMdBlock('- [ ] 待办事项') },
-  { icon: '❝', label: '引用块', cat: 'block', insert: () => insertMdBlock('> 引用内容') },
-  { icon: '{}', label: '代码块', cat: 'block', insert: () => insertHtmlBlock('<pre><code>代码</code></pre>') },
-  { icon: '┬', label: '表格', cat: 'block', insert: () => insertHtmlBlock('<div class="table-wrap"><table><thead><tr><th>列 1</th><th>列 2</th><th>列 3</th></tr></thead><tbody><tr><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td></tr></tbody></table></div>') },
-  { icon: '—', label: '分割线', cat: 'block', insert: () => insertHtmlBlock('<hr>') },
-  { icon: '💡', label: '高亮块', cat: 'block', insert: () => insertHtmlBlock('<div class="callout"><p>内容</p></div>') },
-];
+function getSlashBlocks() {
+  return [
+    { icon: 'H1', label: t('slash.h1'), cat: 'basic', insert: () => execBlock('formatBlock', 'h1') },
+    { icon: 'H2', label: t('slash.h2'), cat: 'basic', insert: () => execBlock('formatBlock', 'h2') },
+    { icon: 'H3', label: t('slash.h3'), cat: 'basic', insert: () => execBlock('formatBlock', 'h3') },
+    { icon: '\u2022', label: t('slash.ul'), cat: 'basic', insert: () => execBlock('insertUnorderedList') },
+    { icon: '1.', label: t('slash.ol'), cat: 'basic', insert: () => execBlock('insertOrderedList') },
+    { icon: '\u2611', label: t('slash.todo'), cat: 'block', insert: () => insertMdBlock('- [ ] ' + t('slash.todoText')) },
+    { icon: '\u275D', label: t('slash.quote'), cat: 'block', insert: () => insertMdBlock('> ' + t('slash.quoteText')) },
+    { icon: '{}', label: t('slash.code'), cat: 'block', insert: () => insertHtmlBlock('<pre><code>' + t('slash.codeText') + '</code></pre>') },
+    { icon: '\u252C', label: t('slash.table'), cat: 'block', insert: () => insertHtmlBlock('<div class="table-wrap"><table><thead><tr><th>' + t('slash.col') + ' 1</th><th>' + t('slash.col') + ' 2</th><th>' + t('slash.col') + ' 3</th></tr></thead><tbody><tr><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td></tr></tbody></table></div>') },
+    { icon: '\u2014', label: t('slash.hr'), cat: 'block', insert: () => insertHtmlBlock('<hr>') },
+    { icon: '*', label: t('slash.callout'), cat: 'block', insert: () => insertHtmlBlock('<div class="callout"><p></p></div>') },
+  ];
+}
 
 function clearSlashTrigger() {
   if (_slashFromPlus) { _slashFromPlus = false; return; }
@@ -458,15 +474,16 @@ let _slashIdx = 0;
 let _slashFromPlus = false;
 
 function renderSlashItems(menu, filter) {
-  const items = SLASH_BLOCKS.filter(b => !filter || b.label.includes(filter));
-  let html = '<div class="slash-menu-head">插入块</div>';
+  const blocks = getSlashBlocks();
+  const items = blocks.filter(b => !filter || b.label.includes(filter));
+  let html = '<div class="slash-menu-head">' + t('slash.heading') + '</div>';
   items.forEach((b, i) => {
-    const absIdx = SLASH_BLOCKS.indexOf(b);
+    const absIdx = blocks.indexOf(b);
     html += '<div class="slash-menu-item' + (i === 0 ? ' active' : '') + '" data-abs="' + absIdx + '" onmousedown="pickSlash(' + absIdx + ')">'
       + '<span class="slash-menu-icon">' + b.icon + '</span>'
       + '<span class="slash-menu-label">' + h(b.label) + '</span></div>';
   });
-  if (!items.length) html += '<div class="slash-menu-empty">无匹配项</div>';
+  if (!items.length) html += '<div class="slash-menu-empty">' + t('slash.noMatch') + '</div>';
   menu.innerHTML = html;
 }
 
@@ -475,7 +492,7 @@ function highlightSlashItem(menu) {
 }
 
 export function pickSlash(idx) {
-  SLASH_BLOCKS[idx].insert();
+  getSlashBlocks()[idx].insert();
 }
 
 let _slashKeyHandler = null;
@@ -575,22 +592,22 @@ export async function doDel() {
     const { updSidebarPages } = await import('../sidebar.js');
     updSidebarPages();
     const restore = savedContent == null ? null : async () => {
-      try { await put('/api/wiki/article', { path, content: savedContent }); state.td = null; toast('已恢复'); go('#/article/' + path); } catch { toast('恢复失败'); }
+      try { await put('/api/wiki/article', { path, content: savedContent }); state.td = null; toast(t('common.restored')); go('#/article/' + path); } catch { toast(t('common.restoreFailed')); }
     };
-    toast('已删除', restore);
-  } catch (e) { toast('删除失败'); }
+    toast(t('common.deleted'), restore);
+  } catch (e) { toast(t('common.deleteFailed')); }
 }
 
 export async function newArticle() {
-  const title = prompt('文章标题:'); if (!title) return;
+  const title = prompt(t('article.newTitle')); if (!title) return;
   const tree = state.td || await api('/api/wiki/tree'); state.td = tree;
   const topic = (tree && tree.length) ? tree[0].name : 'general';
   const slug = title.toLowerCase().replace(/[^\w\u4e00-\u9fff]+/g, '-').replace(/^-|-$/g, '');
   const path = topic + '/' + slug + '.md';
   try {
     await put('/api/wiki/article', { path, content: '# ' + title + '\n\n' }); state.td = null;
-    go('#/article/' + path); toast('已创建');
-  } catch (e) { toast('创建失败: ' + e.message); }
+    go('#/article/' + path); toast(t('common.created'));
+  } catch (e) { toast(t('common.createFailed', { msg: e.message })); }
 }
 
 /* ── Block "+" button on empty lines ── */
@@ -713,13 +730,13 @@ function ensureImgToolbar() {
   d.className = 'img-toolbar';
   d.innerHTML =
     '<div class="img-tb-group">' +
-      '<button class="img-tb-btn" data-align="left" title="左对齐" onmousedown="event.preventDefault();imgAlign(\'left\')">' +
+      '<button class="img-tb-btn" data-align="left" title="' + h(t('article.alignLeft')) + '" onmousedown="event.preventDefault();imgAlign(\'left\')">' +
         '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></svg>' +
       '</button>' +
-      '<button class="img-tb-btn" data-align="center" title="居中" onmousedown="event.preventDefault();imgAlign(\'center\')">' +
+      '<button class="img-tb-btn" data-align="center" title="' + h(t('article.alignCenter')) + '" onmousedown="event.preventDefault();imgAlign(\'center\')">' +
         '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="10" x2="6" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="18" y1="18" x2="6" y2="18"/></svg>' +
       '</button>' +
-      '<button class="img-tb-btn" data-align="right" title="右对齐" onmousedown="event.preventDefault();imgAlign(\'right\')">' +
+      '<button class="img-tb-btn" data-align="right" title="' + h(t('article.alignRight')) + '" onmousedown="event.preventDefault();imgAlign(\'right\')">' +
         '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="21" y1="10" x2="7" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="21" y1="18" x2="7" y2="18"/></svg>' +
       '</button>' +
     '</div>' +
@@ -728,7 +745,7 @@ function ensureImgToolbar() {
       '<button class="img-tb-btn img-tb-size" data-size="25" onmousedown="event.preventDefault();imgSize(25)">S</button>' +
       '<button class="img-tb-btn img-tb-size" data-size="50" onmousedown="event.preventDefault();imgSize(50)">M</button>' +
       '<button class="img-tb-btn img-tb-size" data-size="75" onmousedown="event.preventDefault();imgSize(75)">L</button>' +
-      '<button class="img-tb-btn img-tb-size" data-size="100" onmousedown="event.preventDefault();imgSize(100)">全</button>' +
+      '<button class="img-tb-btn img-tb-size" data-size="100" onmousedown="event.preventDefault();imgSize(100)">' + t('article.fullSize') + '</button>' +
     '</div>';
   document.body.appendChild(d);
   _imgToolbar = d;
@@ -877,11 +894,11 @@ function setupArticleQA(articlePath) {
 
 function buildEmptyState() {
   return '<div class="article-qa-empty">' +
-    '<div class="article-qa-empty-hint">针对当前文章提问</div>' +
+    '<div class="article-qa-empty-hint">' + t('qa.emptyHint') + '</div>' +
     '<div class="article-qa-suggestions">' +
-      '<button class="article-qa-chip" onclick="qaChip(this)">总结这篇文章的核心观点</button>' +
-      '<button class="article-qa-chip" onclick="qaChip(this)">有哪些关键概念？</button>' +
-      '<button class="article-qa-chip" onclick="qaChip(this)">这篇文章的实践建议是什么？</button>' +
+      '<button class="article-qa-chip" onclick="qaChip(this)">' + t('qa.chip1') + '</button>' +
+      '<button class="article-qa-chip" onclick="qaChip(this)">' + t('qa.chip2') + '</button>' +
+      '<button class="article-qa-chip" onclick="qaChip(this)">' + t('qa.chip3') + '</button>' +
     '</div>' +
   '</div>';
 }
@@ -954,7 +971,7 @@ function ensureQAFab() {
   if (_qaFab) return;
   const btn = document.createElement('button');
   btn.className = 'article-qa-fab';
-  btn.title = '提问';
+  btn.title = t('qa.ask');
   btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>';
   document.body.appendChild(btn);
   _qaFab = btn;
@@ -1001,7 +1018,7 @@ function ensureQAPanel() {
   panel.innerHTML =
     '<div class="article-qa-resize"></div>' +
     '<div class="article-qa-head">' +
-      '<span class="article-qa-title">文章提问</span>' +
+      '<span class="article-qa-title">' + t('qa.title') + '</span>' +
       '<div class="article-qa-model-wrap">' +
         '<span class="article-qa-model-tag" onclick="toggleQAModelDD()">' +
           '<span class="article-qa-model-label"></span>' +
@@ -1015,7 +1032,7 @@ function ensureQAPanel() {
     '</div>' +
     '<div class="article-qa-messages"></div>' +
     '<div class="article-qa-input-wrap">' +
-      '<input class="article-qa-input" type="text" placeholder="输入问题，回车发送..." />' +
+      '<input class="article-qa-input" type="text" placeholder="' + h(t('qa.inputPH')) + '" />' +
       '<button class="article-qa-send" onclick="sendArticleQA()">' +
         '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>' +
       '</button>' +
@@ -1190,7 +1207,7 @@ export async function sendArticleQA() {
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
-      throw new Error(err.error || '请求失败');
+      throw new Error(err.error || t('qa.reqFailed'));
     }
 
     const reader = resp.body.getReader();
@@ -1219,7 +1236,7 @@ export async function sendArticleQA() {
             reasoning += obj.r;
             if (!thinkEl) {
               clearLoading();
-              aiBody.innerHTML = '<div class="article-qa-thinking-label">思考中</div><div class="article-qa-thinking"></div>';
+              aiBody.innerHTML = '<div class="article-qa-thinking-label">' + t('qa.thinking') + '</div><div class="article-qa-thinking"></div>';
               thinkEl = aiBody.querySelector('.article-qa-thinking');
             }
             thinkEl.textContent = reasoning;
@@ -1231,7 +1248,7 @@ export async function sendArticleQA() {
             if (thinkEl && !full) {
               const details = document.createElement('details');
               details.className = 'article-qa-thinking-wrap';
-              details.innerHTML = '<summary class="article-qa-thinking-label">思考过程</summary><div class="article-qa-thinking">' + h(reasoning) + '</div>';
+              details.innerHTML = '<summary class="article-qa-thinking-label">' + t('qa.thinkingDone') + '</summary><div class="article-qa-thinking">' + h(reasoning) + '</div>';
               aiBody.innerHTML = '';
               aiBody.appendChild(details);
             }
@@ -1246,14 +1263,14 @@ export async function sendArticleQA() {
       }
     }
 
-    if (!full && !reasoning) aiBody.textContent = '(无回复)';
+    if (!full && !reasoning) aiBody.textContent = t('qa.noReply');
     if (!full && reasoning) {
-      aiBody.innerHTML = '<div class="article-qa-thinking-label">思考完成，未生成回复</div>';
+      aiBody.innerHTML = '<div class="article-qa-thinking-label">' + t('qa.thinkingNoReply') + '</div>';
     }
     sess.history.push({ role: 'assistant', content: full });
   } catch (e) {
     if (e.name === 'AbortError') return;
-    aiBody.textContent = '出错: ' + (e.message || '未知错误');
+    aiBody.textContent = t('qa.error', { msg: e.message || 'unknown error' });
   }
 
   sess.abort = null;

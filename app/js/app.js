@@ -1,5 +1,6 @@
 /* ── Main entry point ── */
 import { $, go } from './utils.js';
+import { initLang, applyI18n, setLang } from './i18n.js';
 import state from './state.js';
 import { initTheme, toggleTheme } from './theme.js';
 import { toggleSidebar, initSidebar, initSidebarPreview, toggleFold, toggleDateFold, switchSidebarTab } from './sidebar.js';
@@ -7,7 +8,7 @@ import { toggleDD, pickModel } from './composer.js';
 import { openSearch, closeSearch, searchFor, handleSearchKeydown, initSearchInput } from './search.js';
 import { openSettings, closeSettings, onProvChange, saveSett, testConn, switchSettingsTab, initSidebarTitle } from './settings.js';
 import { openIngest, closeIngest, submitIngest, batchToggleAll, batchFileToggle, initIngestDragDrop, checkActiveIngest, removeIngestUrl } from './ingest.js';
-import { initIngestQueue, toggleIngestQueue } from './ingest-queue.js';
+import { initIngestQueue, toggleIngestQueue, openIngestQueue } from './ingest-queue.js';
 import { render } from './router.js';
 import { dashAsk } from './pages/dashboard.js';
 import { chatSend, delChat, archiveChat, precipitateMsg, precipitateConv, closePrecipModal } from './pages/chat.js';
@@ -19,6 +20,7 @@ import { openAutotaskModal, closeAutotaskModal, closeAutotaskDetail, runAutotask
 /* ── Expose functions to inline onclick handlers ── */
 window.go = go;
 window.$ = $;
+window.setLang = setLang;
 window.toggleSidebar = toggleSidebar;
 window.toggleTheme = () => { toggleTheme(); if (state.cv === 'dashboard' || state.cv === 'graph') render(); };
 window.openSearch = openSearch;
@@ -128,6 +130,8 @@ document.addEventListener('keydown', e => {
 });
 
 /* ── Init ── */
+initLang();
+applyI18n();
 initTheme();
 initSidebar();
 initSidebarTitle();

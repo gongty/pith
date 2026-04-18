@@ -1,4 +1,7 @@
 import { $, h, api, relTime, go, toast } from './utils.js';
+import { t } from './i18n.js';
+import state from './state.js';
+import { updSidebarPages } from './sidebar.js';
 
 /**
  * 投喂队列 topbar 入口。
@@ -16,6 +19,7 @@ let panelOpen = false;
 let panelOutsideHandler = null;
 let panelKeyHandler = null;
 let lastRunningIds = new Set();
+let lastRecentIds = new Set();
 
 const FAST_INTERVAL = 2000;
 const SLOW_INTERVAL = 10000;
@@ -68,20 +72,44 @@ function applyOverview(data) {
 
   if (panelOpen) renderPanel();
 
+  // Detect newly finished tasks: compare recent IDs across ticks
+  const curRecentIds = new Set((latestOverview.recent || []).map(r => r.id));
+  let anyNewlyDone = false;
+  if (lastRecentIds.size > 0) {
+    for (const id of curRecentIds) {
+      if (!lastRecentIds.has(id)) { anyNewlyDone = true; break; }
+    }
+  }
+
+  if (anyNewlyDone) {
+    state.td = null;
+    state.gd = null;
+    state.sd = null;
+    updSidebarPages();
+    if (state.cv === 'browse' || state.cv === 'dashboard') {
+      if (typeof window.render === 'function') window.render();
+    }
+  }
+
   const wasBusy = (prev.running && prev.running.length > 0) || (prev.batch && prev.batch.status === 'processing');
   const nowIdle = !latestOverview.hasActivity;
   if (wasBusy && nowIdle && prev.batch && prev.batch.total) {
     const b = prev.batch;
-    const msg = `投喂完成：成功 ${b.completed - b.failed} / ${b.total}` + (b.failed ? `，失败 ${b.failed}` : '');
-    import('./utils.js').then(u => u.toast(msg));
+    const msg = t('iq.batchDone', {done: b.completed - b.failed, total: b.total}) + (b.failed ? t('iq.batchDoneFail', {fail: b.failed}) : '');
+    toast(msg);
   }
 
   lastRunningIds = new Set((latestOverview.running || []).map(r => r.id || r.idx));
+  lastRecentIds = curRecentIds;
 }
 
 export function toggleIngestQueue() {
   if (panelOpen) closePanel();
   else openPanel();
+}
+
+export function openIngestQueue() {
+  if (!panelOpen) openPanel();
 }
 
 function openPanel() {
@@ -147,22 +175,22 @@ function renderPanel() {
     const pct = Math.round((batch.completed / batch.total) * 100);
     const etaText = batch.estimatedRemaining != null
       ? (batch.estimatedRemaining < 60
-          ? `约 ${batch.estimatedRemaining} 秒`
-          : `约 ${Math.ceil(batch.estimatedRemaining / 60)} 分钟`)
-      : '计算中…';
+          ? t('iq.etaSec', {n: batch.estimatedRemaining})
+          : t('iq.etaMin', {n: Math.ceil(batch.estimatedRemaining / 60)}))
+      : t('iq.etaCalc');
     html += `
       <div class="iq-summary">
         <div class="iq-summary-line">
-          <span>总进度 ${batch.completed}/${batch.total}</span>
-          <span class="iq-summary-eta">预计 ${etaText}</span>
+          <span>${t('iq.progress', {done: batch.completed, total: batch.total})}</span>
+          <span class="iq-summary-eta">${h(etaText)}</span>
         </div>
         <div class="iq-progress"><div class="iq-progress-fill" style="width:${pct}%"></div></div>
-        ${batch.failed ? `<div class="iq-summary-fail">失败 ${batch.failed}</div>` : ''}
+        ${batch.failed ? `<div class="iq-summary-fail">${t('iq.failed')} ${batch.failed}</div>` : ''}
       </div>`;
   }
 
   if (running.length > 0) {
-    html += `<div class="iq-section-title">正在处理 (${running.length})</div>`;
+    html += `<div class="iq-section-title">${t('iq.processing', {n: running.length})}</div>`;
     html += running.map(r => `
       <div class="iq-item iq-item-running">
         <span class="iq-dot iq-dot-running"></span>
@@ -175,13 +203,13 @@ function renderPanel() {
   }
 
   if (queued.length > 0) {
-    html += `<div class="iq-section-title">排队中 (${queued.length})</div>`;
+    html += `<div class="iq-section-title">${t('iq.queued', {n: queued.length})}</div>`;
     html += queued.map(q => `
       <div class="iq-item iq-item-queued">
         <span class="iq-dot iq-dot-queued"></span>
         <div class="iq-item-main">
           <div class="iq-item-name">${h(q.name || '(unnamed)')}</div>
-          <div class="iq-item-sub">0/${phaseTotal} · 排队中</div>
+          <div class="iq-item-sub">0/${phaseTotal} · ${t('iq.queuedLabel')}</div>
         </div>
       </div>
     `).join('');
@@ -189,33 +217,33 @@ function renderPanel() {
 
   if (recent.length > 0) {
     const shown = recent.slice(0, PANEL_RECENT_LIMIT);
-    html += `<div class="iq-section-title">最近完成</div>`;
+    html += `<div class="iq-section-title">${t('iq.recentDone')}</div>`;
     html += shown.map(r => {
       const isDone = r.status === 'done';
       const isError = r.status === 'error';
       const clickable = isDone && r.article;
       const canRetry = isError && r.retryable;
       const timeText = r.finishedAt ? relTime(r.finishedAt) : '';
-      const retryBadge = r.retryCount > 0 ? `<span class="iq-retry-badge">第 ${r.retryCount} 次重试</span>` : '';
-      const interruptedTag = r.interruptedByRestart ? `<span class="iq-retry-badge">进程重启中断</span>` : '';
-      const inFlightTag = r.retryInFlight ? `<span class="iq-retry-badge iq-retry-inflight">重试进行中</span>` : '';
+      const retryBadge = r.retryCount > 0 ? `<span class="iq-retry-badge">${t('iq.retryN', {n: r.retryCount})}</span>` : '';
+      const interruptedTag = r.interruptedByRestart ? `<span class="iq-retry-badge">${t('iq.interrupted')}</span>` : '';
+      const inFlightTag = r.retryInFlight ? `<span class="iq-retry-badge iq-retry-inflight">${t('iq.retryInFlight')}</span>` : '';
       return `
         <div class="iq-item iq-item-${r.status}${clickable ? ' iq-clickable' : ''}"
              ${clickable ? `data-article="${h(r.article)}"` : ''}>
           <span class="iq-dot iq-dot-${r.status}"></span>
           <div class="iq-item-main">
             <div class="iq-item-name">${h(r.name)} ${retryBadge}${interruptedTag}${inFlightTag}</div>
-            ${isError ? `<div class="iq-item-sub iq-item-error">${h(r.error || '失败')}</div>` : ''}
+            ${isError ? `<div class="iq-item-sub iq-item-error">${h(r.error || t('iq.failed'))}</div>` : ''}
             ${timeText ? `<div class="iq-item-time">${h(timeText)}</div>` : ''}
           </div>
-          ${canRetry ? `<button class="iq-retry-btn" data-retry="${h(r.id)}">重试</button>` : ''}
+          ${canRetry ? `<button class="iq-retry-btn" data-retry="${h(r.id)}">${t('iq.retry')}</button>` : ''}
         </div>
       `;
     }).join('');
   }
 
   if (!html) {
-    html = '<div class="iq-empty">暂无投喂活动</div>';
+    html = `<div class="iq-empty">${t('iq.empty')}</div>`;
   }
 
   body.innerHTML = html;
@@ -232,17 +260,17 @@ function renderPanel() {
       const id = btn.dataset.retry;
       if (!id) return;
       btn.disabled = true;
-      btn.textContent = '重试中…';
+      btn.textContent = t('iq.retrying');
       try {
         const r = await fetch('/api/ingest/retry/' + encodeURIComponent(id), { method: 'POST' });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
-        toast('已重新入队');
+        toast(t('iq.retryQueued'));
         tick(true);
       } catch (err) {
-        toast(err.message || '重试失败');
+        toast(err.message || t('iq.retryFailed'));
         btn.disabled = false;
-        btn.textContent = '重试';
+        btn.textContent = t('iq.retry');
       }
     });
   });
