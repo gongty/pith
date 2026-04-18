@@ -4184,6 +4184,13 @@ const server = http.createServer(async (req, res) => {
   if (!requireAdminAuth(req, res, p)) return;
 
   // ── Auth endpoints (always available; login itself cannot require auth). ──
+  if (p === '/api/debug/sse-test') {
+    res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache' });
+    res.flushHeaders();
+    let i = 0;
+    const iv = setInterval(() => { res.write('data: ' + JSON.stringify({ t: 'chunk' + i }) + '\n\n'); i++; if (i > 3) { clearInterval(iv); res.write('data: [DONE]\n\n'); res.end(); } }, 200);
+    return;
+  }
   if (p === '/api/auth/status' && req.method === 'GET') {
     return json(res, 200, {
       authRequired: AUTH_ENABLED,
@@ -4616,15 +4623,18 @@ ${trimmedArticle}
                 if (lr2.statusCode < 200 || lr2.statusCode >= 300) { let d = ''; lr2.on('data', c => d += c); lr2.on('end', () => fail(new Error(humanizeHttpError(lr2.statusCode, d)))); return; }
                 let buf = '';
                 lr2.setEncoding('utf-8');
+                let wr = (s) => { if (!aborted && !res.destroyed) { res.write(s); } };
                 lr2.on('data', chunk => {
                   buf += chunk; let idx;
+                  let batch = '';
                   while ((idx = buf.indexOf('\n\n')) !== -1) {
                     const ev = buf.slice(0, idx); buf = buf.slice(idx + 2);
                     for (const ln of ev.split('\n').filter(l => l.startsWith('data:'))) {
                       const pl = ln.slice(5).trim(); if (!pl || pl === '[DONE]') continue;
-                      try { const o = JSON.parse(pl); const d = o.choices && o.choices[0] && (o.choices[0].delta || {}); if (d && typeof d.content === 'string' && d.content.length > 0 && !aborted && !res.destroyed) res.write('data: ' + JSON.stringify({ t: d.content }) + '\n\n'); } catch {}
+                      try { const o = JSON.parse(pl); const d = o.choices && o.choices[0] && (o.choices[0].delta || {}); if (d && typeof d.content === 'string' && d.content.length > 0) batch += 'data: ' + JSON.stringify({ t: d.content }) + '\n\n'; } catch {}
                     }
                   }
+                  if (batch) { lr2.pause(); wr(batch); setImmediate(() => lr2.resume()); }
                 });
                 lr2.on('end', ok); lr2.on('error', fail);
               });
