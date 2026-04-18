@@ -8,6 +8,7 @@ start.sh
 .claude/
 CLAUDE.md
 CLAUDE.local.md
+test*.js
 test-vectors.sh
 test-ask.sh
 config.json.bak
