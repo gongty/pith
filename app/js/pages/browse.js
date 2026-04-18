@@ -1,4 +1,4 @@
-import { h, api, go, skelLines, jsAttr, isUnread } from '../utils.js';
+import { h, api, go, skelLines, jsAttr, isUnread, markAllRead } from '../utils.js';
 import state from '../state.js';
 
 function relTime(ms) {
@@ -27,6 +27,22 @@ function extractSummary(title) {
   return s.length > 60 ? s.slice(0, 58) + '…' : s;
 }
 
+export function markAllArticlesRead() {
+  const tree = state.td;
+  if (!tree) return;
+  const all = [];
+  tree.forEach(t => (t.children || []).forEach(ch => all.push(ch.path)));
+  markAllRead(all);
+  document.querySelectorAll('.unread-dot').forEach(el => el.remove());
+  document.querySelectorAll('.unread').forEach(el => el.classList.remove('unread'));
+  const link = document.querySelector('.browse-mark-all-read');
+  if (link) {
+    const prev = link.previousElementSibling;
+    if (prev && prev.classList.contains('browse-stat-sep')) prev.remove();
+    link.remove();
+  }
+}
+
 export async function rBrowse(c, tagFilter) {
   c.innerHTML = '<div class="page-browse">' + skelLines(5) + '</div>';
   try {
@@ -53,6 +69,10 @@ export async function rBrowse(c, tagFilter) {
       + '<span class="browse-stat-sep">·</span><span class="browse-stat">' + view.length + ' 个主题</span>';
     if (tagFilter) {
       s += '<span class="browse-stat-sep">·</span><a class="browse-clear-tag" href="#/browse">清除筛选</a>';
+    }
+    const hasUnread = tree.some(t => t.children.some(ch => isUnread(ch.path)));
+    if (hasUnread) {
+      s += '<span class="browse-stat-sep">·</span><a class="browse-mark-all-read" onclick="markAllArticlesRead()">全部标为已读</a>';
     }
     s += '</div></div>';
 

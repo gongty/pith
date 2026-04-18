@@ -101,6 +101,11 @@ export function isUnread(path) {
   if (localStorage.getItem(READ_KEY) === null) return false;
   return !_readSet().has(path);
 }
+export function markAllRead(paths) {
+  const s = _readSet();
+  paths.forEach(p => s.add(p));
+  localStorage.setItem(READ_KEY, JSON.stringify([...s]));
+}
 export function initReadState(paths) {
   if (localStorage.getItem(READ_KEY) !== null) return;
   localStorage.setItem(READ_KEY, JSON.stringify(paths));
