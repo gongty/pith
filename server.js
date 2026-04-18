@@ -4208,7 +4208,7 @@ if (p === '/api/auth/status' && req.method === 'GET') {
       }
       res.writeHead(200, {
         'Content-Type': 'application/json; charset=utf-8',
-        'Set-Cookie': `wiki_admin_token=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000`
+        'Set-Cookie': `wiki_admin_token=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000${req.headers['x-forwarded-proto'] === 'https' || (req.socket && req.socket.encrypted) ? '; Secure' : ''}`
       });
       return res.end(JSON.stringify({ ok: true }));
     });
@@ -4499,7 +4499,9 @@ if (p === '/api/auth/status' && req.method === 'GET') {
           const fp = safe(WIKI, relPath);
           if (!fp) return json(res, 400, { error: '无效路径' });
           if (typeof content !== 'string' || !content.trim()) return json(res, 400, { error: '正文不能为空' });
-          fs.writeFileSync(fp, content, 'utf-8');
+          const tmp = fp + '.tmp.' + process.pid;
+          fs.writeFileSync(tmp, content, 'utf-8');
+          fs.renameSync(tmp, fp);
           return json(res, 200, { ok: true });
         } catch (e) { return json(res, 400, { error: safeErr(e) }); }
       });
@@ -4517,7 +4519,9 @@ if (p === '/api/auth/status' && req.method === 'GET') {
           if (typeof content !== 'string' || !content.trim()) return json(res, 400, { error: '正文不能为空' });
           if (fs.existsSync(fp)) return json(res, 409, { error: '同名文件已存在，改用 PUT 编辑或换个文件名' });
           fs.mkdirSync(path.dirname(fp), { recursive: true });
-          fs.writeFileSync(fp, content, 'utf-8');
+          const tmp = fp + '.tmp.' + process.pid;
+          fs.writeFileSync(tmp, content, 'utf-8');
+          fs.renameSync(tmp, fp);
           return json(res, 200, { ok: true, path: relPath });
         } catch (e) { return json(res, 400, { error: safeErr(e) }); }
       });
@@ -4949,16 +4953,27 @@ ${trimmedArticle}
       }
     }
 
+    const MAX_CONCEPT_NODES = 500;
+    const MAX_EDGES = 5000;
+    const allNodes = [...conceptNodes, ...articleNodes];
+    const cappedEdges = edges.length > MAX_EDGES ? edges.slice(0, MAX_EDGES) : edges;
+    const truncated = conceptNodes.length > MAX_CONCEPT_NODES || edges.length > MAX_EDGES;
+    if (conceptNodes.length > MAX_CONCEPT_NODES) {
+      conceptNodes.sort((a, b) => b.articleCount - a.articleCount);
+      const kept = new Set(conceptNodes.slice(0, MAX_CONCEPT_NODES).map(n => n.id));
+      const filteredNodes = allNodes.filter(n => n.kind !== 'concept' || kept.has(n.id));
+      return json(res, 200, {
+        nodes: filteredNodes,
+        edges: cappedEdges.filter(e => e.kind !== 'co-concept' || (kept.has(e.source) && kept.has(e.target))),
+        clusters,
+        stats: { articleCount: articleInfos.length, conceptCount: Math.min(conceptNodes.length, MAX_CONCEPT_NODES), droppedHapax, droppedStopword, truncated },
+      });
+    }
     return json(res, 200, {
-      nodes: [...conceptNodes, ...articleNodes],
-      edges,
+      nodes: allNodes,
+      edges: cappedEdges,
       clusters,
-      stats: {
-        articleCount: articleInfos.length,
-        conceptCount: conceptNodes.length,
-        droppedHapax,
-        droppedStopword,
-      },
+      stats: { articleCount: articleInfos.length, conceptCount: conceptNodes.length, droppedHapax, droppedStopword, truncated },
     });
   }
 
@@ -5709,7 +5724,8 @@ ${trimmedArticle}
           totalConnections,
           lastUpdate: lastUpdate ? lastUpdate.toISOString() : null
         },
-        issues,
+        issues: issues.length > 500 ? issues.slice(0, 500) : issues,
+        issuesTruncated: issues.length > 500,
         scoreBreakdown: { completeness, freshness, connectivity, consistency }
       };
     } catch (e) {

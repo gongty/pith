@@ -1,4 +1,4 @@
-import { $, h, api, put, toast, rotatePH } from './utils.js';
+import { $, h, jsAttr, api, put, toast, rotatePH } from './utils.js';
 import { t } from './i18n.js';
 import state from './state.js';
 
@@ -17,7 +17,7 @@ export function buildComposer(ctx) {
   s += '<div class="chat-toolbar"><div class="chat-toolbar-left">';
   s += '<button class="chat-attach-btn" title="' + h(t('composer.attach')) + '"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>';
   s += '</div><div class="chat-toolbar-right">';
-  s += '<span class="chat-model-tag" id="' + ctx + 'ModelTag" onclick="toggleDD(\'' + ctx + 'ModelDD\')"><span id="' + ctx + 'ModelName">' + h(t('settings.selectModel')) + '</span> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span>';
+  s += '<span class="chat-model-tag" id="' + ctx + 'ModelTag" onclick="toggleDD(\'' + jsAttr(ctx) + 'ModelDD\')"><span id="' + ctx + 'ModelName">' + h(t('settings.selectModel')) + '</span> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span>';
   s += '<button class="chat-send-btn" id="' + ctx + 'SendBtn" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>';
   s += '</div></div></div>';
   s += '<div class="chat-model-dropdown" id="' + ctx + 'ModelDD"></div>';
@@ -61,7 +61,7 @@ export async function loadModels(ddId, tagId, override) {
         const id = (m && typeof m === 'object') ? m.id : m;
         const label = (m && typeof m === 'object') ? (m.label || m.id) : m;
         const active = (effModel === id) ? ' active' : '';
-        html += '<div class="chat-model-opt' + active + '" data-v="' + effProv + '|' + id + '" data-id="' + h(id) + '" onclick="pickModel(this,\'' + ddId + '\',\'' + tagId + '\')">' + h(label) + '</div>';
+        html += '<div class="chat-model-opt' + active + '" data-v="' + effProv + '|' + id + '" data-id="' + h(id) + '" onclick="pickModel(this,\'' + jsAttr(ddId) + '\',\'' + jsAttr(tagId) + '\')">' + h(label) + '</div>';
       });
     }
     dd.innerHTML = html;

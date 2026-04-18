@@ -2,7 +2,7 @@ import { $, h, go } from './utils.js';
 import { t } from './i18n.js';
 import state from './state.js';
 import { updSidebarPages, updSidebarChats, switchSidebarTab } from './sidebar.js';
-import { hideFormatToolbar, closeSlashMenu, deselectImg, hideArticleQA } from './pages/article.js';
+import { hideFormatToolbar, closeSlashMenu, deselectImg, hideArticleQA, cleanupArticlePage } from './pages/article.js';
 import { cancelGA } from './pages/graph.js';
 import { rDash } from './pages/dashboard.js';
 import { rChat } from './pages/chat.js';
@@ -80,7 +80,7 @@ function updBC(r) {
 }
 
 export async function render() {
-  const r = route(); state.cv = r.v; updNav(r.v); updBC(r); cancelGA(); hideFormatToolbar(); closeSlashMenu(); deselectImg(); if (r.v !== 'article') hideArticleQA();
+  const r = route(); state.cv = r.v; updNav(r.v); updBC(r); cancelGA(); hideFormatToolbar(); closeSlashMenu(); deselectImg(); cleanupArticlePage(); if (r.v !== 'article') hideArticleQA();
   if (r.v === 'article' || r.v === 'browse') switchSidebarTab('pages');
   else if (r.v === 'chat') switchSidebarTab('chat');
   const delBtn = document.getElementById('topbarDel'); if (delBtn && r.v !== 'article') delBtn.remove();

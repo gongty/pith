@@ -3,7 +3,23 @@ import state from '../state.js';
 import { renderMd, html2md, parseFrontmatter, initTableResize, fmtChat } from '../markdown.js';
 import { t } from '../i18n.js';
 
+const _cleanups = [];
+function _addCleanup(target, event, handler, opts) {
+  target.addEventListener(event, handler, opts);
+  _cleanups.push(() => target.removeEventListener(event, handler, opts));
+}
+export function cleanupArticlePage() {
+  while (_cleanups.length) _cleanups.pop()();
+  if (_qaPath) {
+    const sess = _qaSessions.get(_qaPath);
+    if (sess && sess.streaming && sess.abort) {
+      sess.abort.abort();
+    }
+  }
+}
+
 export async function rArticle(c, p) {
+  cleanupArticlePage();
   c.innerHTML = '<div class="page-article"><div class="page-article-inner">' + skelLines(8) + '</div></div>';
   state.artPath = p;
   markRead(p);
@@ -338,11 +354,9 @@ function setupBodyPasteSanitize() {
 }
 
 /* ── Format toolbar ── */
-let _selHandler = null;
 function setupFormatToolbar() {
   const body = $('artBody'); if (!body) return;
-  if (_selHandler) document.removeEventListener('selectionchange', _selHandler);
-  _selHandler = () => {
+  const _selHandler = () => {
     const sel = window.getSelection();
     if (!sel.rangeCount || sel.isCollapsed || !body.contains(sel.anchorNode)) { hideFormatToolbar(); return; }
     const range = sel.getRangeAt(0); const rect = range.getBoundingClientRect();
@@ -351,7 +365,7 @@ function setupFormatToolbar() {
     tb.style.left = (rect.left + rect.width / 2 - tb.offsetWidth / 2) + 'px';
     tb.classList.add('show');
   };
-  document.addEventListener('selectionchange', _selHandler);
+  _addCleanup(document, 'selectionchange', _selHandler);
 }
 
 export function hideFormatToolbar() { $('formatToolbar').classList.remove('show'); }
@@ -495,15 +509,12 @@ export function pickSlash(idx) {
   getSlashBlocks()[idx].insert();
 }
 
-let _slashKeyHandler = null;
 function setupSlashMenu() {
   const body = $('artBody'); if (!body) return;
-  if (_slashKeyHandler) body.removeEventListener('keydown', _slashKeyHandler);
 
-  body.addEventListener('input', (e) => {
+  const _inputHandler = (e) => {
     const menu = $('slashMenu');
     if (menu && menu.classList.contains('open')) {
-      // Filter as user types after /
       const sel = window.getSelection();
       if (sel.rangeCount) {
         const node = sel.anchorNode;
@@ -521,7 +532,6 @@ function setupSlashMenu() {
       closeSlashMenu();
       return;
     }
-    // Detect "/" typed on empty-ish line
     if (e.inputType === 'insertText' && e.data === '/') {
       const sel = window.getSelection();
       if (!sel.rangeCount) return;
@@ -531,9 +541,10 @@ function setupSlashMenu() {
         if (text === '/') showSlashMenu();
       }
     }
-  });
+  };
+  _addCleanup(body, 'input', _inputHandler);
 
-  _slashKeyHandler = (e) => {
+  const _keyHandler = (e) => {
     const menu = $('slashMenu');
     if (!menu || !menu.classList.contains('open')) return;
     const items = menu.querySelectorAll('.slash-menu-item');
@@ -547,15 +558,14 @@ function setupSlashMenu() {
     }
     else if (e.key === 'Escape') { e.preventDefault(); closeSlashMenu(); }
   };
-  body.addEventListener('keydown', _slashKeyHandler);
+  _addCleanup(body, 'keydown', _keyHandler);
 
-  // Close on click outside
-  document.addEventListener('mousedown', (e) => {
+  const _mouseHandler = (e) => {
     const menu = $('slashMenu');
     if (menu && menu.classList.contains('open') && !menu.contains(e.target) && !e.target.closest('.block-plus-btn')) closeSlashMenu();
-  }, { once: false });
+  };
+  _addCleanup(document, 'mousedown', _mouseHandler);
 
-  // ── "+" button on empty lines ──
   setupBlockPlusBtn(body);
 }
 
@@ -663,23 +673,24 @@ function setupBlockPlusBtn(body) {
     _plusBtn.classList.add('show');
   }
 
-  document.addEventListener('selectionchange', updatePlus);
-  body.addEventListener('input', () => setTimeout(updatePlus, 10));
-  body.addEventListener('blur', () => setTimeout(() => { if (!document.activeElement || !document.activeElement.closest('.block-plus-btn')) _plusBtn.classList.remove('show'); }, 100));
+  _addCleanup(document, 'selectionchange', updatePlus);
+  const _plusInputHandler = () => setTimeout(updatePlus, 10);
+  _addCleanup(body, 'input', _plusInputHandler);
+  const _plusBlurHandler = () => setTimeout(() => { if (!document.activeElement || !document.activeElement.closest('.block-plus-btn')) _plusBtn.classList.remove('show'); }, 100);
+  _addCleanup(body, 'blur', _plusBlurHandler);
 }
 
 /* ── Link navigation inside contenteditable ── */
 function setupLinkNav() {
   const body = $('artBody'); if (!body) return;
-  body.addEventListener('click', e => {
+  const handler = e => {
     const a = e.target.closest('a'); if (!a) return;
     const href = a.getAttribute('href') || '';
     if (!href) return;
-    // Internal hash route → navigate
     if (href.startsWith('#/')) { e.preventDefault(); location.hash = href.slice(1); return; }
-    // External → open in new tab
     if (/^https?:\/\//.test(href)) { e.preventDefault(); window.open(href, '_blank', 'noopener'); return; }
-  });
+  };
+  _addCleanup(body, 'click', handler);
 }
 
 /* ── Image toolbar (resize + alignment) ── */
@@ -1269,8 +1280,9 @@ export async function sendArticleQA() {
     }
     sess.history.push({ role: 'assistant', content: full });
   } catch (e) {
-    if (e.name === 'AbortError') return;
-    aiBody.textContent = t('qa.error', { msg: e.message || 'unknown error' });
+    if (e.name !== 'AbortError') {
+      aiBody.textContent = t('qa.error', { msg: e.message || 'unknown error' });
+    }
   }
 
   sess.abort = null;
