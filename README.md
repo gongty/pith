@@ -1,6 +1,6 @@
 # Wiki App
 
-AI-powered personal knowledge base. Throw in materials, AI compiles them into structured wiki articles. The more you feed, the smarter it gets.
+AI-powered personal knowledge base. Throw in materials, AI compiles them into structured wiki articles. The more you feed, the smarter it gets. UI available in Chinese, English, Japanese, and Korean.
 
 Inspired by [Andrej Karpathy](https://x.com/karpathy): let LLMs write and maintain a wiki, you read and ask questions. A wiki is a compounding knowledge asset.
 
