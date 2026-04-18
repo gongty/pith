@@ -170,11 +170,11 @@
 }
 .page-article-inner{
   grid-column:2;
-  width:100%;max-width:860px;margin:0 auto;
+  width:100%;max-width:1032px;margin:0 auto;
   padding:20px 48px 120px;min-width:0;
 }
-@media(min-width:1500px){.page-article-inner{max-width:920px}}
-@media(min-width:1800px){.page-article-inner{max-width:980px}}
+@media(min-width:1500px){.page-article-inner{max-width:1104px}}
+@media(min-width:1800px){.page-article-inner{max-width:1176px}}
 @media(max-width:1100px){
   .page-article{grid-template-columns:1fr}
   .page-article-inner{grid-column:1;padding:20px 24px 120px}
@@ -249,15 +249,15 @@
 .article-body pre code{background:none;padding:0;color:#cdd6f4;font-weight:400}
 .article-body hr{border:none;border-top:1px solid var(--border);margin:2em 0}
 .article-body img{max-width:100%;border-radius:8px;margin:12px 0;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
-.article-body .table-wrap{overflow-x:auto;margin:12px 0}
-.article-body table{width:100%;border-collapse:collapse;font-size:14px;border-radius:6px;overflow:hidden}
+.article-body .table-wrap{overflow-x:auto;margin:12px 0;border-radius:6px}
+.article-body table{width:100%;border-collapse:collapse;font-size:14px}
 .article-body th{font-weight:700;text-align:left;background:var(--accent-bg);color:var(--fg);font-size:13px;text-transform:uppercase;letter-spacing:0.03em}
 .article-body th,.article-body td{padding:10px 14px;border:1px solid var(--border)}
 .article-body td{color:var(--fg)}
 .article-body tr:hover td{background:var(--bg-hover)}
-.col-resize-handle{position:absolute;top:0;width:6px;cursor:col-resize;z-index:2;user-select:none}
-.col-resize-handle::after{content:'';position:absolute;top:0;bottom:0;left:2px;width:2px;border-radius:1px;background:transparent;transition:background .15s}
-.col-resize-handle:hover::after,.col-resize-handle.active::after{background:var(--accent)}
+.col-resize-handle{position:absolute;top:0;right:-3px;width:6px;cursor:col-resize;z-index:2;user-select:none;overflow:visible}
+.col-resize-handle::after{content:'';position:absolute;top:0;bottom:0;right:2px;width:2px;border-radius:1px;background:transparent;transition:background .15s}
+.col-resize-handle:hover::after,.col-resize-handle.active::after{background:rgba(91,91,214,0.5)}
 
 .article-save-indicator{
   position:fixed;bottom:20px;right:20px;font-size:12px;color:var(--green);

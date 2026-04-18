@@ -181,32 +181,21 @@ function table2md(table) {
 /* ── Table column resize ── */
 export function initTableResize(root) {
   if (!root) return;
-  root.querySelectorAll('.table-wrap').forEach(wrap => {
-    const table = wrap.querySelector('table');
-    if (!table || table.__resizeInit) return;
+  root.querySelectorAll('.table-wrap table').forEach(table => {
+    if (table.__resizeInit) return;
     table.__resizeInit = true;
     table.style.tableLayout = 'fixed';
-    wrap.style.position = 'relative';
     const ths = table.querySelectorAll('thead th');
     if (!ths.length) return;
     ths.forEach(th => { th.style.width = th.offsetWidth + 'px'; });
 
-    const handles = [];
-    const updateAllPos = () => {
-      handles.forEach((hd, hi) => {
-        let left = 0;
-        for (let j = 0; j <= hi; j++) left += ths[j].offsetWidth;
-        hd.style.left = (left - 3) + 'px';
-        hd.style.height = table.offsetHeight + 'px';
-      });
-    };
-
     ths.forEach((th, i) => {
       if (i === ths.length - 1) return;
+      th.style.position = 'relative';
       const handle = document.createElement('div');
       handle.className = 'col-resize-handle';
-      wrap.appendChild(handle);
-      handles.push(handle);
+      handle.style.height = table.offsetHeight + 'px';
+      th.appendChild(handle);
 
       handle.addEventListener('mousedown', e => {
         e.preventDefault(); e.stopPropagation();
@@ -219,7 +208,6 @@ export function initTableResize(root) {
           const dx = ev.clientX - startX;
           th.style.width = Math.max(40, startW + dx) + 'px';
           nextTh.style.width = Math.max(40, nextW - dx) + 'px';
-          updateAllPos();
         };
         const onUp = () => {
           handle.classList.remove('active');
@@ -230,6 +218,5 @@ export function initTableResize(root) {
         document.addEventListener('mouseup', onUp);
       });
     });
-    updateAllPos();
   });
 }
