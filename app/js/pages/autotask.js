@@ -204,8 +204,9 @@ function renderTaskList() {
       + '<button class="btn-fill" style="width:auto;padding:10px 24px" onclick="openAutotaskModal()">' + h(t('autotask.createBtn')) + '</button>'
       + '</div>';
   }
+  const sorted = [...tasks].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   let s = '<div class="autotask-cards">';
-  tasks.forEach(tk => {
+  sorted.forEach(tk => {
     const sources = Array.isArray(tk.sources) ? tk.sources : [];
     const tagSet = new Set();
     sources.forEach(src => {

@@ -40,30 +40,31 @@ async function parsePdfBuffer(buf) {
 }
 
 const ROOT = __dirname;  // wiki-app/ is the project root
-const WIKI = path.join(ROOT, 'data', 'wiki');
-const RAW = path.join(ROOT, 'data', 'raw');
+const DATA_ROOT = process.env.WIKI_DATA_DIR || path.join(ROOT, 'data');
+const WIKI = path.join(DATA_ROOT, 'wiki');
+const RAW = path.join(DATA_ROOT, 'raw');
 const APP = path.join(ROOT, 'app');
 const PORT = parseInt(process.env.PORT, 10) || 3456;
-const CONFIG_PATH = path.join(ROOT, 'config.json');
-const PROFILE_PATH = path.join(ROOT, 'profile.json');
-const MEMORY_PATH = path.join(ROOT, 'data', 'memory.json');
+const CONFIG_PATH = path.join(DATA_ROOT, 'config.json');
+const PROFILE_PATH = path.join(DATA_ROOT, 'profile.json');
+const MEMORY_PATH = path.join(DATA_ROOT, 'memory.json');
 
 // Ensure data directories exist
 fs.mkdirSync(WIKI, { recursive: true });
 fs.mkdirSync(RAW, { recursive: true });
-const UPLOADS = path.join(ROOT, 'data', 'uploads');
+const UPLOADS = path.join(DATA_ROOT, 'uploads');
 fs.mkdirSync(UPLOADS, { recursive: true });
-const CHATS = path.join(ROOT, 'data', 'chats');
+const CHATS = path.join(DATA_ROOT, 'chats');
 fs.mkdirSync(CHATS, { recursive: true });
-const AUTOTASKS_DIR = path.join(ROOT, 'data', 'autotasks');
+const AUTOTASKS_DIR = path.join(DATA_ROOT, 'autotasks');
 fs.mkdirSync(AUTOTASKS_DIR, { recursive: true });
-const QUEUE_DIR = path.join(ROOT, 'data', 'queue');
+const QUEUE_DIR = path.join(DATA_ROOT, 'queue');
 fs.mkdirSync(QUEUE_DIR, { recursive: true });
 const QUEUE_FILE = path.join(QUEUE_DIR, 'tasks.json');
 
 // ── 崩溃诊断 & 访问日志 ──
 // 目的：进程挂掉时能还原现场（最近请求 + 堆栈 + 触发来源 + 信号）
-const LOGS_DIR = path.join(ROOT, 'data', 'logs');
+const LOGS_DIR = path.join(DATA_ROOT, 'logs');
 fs.mkdirSync(LOGS_DIR, { recursive: true });
 const CRASH_LOG = path.join(LOGS_DIR, 'crash.log');
 const ACCESS_LOG = path.join(LOGS_DIR, 'access.log');
@@ -2816,7 +2817,12 @@ async function extractURLReadability(url, rawDir) {
       /enable javascript and cookies/.test(headSnippet) ||
       /checking your browser/.test(headSnippet) ||
       /cf-(chl|browser-verification|challenge|ray)/.test(headSnippet) ||
-      (/cloudflare/.test(headSnippet) && /(challenge|verify|attention)/.test(headSnippet));
+      (/cloudflare/.test(headSnippet) && /(challenge|verify|attention)/.test(headSnippet)) ||
+      /ttgcaptcha/i.test(headSnippet) ||
+      /captcha\.init/i.test(headSnippet) ||
+      (/sec_sdk_build/.test(headSnippet) && /captcha/.test(headSnippet)) ||
+      /waf[-_]?(verify|captcha|challenge)/i.test(headSnippet) ||
+      (/百度安全验证/.test(html.slice(0, 6000)) || /baidu.*verify/i.test(headSnippet));
     if (challengeHit) {
       return `[Fetch failed: 反爬虫验证页（Cloudflare/Bot challenge），未抓到实质内容]\n\nURL: ${url}`;
     }
@@ -3001,7 +3007,7 @@ async function extractContent(type, content, filename, urlVal, rawDir) {
 // ── 自动化任务 ──
 
 const { fetchSource: fetchSourceAdapter, AGGREGATOR_SCRIPT: AGG_SCRIPT_PATH, assertSafeUrl, isBlockedUrlError } = require('./lib/sources.js');
-const SYSTEM_SOURCES_PATH = path.join(ROOT, 'data', 'system-sources.json');
+const SYSTEM_SOURCES_PATH = path.join(DATA_ROOT, 'system-sources.json');
 
 // ── 向量索引（团队 A / M1） ──
 const vectors = require('./lib/vectors.js');
@@ -3328,8 +3334,11 @@ async function fetchRSS(url) {
     const link = (block.match(/<link[^>]*>([\s\S]*?)<\/link>/i) || [])[1] ||
                  (block.match(/<link[^>]*href="([^"]*)"[^>]*\/?>/i) || [])[1] || '';
     const desc = (block.match(/<description[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/i) || [])[1] || '';
+    const contentEncoded = (block.match(/<content:encoded[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/content:encoded>/i) || [])[1] || '';
     const pubDate = (block.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i) || [])[1] || '';
-    items.push({ title: title.trim(), url: link.trim(), description: stripHtml(desc).trim(), pubDate: pubDate.trim() });
+    const richDesc = contentEncoded || desc;
+    const fullText = stripHtml(richDesc).trim();
+    items.push({ title: title.trim(), url: link.trim(), description: stripHtml(desc).trim(), fullContent: fullText.length > 200 ? fullText : '', pubDate: pubDate.trim() });
   }
 
   // Also try Atom <entry> format
@@ -3818,18 +3827,32 @@ async function executeAutotask(taskId, isManual = false, presetRunId = null) {
         const rawDir = path.join(RAW, topicDir);
         fs.mkdirSync(rawDir, { recursive: true });
 
-        const extractedText = await extractContent('url', null, null, item.url, rawDir);
+        let extractedText = await extractContent('url', null, null, item.url, rawDir);
 
         // 内容质量守卫：抓取失败/反爬拦截/内容过短时不入库。
         // 背景：extractURLReadability 在失败路径上不 throw，而是返回形如
         // "[Fetch failed: ...]" 的占位字符串。以前这串字符也被当作"有效素材"
         // 塞给 compileArticle，LLM 被迫按"结构化"要求硬编出"采集状态说明"这类
         // 空壳文章入库，污染知识库。
-        const extractedTrim = (extractedText || '').trim();
+        let extractedTrim = (extractedText || '').trim();
         const EXTRACT_FAIL_PREFIXES = ['[Fetch failed:', '[Fetched content too short]', '[PDF 文本提取为空'];
-        const isFailMarker = EXTRACT_FAIL_PREFIXES.some(m => extractedTrim.startsWith(m));
-        // 300 字符阈值：正常文章至少一段话，低于此量的网页基本只能是拦截页 / 纯导航 / 404。
-        const tooShort = extractedTrim.length < 300;
+        let isFailMarker = EXTRACT_FAIL_PREFIXES.some(m => extractedTrim.startsWith(m));
+        let tooShort = extractedTrim.length < 300;
+
+        // URL 抓取失败时回退到 RSS/aggregator 源已提供的内容
+        if (!extractedTrim || isFailMarker || tooShort) {
+          const fallback = (item.fullContent || item.summary || '').trim();
+          if (fallback.length >= 80) {
+            const fbTitle = item.title ? `# ${item.title}\n\n` : '';
+            const fbSource = item.url ? `> Source: ${item.url}\n\n` : '';
+            extractedText = fbTitle + fbSource + fallback;
+            extractedTrim = extractedText.trim();
+            isFailMarker = false;
+            tooShort = extractedTrim.length < 300;
+            if (rec && !tooShort) rec.note = 'fallback:rss-content';
+          }
+        }
+
         if (!extractedTrim || isFailMarker || tooShort) {
           if (rec) {
             rec.status = 'fetch_error';
@@ -5733,7 +5756,7 @@ ${trimmedArticle}
   }
 
   // ── 报告存储 ──
-  const REPORTS_DIR = path.join(ROOT, 'data', 'reports');
+  const REPORTS_DIR = path.join(DATA_ROOT, 'reports');
 
   function ensureReportsDir() {
     if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
@@ -6595,7 +6618,7 @@ try {
 }
 
 // ── 定时健康检查 ──
-const REPORTS_DIR_INIT = path.join(ROOT, 'data', 'reports');
+const REPORTS_DIR_INIT = path.join(DATA_ROOT, 'reports');
 if (!fs.existsSync(REPORTS_DIR_INIT)) fs.mkdirSync(REPORTS_DIR_INIT, { recursive: true });
 
 // 启动时清理旧报告
