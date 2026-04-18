@@ -4,9 +4,11 @@ const { app, BrowserWindow, dialog } = require('electron');
 const { fork } = require('child_process');
 const path = require('path');
 const net = require('net');
+const http = require('http');
 const fs = require('fs');
 
-const PORT = 3456;
+const BASE_PORT = 3456;
+let activePort = BASE_PORT;
 const SERVER_SCRIPT = path.join(__dirname, '..', 'server.js');
 
 let dataDir = null;
@@ -55,12 +57,37 @@ function isPortOpen(port) {
   });
 }
 
-function startServer() {
+function isPithServer(port) {
+  return new Promise((resolve) => {
+    const req = http.get(`http://127.0.0.1:${port}/api/auth/status`, { timeout: 2000 }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          resolve('authRequired' in json && 'authenticated' in json);
+        } catch { resolve(false); }
+      });
+    });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+  });
+}
+
+async function findAvailablePort() {
+  for (let p = BASE_PORT; p < BASE_PORT + 20; p++) {
+    if (!(await isPortOpen(p))) return { port: p, reuse: false };
+    if (await isPithServer(p)) return { port: p, reuse: true };
+  }
+  return { port: BASE_PORT + 20, reuse: false };
+}
+
+function startServer(port) {
   return new Promise((resolve, reject) => {
     serverProcess = fork(SERVER_SCRIPT, [], {
       env: {
         ...process.env,
-        PORT: String(PORT),
+        PORT: String(port),
         WIKI_DATA_DIR: getDataDir(),
         WIKI_API_KEY: loadApiKey(),
         ELECTRON: '1',
@@ -83,7 +110,7 @@ function startServer() {
       serverProcess = null;
     });
 
-    waitForPort(PORT, 10000).then(resolve).catch(reject);
+    waitForPort(port, 10000).then(resolve).catch(reject);
   });
 }
 
@@ -119,7 +146,7 @@ function createWindow() {
     },
   });
 
-  mainWindow.loadURL(`http://127.0.0.1:${PORT}`);
+  mainWindow.loadURL(`http://127.0.0.1:${activePort}`);
 
   mainWindow.on('closed', () => { mainWindow = null; });
 }
@@ -127,11 +154,13 @@ function createWindow() {
 app.whenReady().then(async () => {
   try {
     seedDataDir();
-    if (await isPortOpen(PORT)) {
+    const found = await findAvailablePort();
+    activePort = found.port;
+    if (found.reuse) {
       ownServer = false;
     } else {
       ownServer = true;
-      await startServer();
+      await startServer(activePort);
     }
     createWindow();
   } catch (err) {
