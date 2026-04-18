@@ -39,6 +39,7 @@ Single-file raw Node.js HTTP server (~6700 lines). Key subsystems:
 - **Wiki Data & Graph** — `searchWiki()` for full-text (BM25-ish) search. `retrieveContext(question)` for chat RAG: lex + vec RRF 融合. `/api/wiki/graph` 构两层图: concept 节点 + article 节点, 经 `lib/concepts.js` 的 stopword + hapax 双档过滤。
 - **Vector Retrieval (`lib/vectors.js`)** — embedding 仅支持 `bailian / openai / custom`。索引落 `data/vectors/index.jsonl` + `meta.json`。写策略: 先写 `.tmp` 再 `fs.renameSync` 原子替换。
 - **Ingest Pipeline** — Single-task queue. Accepts text/URL/PDF/image/audio/video/ZIP. Batch mode with progress tracking.
+- **Article Q&A** — `POST /api/wiki/article-ask` SSE 端点，读取文章全文 + 多轮对话历史，调 `callLLM` 流式返回。server 做 SSE 代理，re-emit `{t:content}` 和 `{r:reasoning_content}` 事件。前端在 `pages/article.js` 实现浮动面板，每个文章独立 session（上限 10，LRU 淘汰），session 持有自己的 DOM 容器，切文章只换挂载不丢 streaming 状态。
 - **Automated Tasks** — Source 适配器五种类型: rss / changelog / aggregator / webpage / api. Pipeline: fetch -> dedup -> prefilter -> gating -> smart_fill -> processing -> brief -> finalize. SSRF 防护 via `assertSafeUrl()`.
 - **Auth & Hardening** — 三层中间件: CSRF (Origin check) -> Rate limit (IP + endpoint bucketing) -> Auth (Bearer token / cookie).
 
@@ -103,11 +104,15 @@ data/uploads/       -> Uploaded files
 
 - **No build system.** Edit CSS/JS files -> refresh browser. Server restart only needed for `server.js` changes.
 - **ES module imports must use relative paths** with `.js` extension. If any import in the chain fails, the entire module tree silently fails (blank page).
+- **Article page uses flex layout** with TOC as `order:-1` child (renders left). TOC HTML must be inside `.page-article` div, not outside it.
 - **Article frontmatter 必须保留**: 所有 `data/wiki/**/*.md` 都有 `---\ntags: [...]\n---\n` 开头。用 `parseFrontmatter` + `serializeFrontmatter` 操作，不要直接字符串拼接。
 - **inline `onclick` 字符串必须用 `jsAttr()` 不能用 `h()`**: `h()` 不转义 `'`，文件名里的引号会击穿 onclick 字符串。`jsAttr()` 用 JS 级 unicode 转义。
 - **`safe(base, rel)` 路径穿越校验**: 所有拼文件路径的操作必须过 `safe()`。
 - **Autotask 写锁**: `history.json` 并发写必须经过 `withAutotaskWriteLock(fn)` 串行化。
 - **向量索引写入**: 必须经 `lib/vectors.js` 导出的 API，不要直接 `fs.writeFileSync`。
+- **CSS overflow rule**: `overflow-y` 非 `visible` 时浏览器强制 `overflow-x` 从 `visible` 变 `auto`。滚动容器必须显式 `overflow-x:hidden`。
+- **Contenteditable paste 清洗**: `.article-title` 走纯文本粘贴；`.article-body` 走 `sanitizeBodyHtml()` 白/灰/黑三张表清洗。新增 contenteditable 区域要走同款处理。
+- **新增写路由**: 默认进 auth / CSRF / rate limit 三层中间件。高成本 LLM 端点加到 `EXPENSIVE_PREFIXES`（10 req/min）。
 - **前端 tab 状态持久化**: 用 localStorage，不走 hash query（会触发 router 全量重 render）。
 
 ## Conventions
@@ -116,3 +121,8 @@ data/uploads/       -> Uploaded files
 - Wiki articles written in Chinese; raw materials preserve original language
 - Design tokens use CSS custom properties — change colors/radius in `base.css :root`
 - Dark mode: `[data-theme="dark"]` overrides in each CSS file
+
+## UI 设计原则
+
+- **多 Tab 弹窗必须同高度**: 弹窗高度不允许随 Tab 内容跳动。固定外框高度，内容超出时面板内滚动，底部按钮栏吸底常驻。
+- **长文内容宽度自适应**: 正文有阅读友好的宽度上限（约 860-920px），富余空间左右均分居中，不一律贴左。
