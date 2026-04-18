@@ -37,6 +37,7 @@ Inspired by [Andrej Karpathy](https://x.com/karpathy): let LLMs write and mainta
 - **Automated tasks** -- AI research assistant that monitors RSS/web/API sources on a schedule. LLM relevance gating, dedup, and daily briefings.
 - **Rich editing** -- Notion-style contenteditable editor with floating toolbar, auto-save, tag management, and table of contents.
 - **Multi-LLM** -- Bailian (Alibaba), OpenRouter, Anthropic, OpenAI, DeepSeek, or custom providers.
+- **Multi-language UI** -- Chinese, English, Japanese, Korean.
 - **Dark mode** -- Full dark theme with carefully tuned tokens.
 - **Zero framework** -- Vanilla JS frontend, no build step. Edit and refresh.
 
