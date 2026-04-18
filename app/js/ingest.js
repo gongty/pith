@@ -1,5 +1,6 @@
 import { $, h, api, toast, go } from './utils.js';
 import state from './state.js';
+import { updSidebarPages } from './sidebar.js';
 
 // ── 文件类型检测 ──
 
@@ -581,7 +582,13 @@ function showProgressDone(success, msg, articlePath) {
 
   state.gd = null; state.td = null; state.sd = null; state.chatList = null;
   state.pendingBinaryFile = null;
-  if (success) toast('\u77E5\u8BC6\u5E93\u5DF2\u66F4\u65B0');
+  if (success) {
+    toast('\u77E5\u8BC6\u5E93\u5DF2\u66F4\u65B0');
+    updSidebarPages();
+    if (state.cv === 'browse' || state.cv === 'dashboard') {
+      if (typeof window.render === 'function') window.render();
+    }
+  }
 
   if (articlePath) {
     el.style.cursor = 'pointer';

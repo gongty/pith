@@ -1,10 +1,11 @@
-import { $, h, api, put, apiDel, toast, go, skelLines, jsAttr } from '../utils.js';
+import { $, h, api, put, apiDel, toast, go, skelLines, jsAttr, markRead } from '../utils.js';
 import state from '../state.js';
-import { renderMd, html2md, parseFrontmatter } from '../markdown.js';
+import { renderMd, html2md, parseFrontmatter, initTableResize, fmtChat } from '../markdown.js';
 
 export async function rArticle(c, p) {
   c.innerHTML = '<div class="page-article"><div class="page-article-inner">' + skelLines(8) + '</div></div>';
   state.artPath = p;
+  markRead(p);
   try {
     const res = await api('/api/wiki/article?path=' + encodeURIComponent(p));
     state.artMd = res.content || '';
@@ -101,6 +102,8 @@ export async function rArticle(c, p) {
     setupSlashMenu();
     setupImageToolbar();
     setupLinkNav();
+    initTableResize($('artBody'));
+    setupArticleQA(p);
   } catch (e) { c.innerHTML = '<div style="text-align:center;padding:60px;color:var(--fg-tertiary)">加载失败: ' + h(e.message) + '</div>'; }
 }
 

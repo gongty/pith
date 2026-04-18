@@ -255,6 +255,9 @@
 .article-body th,.article-body td{padding:10px 14px;border:1px solid var(--border)}
 .article-body td{color:var(--fg)}
 .article-body tr:hover td{background:var(--bg-hover)}
+.col-resize-handle{position:absolute;top:0;width:6px;cursor:col-resize;z-index:2;user-select:none}
+.col-resize-handle::after{content:'';position:absolute;top:0;bottom:0;left:2px;width:2px;border-radius:1px;background:transparent;transition:background .15s}
+.col-resize-handle:hover::after,.col-resize-handle.active::after{background:var(--accent)}
 
 .article-save-indicator{
   position:fixed;bottom:20px;right:20px;font-size:12px;color:var(--green);
@@ -414,6 +417,8 @@
 .browse-card-meta{display:flex;align-items:center;gap:8px}
 .browse-card-topic{font-size:11px;font-weight:500;padding:2px 8px;border-radius:10px;white-space:nowrap}
 .browse-card-time{font-size:12px;color:var(--fg-tertiary);margin-left:auto;white-space:nowrap}
+.browse-card{position:relative}
+.browse-card .unread-dot{position:absolute;top:8px;right:8px;width:7px;height:7px;border-radius:50%;background:var(--accent)}
 @media(max-width:768px){
   .page-browse{padding:20px 16px 120px}
   .browse-group-grid{grid-template-columns:1fr}

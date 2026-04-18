@@ -88,3 +88,20 @@ export function skelLines(n) {
   for (let i = 0; i < n; i++) s += '<div class="skel skel-line" style="width:' + ((40 + Math.random() * 50) | 0) + '%"></div>';
   return '<div class="skel skel-title"></div>' + s;
 }
+
+const READ_KEY = 'kb-read-articles';
+function _readSet() {
+  try { return new Set(JSON.parse(localStorage.getItem(READ_KEY) || '[]')); } catch { return new Set(); }
+}
+export function markRead(path) {
+  const s = _readSet(); s.add(path);
+  localStorage.setItem(READ_KEY, JSON.stringify([...s]));
+}
+export function isUnread(path) {
+  if (localStorage.getItem(READ_KEY) === null) return false;
+  return !_readSet().has(path);
+}
+export function initReadState(paths) {
+  if (localStorage.getItem(READ_KEY) !== null) return;
+  localStorage.setItem(READ_KEY, JSON.stringify(paths));
+}

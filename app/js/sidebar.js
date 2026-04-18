@@ -1,4 +1,4 @@
-import { $, h, api, jsAttr } from './utils.js';
+import { $, h, api, jsAttr, isUnread, initReadState } from './utils.js';
 import state from './state.js';
 
 export function toggleSidebar() {
@@ -63,6 +63,7 @@ export async function updSidebarPages() {
     const tree = state.td || await api('/api/wiki/tree'); state.td = tree;
     const all = [];
     (tree || []).forEach(t => (t.children || []).forEach(c => all.push(c)));
+    initReadState(all.map(c => c.path));
     all.sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
     // group by date bucket, preserve sort order
     const buckets = [];
@@ -85,7 +86,9 @@ export async function updSidebarPages() {
         const active = state.artPath === c.path ? ' active' : '';
         const hidden = state.foldedDates.has(b.key) ? ' style="display:none"' : '';
         const titleText = c.title || c.file;
-        s += '<div class="sidebar-page' + active + '" data-date="' + h(b.key) + '" data-path="' + h(c.path) + '"' + hidden + ' onclick="go(\'#/article/' + jsAttr(c.path) + '\')" title="' + h(titleText) + '">'
+        const unread = isUnread(c.path) ? ' unread' : '';
+        s += '<div class="sidebar-page' + active + unread + '" data-date="' + h(b.key) + '" data-path="' + h(c.path) + '"' + hidden + ' onclick="go(\'#/article/' + jsAttr(c.path) + '\')" title="' + h(titleText) + '">'
+          + (unread ? '<span class="unread-dot"></span>' : '')
           + '<span class="page-title">' + h(titleText) + '</span>'
           + '<button class="sidebar-page-del" onclick="event.stopPropagation();requestDelArticle(\'' + jsAttr(c.path) + '\',\'' + jsAttr(titleText) + '\')" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>'
           + '</div>';

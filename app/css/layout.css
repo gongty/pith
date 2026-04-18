@@ -86,6 +86,7 @@
 .sidebar-page svg{width:15px;height:15px;flex-shrink:0;opacity:0.4}
 .sidebar-page.active svg{opacity:0.7;color:var(--accent)}
 .sidebar-page .page-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.sidebar-page .unread-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0}
 .sidebar-page-del{
   width:24px;height:24px;border-radius:var(--radius);display:flex;
   align-items:center;justify-content:center;color:var(--fg-tertiary);
