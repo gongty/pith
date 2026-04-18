@@ -370,7 +370,7 @@ const SLASH_BLOCKS = [
   { icon: '{}', label: '代码块', cat: 'block', insert: () => insertHtmlBlock('<pre><code>代码</code></pre>') },
   { icon: '┬', label: '表格', cat: 'block', insert: () => insertHtmlBlock('<div class="table-wrap"><table><thead><tr><th>列 1</th><th>列 2</th><th>列 3</th></tr></thead><tbody><tr><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td></tr></tbody></table></div>') },
   { icon: '—', label: '分割线', cat: 'block', insert: () => insertHtmlBlock('<hr>') },
-  { icon: '💡', label: '高亮块', cat: 'block', insert: () => insertHtmlBlock('<blockquote><p><strong>提示：</strong>内容</p></blockquote>') },
+  { icon: '💡', label: '高亮块', cat: 'block', insert: () => insertHtmlBlock('<div class="callout"><p>内容</p></div>') },
 ];
 
 function clearSlashTrigger() {
@@ -828,4 +828,218 @@ function endImgResize() {
   document.removeEventListener('mousemove', onImgResize);
   document.removeEventListener('mouseup', endImgResize);
   onArtChange();
+}
+
+/* ── Article Q&A floating panel ── */
+let _qaPanel = null;
+let _qaFab = null;
+let _qaHistory = [];
+let _qaPath = '';
+let _qaStreaming = false;
+let _qaModel = '';
+let _qaModels = [];
+
+function setupArticleQA(articlePath) {
+  _qaPath = articlePath;
+  _qaHistory = [];
+  ensureQAPanel();
+  ensureQAFab();
+  if (!_qaPanel.classList.contains('open')) _qaFab.classList.add('show');
+  const msgsEl = _qaPanel.querySelector('.article-qa-messages');
+  msgsEl.innerHTML = buildEmptyState();
+  loadQAModels();
+}
+
+function buildEmptyState() {
+  return '<div class="article-qa-empty">' +
+    '<div class="article-qa-empty-hint">针对当前文章提问</div>' +
+    '<div class="article-qa-suggestions">' +
+      '<button class="article-qa-chip" onclick="qaChip(this)">总结这篇文章的核心观点</button>' +
+      '<button class="article-qa-chip" onclick="qaChip(this)">有哪些关键概念？</button>' +
+      '<button class="article-qa-chip" onclick="qaChip(this)">这篇文章的实践建议是什么？</button>' +
+    '</div>' +
+  '</div>';
+}
+
+async function loadQAModels() {
+  if (_qaModels.length) { renderModelSelect(); return; }
+  try {
+    const cfg = await api('/api/settings');
+    const provKey = cfg.provider || 'bailian';
+    const prov = cfg.providers && cfg.providers[provKey];
+    if (prov && prov.models) {
+      _qaModels = prov.models.map(m => ({ id: m.id, label: m.label || m.id }));
+      const fast = prov.models.find(m => m.use === 'fast');
+      _qaModel = fast ? fast.id : (cfg.model || prov.models[0].id);
+    }
+    renderModelSelect();
+  } catch {}
+}
+
+function renderModelSelect() {
+  const sel = _qaPanel.querySelector('.article-qa-model-select');
+  if (!sel || !_qaModels.length) return;
+  sel.innerHTML = _qaModels.map(m =>
+    '<option value="' + h(m.id) + '"' + (m.id === _qaModel ? ' selected' : '') + '>' + h(m.label) + '</option>'
+  ).join('');
+}
+
+function ensureQAFab() {
+  if (_qaFab) return;
+  const btn = document.createElement('button');
+  btn.className = 'article-qa-fab';
+  btn.title = '提问';
+  btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>';
+  btn.addEventListener('click', toggleQAPanel);
+  document.body.appendChild(btn);
+  _qaFab = btn;
+}
+
+function ensureQAPanel() {
+  if (_qaPanel) return;
+  const panel = document.createElement('div');
+  panel.className = 'article-qa-panel';
+  panel.innerHTML =
+    '<div class="article-qa-head">' +
+      '<span class="article-qa-title">文章提问</span>' +
+      '<select class="article-qa-model-select" onchange="qaModelChange(this)"></select>' +
+      '<button class="article-qa-close" onclick="closeArticleQA()">' +
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+      '</button>' +
+    '</div>' +
+    '<div class="article-qa-messages">' + buildEmptyState() + '</div>' +
+    '<div class="article-qa-input-wrap">' +
+      '<input class="article-qa-input" type="text" placeholder="输入问题，回车发送..." />' +
+      '<button class="article-qa-send" onclick="sendArticleQA()">' +
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>' +
+      '</button>' +
+    '</div>';
+  document.body.appendChild(panel);
+  _qaPanel = panel;
+
+  const input = panel.querySelector('.article-qa-input');
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      sendArticleQA();
+    }
+  });
+}
+
+export function qaModelChange(sel) {
+  _qaModel = sel.value;
+}
+
+export function toggleQAPanel() {
+  ensureQAPanel();
+  const opening = !_qaPanel.classList.contains('open');
+  _qaPanel.classList.toggle('open');
+  if (opening) {
+    _qaFab.classList.remove('show');
+    setTimeout(() => _qaPanel.querySelector('.article-qa-input').focus(), 100);
+  } else {
+    _qaFab.classList.add('show');
+  }
+}
+
+export function closeArticleQA() {
+  if (_qaPanel) _qaPanel.classList.remove('open');
+  if (_qaFab) _qaFab.classList.add('show');
+}
+
+export function hideArticleQA() {
+  if (_qaFab) _qaFab.classList.remove('show');
+  if (_qaPanel) _qaPanel.classList.remove('open');
+}
+
+export function qaChip(btn) {
+  if (_qaStreaming) return;
+  const input = _qaPanel.querySelector('.article-qa-input');
+  input.value = btn.textContent;
+  sendArticleQA();
+}
+
+export async function sendArticleQA() {
+  if (_qaStreaming) return;
+  const input = _qaPanel.querySelector('.article-qa-input');
+  const q = input.value.trim();
+  if (!q) return;
+  input.value = '';
+
+  const msgsEl = _qaPanel.querySelector('.article-qa-messages');
+  const empty = msgsEl.querySelector('.article-qa-empty');
+  if (empty) empty.remove();
+
+  const userDiv = document.createElement('div');
+  userDiv.className = 'article-qa-msg user';
+  userDiv.innerHTML = '<div class="article-qa-msg-body">' + h(q).replace(/\n/g, '<br>') + '</div>';
+  msgsEl.appendChild(userDiv);
+
+  const aiDiv = document.createElement('div');
+  aiDiv.className = 'article-qa-msg assistant';
+  aiDiv.innerHTML = '<div class="article-qa-avatar">AI</div><div class="article-qa-msg-body"><span class="article-qa-dots"><span></span><span></span><span></span></span></div>';
+  msgsEl.appendChild(aiDiv);
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+
+  _qaHistory.push({ role: 'user', content: q });
+  _qaStreaming = true;
+  input.disabled = true;
+
+  const aiBody = aiDiv.querySelector('.article-qa-msg-body');
+  let full = '';
+
+  try {
+    const reqBody = { path: _qaPath, question: q, history: _qaHistory.slice(-10) };
+    if (_qaModel) reqBody.model = _qaModel;
+
+    const resp = await fetch('/api/wiki/article-ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(reqBody)
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || '请求失败');
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    aiBody.textContent = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf('\n\n')) !== -1) {
+        const line = buf.slice(0, idx).trim();
+        buf = buf.slice(idx + 2);
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6);
+        if (payload === '[DONE]') continue;
+        try {
+          const obj = JSON.parse(payload);
+          if (obj.error) throw new Error(obj.error);
+          if (obj.t) {
+            full += obj.t;
+            aiBody.innerHTML = fmtChat(full);
+            msgsEl.scrollTop = msgsEl.scrollHeight;
+          }
+        } catch (e) {
+          if (e.message && e.message !== 'Unexpected end of JSON input') throw e;
+        }
+      }
+    }
+
+    if (!full) aiBody.textContent = '(无回复)';
+    _qaHistory.push({ role: 'assistant', content: full });
+  } catch (e) {
+    aiBody.textContent = '出错: ' + (e.message || '未知错误');
+  }
+
+  _qaStreaming = false;
+  input.disabled = false;
+  input.focus();
+  msgsEl.scrollTop = msgsEl.scrollHeight;
 }

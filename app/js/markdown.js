@@ -144,6 +144,7 @@ function node2md(node) {
     const tag = child.tagName;
     if (tag === 'BR') { md += '\n'; continue; }
     if (tag === 'P') { md += '\n\n' + node2md(child); continue; }
+    if (tag === 'DIV' && child.classList.contains('callout')) { const lines = node2md(child).trim().split('\n'); md += '\n\n' + lines.map(l => '>! ' + l).join('\n'); continue; }
     if (tag === 'DIV') { md += '\n' + node2md(child); continue; }
     if (/^H[1-6]$/.test(tag)) { const lvl = tag[1]; md += '\n\n' + '#'.repeat(+lvl) + ' ' + child.innerText; continue; }
     if (tag === 'STRONG' || tag === 'B') { md += '**' + node2md(child) + '**'; continue; }
