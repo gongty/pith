@@ -184,10 +184,19 @@ export function initTableResize(root) {
   root.querySelectorAll('.table-wrap table').forEach(table => {
     if (table.__resizeInit) return;
     table.__resizeInit = true;
-    table.style.tableLayout = 'fixed';
     const ths = table.querySelectorAll('thead th');
     if (!ths.length) return;
-    ths.forEach(th => { th.style.width = th.offsetWidth + 'px'; });
+    const initW = table.offsetWidth;
+    const naturalWidths = Array.from(ths).map(th => th.offsetWidth);
+    table.style.tableLayout = 'fixed';
+    table.style.width = initW + 'px';
+    ths.forEach((th, i) => { th.style.width = naturalWidths[i] + 'px'; });
+
+    const syncTableW = () => {
+      let total = 0;
+      ths.forEach(t => { total += t.offsetWidth; });
+      table.style.width = Math.max(initW, total) + 'px';
+    };
 
     ths.forEach((th, i) => {
       if (i === ths.length - 1) return;
@@ -201,13 +210,11 @@ export function initTableResize(root) {
         e.preventDefault(); e.stopPropagation();
         const startX = e.clientX;
         const startW = th.offsetWidth;
-        const nextTh = ths[i + 1];
-        const nextW = nextTh.offsetWidth;
         handle.classList.add('active');
         const onMove = ev => {
           const dx = ev.clientX - startX;
           th.style.width = Math.max(40, startW + dx) + 'px';
-          nextTh.style.width = Math.max(40, nextW - dx) + 'px';
+          syncTableW();
         };
         const onUp = () => {
           handle.classList.remove('active');
