@@ -130,6 +130,7 @@ document.addEventListener('keydown', e => {
 });
 
 /* ── Init ── */
+if (navigator.userAgent.includes('Electron')) document.body.classList.add('electron-app');
 initLang();
 applyI18n();
 initTheme();

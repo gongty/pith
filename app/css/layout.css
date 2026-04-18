@@ -219,5 +219,12 @@
 #topbarDel{width:32px;padding:0;justify-content:center}
 #topbarDel:hover{color:var(--red)!important;background:var(--bg-hover)}
 
+/* ── Electron: window drag & traffic-light clearance ── */
+.electron-app .topbar{-webkit-app-region:drag;margin-top:6px}
+.electron-app .topbar-btn,
+.electron-app .topbar-breadcrumb a{-webkit-app-region:no-drag}
+.electron-app .sidebar-header{padding-top:38px}
+.electron-app .sidebar-header *{-webkit-app-region:no-drag}
+
 /* ── Content ── */
 .content{flex:1;overflow-y:auto;overflow-x:hidden}

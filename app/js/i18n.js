@@ -16,8 +16,8 @@ L.en = {
   'nav.ingest': 'Ingest',
   'nav.collapse': 'Collapse sidebar',
   'nav.ingestQueue': 'Ingest Queue',
-  'nav.kb': 'Knowledge Base',
-  'nav.kbOf': "{name}'s KB",
+  'nav.kb': 'Pith',
+  'nav.kbOf': "{name}'s Pith",
 
   // ── time ──
   'time.justNow': 'just now',
@@ -221,7 +221,7 @@ L.en = {
   'raw.loadError': 'Load failed',
 
   // ── health ──
-  'health.title': 'Knowledge Base Health Report',
+  'health.title': 'Pith Health Report',
   'health.lastCheck': 'Last check: {time}',
   'health.runNow': 'Check now',
   'health.running': 'Checking...',
@@ -626,8 +626,8 @@ L.ja = {
   'nav.ingest': '\u53D6\u8FBC',
   'nav.collapse': '\u30B5\u30A4\u30C9\u30D0\u30FC\u3092\u6298\u308A\u305F\u305F\u3080',
   'nav.ingestQueue': '\u53D6\u8FBC\u30AD\u30E5\u30FC',
-  'nav.kb': '\u30CA\u30EC\u30C3\u30B8\u30D9\u30FC\u30B9',
-  'nav.kbOf': '{name} \u306E KB',
+  'nav.kb': 'Pith',
+  'nav.kbOf': '{name} \u306E Pith',
 
   'time.justNow': '\u305F\u3063\u305F\u4ECA',
   'time.minAgo': '{n}\u5206\u524D',
@@ -1208,8 +1208,8 @@ L.ko = {
   'nav.ingest': '\uC218\uC9D1',
   'nav.collapse': '\uC0AC\uC774\uB4DC\uBC14 \uC811\uAE30',
   'nav.ingestQueue': '\uC218\uC9D1 \uB300\uAE30\uC5F4',
-  'nav.kb': '\uC9C0\uC2DD\uBCA0\uC774\uC2A4',
-  'nav.kbOf': '{name}\uC758 KB',
+  'nav.kb': 'Pith',
+  'nav.kbOf': '{name}\uC758 Pith',
 
   'time.justNow': '\uBC29\uAE08',
   'time.minAgo': '{n}\uBD84 \uC804',
@@ -1790,8 +1790,8 @@ L.zh = {
   'nav.ingest': '\u6295\u5582',
   'nav.collapse': '\u6536\u8D77\u4FA7\u8FB9\u680F',
   'nav.ingestQueue': '\u6295\u5582\u961F\u5217',
-  'nav.kb': '\u77E5\u8BC6\u5E93',
-  'nav.kbOf': '{name} \u7684\u77E5\u8BC6\u5E93',
+  'nav.kb': 'Pith',
+  'nav.kbOf': '{name} \u7684 Pith',
 
   'time.justNow': '\u521A\u521A',
   'time.minAgo': '{n}\u5206\u949F\u524D',

@@ -1,17 +1,25 @@
 {
   "name": "wiki-app",
   "version": "1.0.0",
-  "description": "受 [Andrej Karpathy](https://x.com/karpathy) 启发：让 LLM 写和维护 wiki，人来读和提问。wiki 是一个持续复利的知识资产。",
-  "main": "server.js",
+  "description": "AI-powered personal knowledge base",
+  "main": "electron/main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "node server.js",
+    "electron": "unset ELECTRON_RUN_AS_NODE && electron .",
+    "dist": "unset ELECTRON_RUN_AS_NODE && electron-builder --mac dmg",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/gongty/wiki-app.git"
   },
-  "keywords": ["wiki", "knowledge-base", "ai", "llm", "rag"],
+  "keywords": [
+    "wiki",
+    "knowledge-base",
+    "ai",
+    "llm",
+    "rag"
+  ],
   "author": "gongty",
   "license": "ISC",
   "type": "commonjs",
@@ -23,5 +31,32 @@
     "@mozilla/readability": "^0.6.0",
     "jsdom": "^29.0.2",
     "pdf-parse": "^2.4.5"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.blank.pith",
+    "productName": "Pith",
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": "dmg"
+    },
+    "files": [
+      "server.js",
+      "electron/**/*",
+      "app/**/*",
+      "lib/**/*",
+      "scripts/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "data/system-sources.json",
+        "to": "data/system-sources.json"
+      }
+    ]
   }
 }

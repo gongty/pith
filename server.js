@@ -654,7 +654,7 @@ async function callLLM(systemPrompt, messages, overrides, opts = {}) {
   const headers = { 'Authorization': `Bearer ${apiKey}` };
   if (providerKey === 'openrouter') {
     headers['HTTP-Referer'] = `http://localhost:${PORT}`;
-    headers['X-Title'] = 'Wiki Knowledge Base';
+    headers['X-Title'] = 'Pith';
   }
 
   // Resolve thinking + stream
@@ -2888,7 +2888,7 @@ async function ocrImage(b64, filename) {
   const headers = { 'Authorization': `Bearer ${config.apiKey}` };
   if (providerKey === 'openrouter') {
     headers['HTTP-Referer'] = `http://localhost:${PORT}`;
-    headers['X-Title'] = 'Wiki Knowledge Base';
+    headers['X-Title'] = 'Pith';
   }
 
   let visionModel = model;
