@@ -14,8 +14,10 @@ export function switchSettingsTab(tab) {
   $('settingsTabProvider').style.display = tab === 'provider' ? '' : 'none';
   $('settingsTabMemory').style.display   = tab === 'memory'   ? '' : 'none';
   const pipe = $('settingsTabPipeline'); if (pipe) pipe.style.display = tab === 'pipeline' ? '' : 'none';
+  const srch = $('settingsTabSearch'); if (srch) srch.style.display = tab === 'search' ? '' : 'none';
   if (tab === 'memory') renderMemory($('settingsTabMemory'));
   if (tab === 'pipeline') loadPipeline();
+  if (tab === 'search') loadSearchConfig();
 }
 
 /* ── helpers: normalize model list across old/new schemas ── */
@@ -128,7 +130,7 @@ export function onProvChange() {
   const p = currentProvKey();
   const models = getWorkingModels(p);
   const ms = $('sModel'); ms.innerHTML = '';
-  models.forEach(m => {
+  models.filter(m => m.use !== 'embed').forEach(m => {
     const o = document.createElement('option');
     o.value = m.id;
     o.textContent = m.label || m.id;
@@ -155,15 +157,16 @@ function renderModelList() {
       <div class="mr-col-head">${h(t('settings.modelLabel'))}</div>
       <div class="mr-col-head"></div>
     </div>`;
-  tbl.innerHTML = header + models.map((m, i) => `
-    <div class="model-row" data-idx="${i}">
+  tbl.innerHTML = header + models.map((m, i) => {
+    if (m.use === 'embed') return '';
+    return `<div class="model-row" data-idx="${i}">
       <input class="mr-id" data-f="id" value="${h(m.id)}" placeholder="model id">
       <input class="mr-label" data-f="label" value="${h(m.label)}" placeholder="${h(t('settings.modelLabel'))}">
       <button class="mr-delete" type="button" data-action="del" title="${h(t('common.delete'))}" aria-label="${h(t('common.delete'))}">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
       </button>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
   // wire input/select/checkbox changes
   tbl.querySelectorAll('.model-row').forEach(row => {
     const idx = parseInt(row.dataset.idx, 10);
@@ -184,11 +187,12 @@ function updateModelField(idx, field, value) {
   models[idx][field] = value;
   // If id/label changed, the main-model dropdown labels may need refresh
   if (field === 'id' || field === 'label') {
+    const chat = models.filter(m => m.use !== 'embed');
     const ms = $('sModel'); if (ms) {
       const prev = ms.value;
       ms.innerHTML = '';
-      models.forEach(m => { const o = document.createElement('option'); o.value = m.id; o.textContent = m.label || m.id; ms.appendChild(o); });
-      ms.value = prev || (models[0] && models[0].id) || '';
+      chat.forEach(m => { const o = document.createElement('option'); o.value = m.id; o.textContent = m.label || m.id; ms.appendChild(o); });
+      ms.value = prev || (chat[0] && chat[0].id) || '';
     }
   }
 }
@@ -200,12 +204,12 @@ function deleteModel(idx) {
   models.splice(idx, 1);
   renderModelList();
   // refresh main-model select
-  onProvChange.refreshOnly = true; // no-op flag; just re-run
+  const chat = models.filter(m => m.use !== 'embed');
   const ms = $('sModel'); if (ms) {
     const prev = ms.value;
     ms.innerHTML = '';
-    models.forEach(m => { const o = document.createElement('option'); o.value = m.id; o.textContent = m.label || m.id; ms.appendChild(o); });
-    if (models.find(m => m.id === prev)) ms.value = prev;
+    chat.forEach(m => { const o = document.createElement('option'); o.value = m.id; o.textContent = m.label || m.id; ms.appendChild(o); });
+    if (chat.find(m => m.id === prev)) ms.value = prev;
   }
 }
 
@@ -555,5 +559,59 @@ function wirePipelineControls() {
       applyPreset(cur && cur !== 'custom' ? cur : 'balanced');
     });
     resetBtn.__wired = true;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────── */
+/* Search config tab                                                    */
+/* ──────────────────────────────────────────────────────────────────── */
+
+async function loadSearchConfig() {
+  const s = state.sCache || await api('/api/settings').catch(() => null);
+  if (!s) return;
+  state.sCache = s;
+  const hasBailian = s.hasKey && s.provider === 'bailian';
+  const mode = s.searchMode || 'keyword';
+  const vecRadio = document.querySelector('input[name="searchMode"][value="vector"]');
+  const kwRadio = document.querySelector('input[name="searchMode"][value="keyword"]');
+  // 百炼未配置 → 向量选项禁用，强制关键词
+  if (vecRadio) {
+    vecRadio.disabled = !hasBailian;
+    vecRadio.closest('.search-mode-opt').classList.toggle('disabled', !hasBailian);
+  }
+  if (hasBailian) {
+    // 已配置百炼：按保存的 mode 选中；首次无配置时自动选向量
+    const effectiveMode = s.searchMode ? mode : 'vector';
+    if (kwRadio) kwRadio.checked = effectiveMode === 'keyword';
+    if (vecRadio) vecRadio.checked = effectiveMode === 'vector';
+  } else {
+    if (kwRadio) kwRadio.checked = true;
+    if (vecRadio) vecRadio.checked = false;
+  }
+  updateSearchHint(hasBailian);
+  const radios = document.querySelectorAll('input[name="searchMode"]');
+  radios.forEach(r => {
+    if (!r.__wired) { r.addEventListener('change', () => updateSearchHint(hasBailian)); r.__wired = true; }
+  });
+}
+
+function updateSearchHint(hasBailian) {
+  const hint = $('searchModeHint'); if (!hint) return;
+  if (!hasBailian) {
+    hint.innerHTML = '<span class="search-hint-warn">' + h(t('search.needBailian')) + '</span>';
+  } else {
+    hint.innerHTML = '<span class="search-hint-ok">' + h(t('search.ready')) + '</span>';
+  }
+}
+
+export async function saveSearchMode() {
+  const checked = document.querySelector('input[name="searchMode"]:checked');
+  if (!checked) return;
+  try {
+    await put('/api/settings', { searchMode: checked.value });
+    state.sCache = null;
+    toast(t('common.saved'));
+  } catch (e) {
+    toast(t('common.saveFailed', { msg: e.message }));
   }
 }

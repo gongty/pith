@@ -178,6 +178,7 @@
       <button class="settings-tab" data-tab="memory" onclick="switchSettingsTab('memory')" data-i18n="settings.tabMemory">记忆</button>
       <button class="settings-tab" data-tab="provider" onclick="switchSettingsTab('provider')" data-i18n="settings.tabProvider">模型配置</button>
       <button class="settings-tab" data-tab="pipeline" onclick="switchSettingsTab('pipeline')" data-i18n="settings.tabPipeline">编译流水线</button>
+      <button class="settings-tab" data-tab="search" onclick="switchSettingsTab('search')" data-i18n="settings.tabSearch">搜索配置</button>
     </div>
     <div class="settings-tab-content" id="settingsTabGeneral">
       <div class="modal-form">
@@ -240,6 +241,33 @@
       <div class="modal-foot">
         <button class="btn-outline" id="pipelineResetBtn" type="button" data-i18n="settings.resetPreset">重置为预设</button>
         <button class="btn-sm-fill" id="pipelineSaveBtn" type="button" data-i18n="common.save">保存</button>
+      </div>
+    </div>
+    <div class="settings-tab-content" id="settingsTabSearch" style="display:none">
+      <div class="modal-form">
+        <div class="settings-section">
+          <div class="settings-section-head"><h4 data-i18n="search.modeTitle">搜索模式</h4></div>
+          <div class="search-mode-opts" id="searchModeOpts">
+            <label class="search-mode-opt">
+              <input type="radio" name="searchMode" value="keyword" checked>
+              <div class="search-mode-info">
+                <span class="search-mode-name" data-i18n="search.keyword">关键词搜索</span>
+                <span class="search-mode-desc" data-i18n="search.keywordDesc">基于关键词匹配，开箱即用</span>
+              </div>
+            </label>
+            <label class="search-mode-opt">
+              <input type="radio" name="searchMode" value="vector">
+              <div class="search-mode-info">
+                <span class="search-mode-name" data-i18n="search.vector">向量搜索</span>
+                <span class="search-mode-desc" data-i18n="search.vectorDesc">基于语义理解，效果更精准</span>
+              </div>
+            </label>
+          </div>
+          <div class="search-mode-hint" id="searchModeHint"></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-sm-fill" onclick="saveSearchMode()" data-i18n="common.save">保存</button>
       </div>
     </div>
   </div>

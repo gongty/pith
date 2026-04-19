@@ -57,7 +57,7 @@ export async function loadModels(ddId, tagId, override) {
     let html = '';
     const prov = s.providers && s.providers[effProv];
     if (prov) {
-      prov.models.forEach(m => {
+      prov.models.filter(m => !(m && typeof m === 'object' && m.use === 'embed')).forEach(m => {
         const id = (m && typeof m === 'object') ? m.id : m;
         const label = (m && typeof m === 'object') ? (m.label || m.id) : m;
         const active = (effModel === id) ? ' active' : '';

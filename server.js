@@ -183,14 +183,13 @@ const BUILTIN_PROVIDERS = {
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     format: 'openai',
     defaultModel: 'qwen-plus',
-    // 使用 dashscope 真实存在的模型 ID（OpenAI 兼容模式）
-    // 视觉 qwen-vl-max-latest 在 compileArticle 里硬编码兜底，无需列在这里
+    // 百炼 DashScope 兼容模式 — 多厂商模型
     models: [
-      { id: 'qwen-max',         label: 'Qwen Max (强)',     use: 'strong' },
-      { id: 'qwen-max-latest',  label: 'Qwen Max Latest',   use: 'strong' },
-      { id: 'qwen-plus',        label: 'Qwen Plus (主力)',  use: 'main'   },
-      { id: 'qwen-plus-latest', label: 'Qwen Plus Latest',  use: 'main'   },
-      { id: 'qwen-turbo',       label: 'Qwen Turbo (快/省)', use: 'fast'  }
+      { id: 'qwen-plus',       label: 'Qwen Plus (主力)',    use: 'main'   },
+      { id: 'qwen3.6-plus',    label: 'Qwen3.6 Plus',       use: 'strong' },
+      { id: 'qwen3.5-flash',   label: 'Qwen3.5 Flash (快)', use: 'fast'   },
+      { id: 'glm-5.1',         label: 'GLM 5.1',            use: 'main'   },
+      { id: 'kimi-k2.5',       label: 'Kimi K2.5',          use: 'main'   }
     ]
   },
   openrouter: {
@@ -269,9 +268,15 @@ function getProviderModels(providerKey, cfg) {
   const builtin = (BUILTIN_PROVIDERS[providerKey] && BUILTIN_PROVIDERS[providerKey].models) || [];
   const userOverride = config && config.providers && config.providers[providerKey] && config.providers[providerKey].models;
   const builtinIds = new Set(builtin.map(m => m.id));
-  if (Array.isArray(userOverride) && userOverride.length >= 0 && (config.providers && config.providers[providerKey])) {
-    // user override replaces builtin list
-    return userOverride.map(m => ({ ...m, isBuiltin: builtinIds.has(m.id) }));
+  if (Array.isArray(userOverride) && config.providers && config.providers[providerKey]) {
+    const chatModels = userOverride.filter(m => !m || m.use !== 'embed');
+    const embedModels = userOverride.filter(m => m && m.use === 'embed');
+    if (chatModels.length > 0) {
+      // 用户有明确的 chat 模型 → 完全使用用户列表
+      return userOverride.map(m => ({ ...m, isBuiltin: builtinIds.has(m.id) }));
+    }
+    // 只有 embed 模型（来自自动迁移）→ 合并内建默认 + embed
+    return [...builtin.map(m => ({ ...m, isBuiltin: true })), ...embedModels.map(m => ({ ...m, isBuiltin: false }))];
   }
   return builtin.map(m => ({ ...m, isBuiltin: true }));
 }
@@ -443,11 +448,9 @@ function saveConfig(cfg) {
 // apiKey 只从环境变量读取，绝不落盘。
 function loadApiKey() {
   if (process.env.WIKI_API_KEY) return process.env.WIKI_API_KEY;
-  // Electron desktop: fall back to file-based key in data dir
-  if (process.env.ELECTRON) {
-    const keyPath = path.join(DATA_ROOT, '.api-key');
-    try { return fs.readFileSync(keyPath, 'utf-8').trim(); } catch {}
-  }
+  // Fall back to file-based key in data dir (both Electron and web mode)
+  const keyPath = path.join(DATA_ROOT, '.api-key');
+  try { return fs.readFileSync(keyPath, 'utf-8').trim(); } catch {}
   return '';
 }
 
@@ -514,8 +517,15 @@ function migrateMemory() {
 // ── LLM 调用层 ──
 
 function humanizeHttpError(status, body) {
-  const detail = body.slice(0, 200);
-  if (status === 401 || status === 403) return 'API Key 无效或已过期，请在设置中重新配置';
+  const detail = body.slice(0, 300);
+  // 尝试从 JSON 响应体提取错误码/消息
+  let errCode = '', errMsg = '';
+  try { const j = JSON.parse(body); errCode = (j.error && j.error.code) || ''; errMsg = (j.error && j.error.message) || ''; } catch {}
+  if (status === 401) return 'API Key 无效或已过期，请在设置中重新配置';
+  if (status === 403) {
+    if (/quota|exhausted|free.tier/i.test(errCode + errMsg)) return '免费额度已用完，请在控制台开通付费或充值';
+    return 'API Key 权限不足 (403)：' + (errMsg || detail).slice(0, 150);
+  }
   if (status === 429) return '请求过于频繁，已被限流，请稍后再试';
   if (status === 402) return '账户额度已用完，请充值或更换服务商';
   if (status === 404) return '模型不存在或 API 地址错误，请检查设置';
@@ -1810,9 +1820,10 @@ function buildContextShape(top) {
 async function retrieveContext(question) {
   const lexResults = searchWiki(question);
   let vecResults = [];
+  const cfg = getFullConfig();
+  const useVector = (cfg.searchMode || 'keyword') === 'vector';
   try {
-    if (vectors && typeof vectors.isVectorReady === 'function' && vectors.isVectorReady()) {
-      const cfg = getFullConfig();
+    if (useVector && vectors && typeof vectors.isVectorReady === 'function' && vectors.isVectorReady()) {
       const topK = (cfg && cfg.ask && Number.isFinite(cfg.ask.topK)) ? cfg.ask.topK : 20;
       const chunks = await vectors.vectorSearch(question, { topK });
       vecResults = aggregateByArticle(chunks);
@@ -1821,7 +1832,6 @@ async function retrieveContext(question) {
     console.error('[retrieve] vector search failed, fallback to lex only:', e && e.message);
   }
 
-  const cfg = getFullConfig();
   const rrfK = (cfg && cfg.ask && Number.isFinite(cfg.ask.rrfK)) ? cfg.ask.rrfK : 60;
   const fuseTopN = (cfg && cfg.ask && Number.isFinite(cfg.ask.fuseTopN)) ? cfg.ask.fuseTopN : 5;
   const fused = rrfFuse(lexResults, vecResults, rrfK);
@@ -5856,7 +5866,8 @@ ${trimmedArticle}
       uiLang: config.uiLang || 'en',
       providers: providersOut,
       pipeline: config.pipeline || { preset: 'balanced', stages: resolvePresetForProvider('balanced', config.provider, config) },
-      hasKey: !!config.apiKey
+      hasKey: !!config.apiKey,
+      searchMode: config.searchMode || 'keyword'
     });
   }
 
@@ -5885,14 +5896,13 @@ ${trimmedArticle}
     req.on('end', () => {
       try {
         const parsed = JSON.parse(body);
-        // Electron desktop: allow saving API key to data dir (chmod 600) so users can configure via UI.
-        // Web server mode: apiKey field is silently ignored; key only from env var WIKI_API_KEY.
-        if (process.env.ELECTRON && parsed.apiKey) {
+        // Save API key to data dir and set env var so it takes effect immediately.
+        if (parsed.apiKey) {
           const keyPath = path.join(DATA_ROOT, '.api-key');
           fs.writeFileSync(keyPath, parsed.apiKey.trim(), { mode: 0o600 });
           process.env.WIKI_API_KEY = parsed.apiKey.trim();
         }
-        const { provider, model, customBaseUrl, wikiLang, uiLang, providers, pipeline } = parsed;
+        const { provider, model, customBaseUrl, wikiLang, uiLang, providers, pipeline, searchMode } = parsed;
         const config = loadConfig();
         const prevProvider = config.provider;
         if (provider) config.provider = provider;
@@ -5900,6 +5910,7 @@ ${trimmedArticle}
         if (typeof customBaseUrl === 'string') config.customBaseUrl = customBaseUrl;
         if (typeof wikiLang === 'string') config.wikiLang = wikiLang;
         if (typeof uiLang === 'string') config.uiLang = uiLang;
+        if (typeof searchMode === 'string') config.searchMode = searchMode;
         if (providers && typeof providers === 'object') {
           config.providers = { ...(config.providers || {}), ...providers };
         }
