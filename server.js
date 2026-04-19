@@ -4113,7 +4113,10 @@ const EXPENSIVE_PREFIXES = [
   '/api/auth/login',
   '/api/wiki/article-ask'
 ];
+// 只读轮询/状态端点不算 expensive，避免前端正常轮询被误限
+const EXPENSIVE_EXEMPT = ['/api/ingest/overview', '/api/ingest/active', '/api/ingest/status', '/api/ingest/batch/status', '/api/ingest/queue/all'];
 function isExpensiveEndpoint(p) {
+  if (EXPENSIVE_EXEMPT.includes(p)) return false;
   if (EXPENSIVE_PREFIXES.some(x => p === x || p.startsWith(x))) return true;
   // /api/chat/:id/message and /api/chat/:id/regenerate
   if (/^\/api\/chat\/[^/]+\/(message|regenerate)$/.test(p)) return true;
@@ -4123,6 +4126,8 @@ function clientIp(req) {
   return (req.socket && req.socket.remoteAddress) || 'unknown';
 }
 function rateLimitAllow(req, p) {
+  // 本地开发（未设 WIKI_ADMIN_TOKEN）：单用户场景无需限流
+  if (!AUTH_ENABLED) return true;
   const ip = clientIp(req);
   // 归并到 endpoint 维度：去掉路径末端的可变 id 段
   const ep = p.replace(/\/[a-z0-9_-]{8,}$/i, '/:id');

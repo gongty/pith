@@ -38,7 +38,10 @@ export async function rDash(c) {
     s += '</div>';
 
     // Graph
-    s += '<div class="section-head"><span class="section-label">' + t('dash.graphLabel') + '</span></div>';
+    const conceptCount = graph.nodes.filter(n => n.kind === 'concept').length;
+    s += '<div class="section-head"><span class="section-label">' + t('dash.graphLabel') + '</span>';
+    if (conceptCount > 30) s += '<a class="section-more" href="#/graph">' + t('dash.graphAll', { n: conceptCount }) + '</a>';
+    s += '</div>';
     s += '<div class="graph-card" id="dgWrap">';
     if (graph.nodes.length < 2) s += '<div class="graph-empty-msg">' + t('dash.graphEmpty') + '</div>';
     else s += '<canvas id="dgCanvas"></canvas><div class="graph-focus-card" hidden></div>';

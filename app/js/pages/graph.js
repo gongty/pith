@@ -85,9 +85,15 @@ export function initFG(canvas, data, full) {
       n.cluster = n.cluster || '_all';
     }
   }
-  const concepts = rawNodes.filter(n => n.kind === 'concept');
+  let concepts = rawNodes.filter(n => n.kind === 'concept');
   // articles 保留给 popup 列表用，但不再参与 canvas 仿真/绘制
   const articles = rawNodes.filter(n => n.kind === 'article');
+
+  // 首页只展示最重要的若干概念节点，完整图谱去 #/graph 看
+  const DASH_MAX = 30;
+  if (!full && concepts.length > DASH_MAX) {
+    concepts = concepts.slice().sort((a, b) => (b.articleCount || 0) - (a.articleCount || 0)).slice(0, DASH_MAX);
+  }
 
   // ── Cluster 定义 & 中心点布局 ──
   const rawClusters = Array.isArray(data.clusters) ? data.clusters.slice() : [];
